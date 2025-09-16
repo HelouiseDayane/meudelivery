@@ -16,6 +16,8 @@ use App\Http\Controllers\Admin\DashboardController;
 |--------------------------------------------------------------------------
 */
 
+
+
 // Rotas públicas
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
@@ -31,6 +33,7 @@ Route::prefix('admin')->group(function () {
         Route::get('/products', [ProductAdminController::class, 'index']);
         Route::post('/products', [ProductAdminController::class, 'store']);
         Route::put('/products/{product}', [ProductAdminController::class, 'update']);
+        Route::patch('/products/{product}/toggle', [ProductAdminController::class, 'toggleActive']);
 
         Route::get('/orders', [OrderAdminController::class, 'index']);
         Route::get('/orders/{order}', [OrderAdminController::class, 'show']);

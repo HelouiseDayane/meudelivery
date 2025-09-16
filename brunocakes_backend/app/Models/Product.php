@@ -17,6 +17,7 @@ class Product extends Model
         'is_new',
         'is_active',
         'image',
+         'category'
     ];
 
     protected $casts = [

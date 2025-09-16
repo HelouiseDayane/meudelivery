@@ -30,11 +30,12 @@ export const API_ENDPOINTS = {
     delete: (id: string) => `${API_BASE_URL}/clients/${id}`,
   },
   products: {
-    list: `${API_BASE_URL}/products`,
-    show: (id: string) => `${API_BASE_URL}/products/${id}`,
-    create: `${API_BASE_URL}/products`,
-    update: (id: string) => `${API_BASE_URL}/products/${id}`,
-    delete: (id: string) => `${API_BASE_URL}/products/${id}`,
+    listPublic: `${API_BASE_URL}/products`,
+    showPublic: (id: string) => `${API_BASE_URL}/products/${id}`,
+    listAdmin: `${API_BASE_URL}/admin/products`,
+    createAdmin: `${API_BASE_URL}/admin/products`,
+    updateAdmin: (id: string) => `${API_BASE_URL}/admin/products/${id}`,
+    toggleAdmin: (id: string) => `${API_BASE_URL}/admin/products/${id}/toggle`,
   },
   orders: {
     create: `${API_BASE_URL}/orders`,
@@ -54,24 +55,32 @@ export const API_ENDPOINTS = {
     list: `${API_BASE_URL}/deliveries`,
     create: `${API_BASE_URL}/deliveries`,
     show: (id: string) => `${API_BASE_URL}/deliveries/${id}`,
-    update: (id: string, data: any) => `${API_BASE_URL}/deliveries/${id}`,
+    update: (id: string) => `${API_BASE_URL}/deliveries/${id}`,
     delete: (id: string) => `${API_BASE_URL}/deliveries/${id}`
   }
 };
 
+// Headers com token
 const getAuthHeaders = () => {
   const token = localStorage.getItem('admin_token');
   return {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` })
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 };
 
+// Função genérica de requisição
 export const apiRequest = async (url: string, options: RequestInit = {}) => {
-  const defaultOptions: RequestInit = { headers: { ...getAuthHeaders(), ...options.headers }, ...options };
   try {
+    const defaultOptions: RequestInit = { 
+      headers: { ...getAuthHeaders(), ...options.headers }, 
+      ...options 
+    };
+
     const response = await fetch(url, defaultOptions);
+
+    if (response.status === 204) return null; // sem conteúdo
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
@@ -83,25 +92,27 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
   }
 };
 
+// API pública/admin
 export const api = {
-  adminLogin: (email: string, password: string) => apiRequest(API_ENDPOINTS.auth.adminLogin, {
-    method: 'POST',
-    body: JSON.stringify({ email, password })
-  }),
+  adminLogin: (email: string, password: string) => 
+    apiRequest(API_ENDPOINTS.auth.adminLogin, { method: 'POST', body: JSON.stringify({ email, password }) }),
+  
   logout: () => apiRequest(API_ENDPOINTS.auth.logout, { method: 'POST' }),
   getMe: () => apiRequest(API_ENDPOINTS.auth.me),
 
-  getProducts: () => apiRequest(API_ENDPOINTS.products.list),
-  getProduct: (id: string) => apiRequest(API_ENDPOINTS.products.show(id)),
-  createProduct: (product: any) => apiRequest(API_ENDPOINTS.products.create, { method: 'POST', body: JSON.stringify(product) }),
-  updateProduct: (id: string, product: any) => apiRequest(API_ENDPOINTS.products.update(id), { method: 'PUT', body: JSON.stringify(product) }),
-  deleteProduct: (id: string) => apiRequest(API_ENDPOINTS.products.delete(id), { method: 'DELETE' }),
+  getPublicProducts: () => apiRequest(API_ENDPOINTS.products.listPublic),
+  getPublicProduct: (id: string) => apiRequest(API_ENDPOINTS.products.showPublic(id)),
+
+  getAdminProducts: () => apiRequest(API_ENDPOINTS.products.listAdmin),
+  createAdminProduct: (data: any) => apiRequest(API_ENDPOINTS.products.createAdmin, { method: 'POST', body: JSON.stringify(data) }),
+  updateAdminProduct: (id: string, data: any) => apiRequest(API_ENDPOINTS.products.updateAdmin(id), { method: 'PUT', body: JSON.stringify(data) }),
+  toggleAdminProduct: (id: string) => apiRequest(API_ENDPOINTS.products.toggleAdmin(id), { method: 'PATCH' }),
 
   registerClient: (data: any) => apiRequest(API_ENDPOINTS.clients.register, { method: 'POST', body: JSON.stringify(data) }),
   getClients: () => apiRequest(API_ENDPOINTS.clients.list),
   getClient: (id: string) => apiRequest(API_ENDPOINTS.clients.show(id)),
   updateClient: (id: string, data: any) => apiRequest(API_ENDPOINTS.clients.update(id), { method: 'PUT', body: JSON.stringify(data) }),
-  deleteClient: (id: string) => apiRequest(API_ENDPOINTS.clients.delete(id), { method: 'DELETE' }),
+  deleteClient: (id: string) => apiRequest(API_ENDPOINTS.clients.delete(id)),
 
   createOrder: (data: any) => apiRequest(API_ENDPOINTS.orders.create, { method: 'POST', body: JSON.stringify(data) }),
   getOrders: () => apiRequest(API_ENDPOINTS.orders.list),
@@ -114,7 +125,7 @@ export const api = {
 
   getDeliveries: () => apiRequest(API_ENDPOINTS.deliveries.list),
   createDelivery: (data: any) => apiRequest(API_ENDPOINTS.deliveries.create, { method: 'POST', body: JSON.stringify(data) }),
-  updateDelivery: (id: string, data: any) => apiRequest(API_ENDPOINTS.deliveries.update(id, data), { method: 'PUT', body: JSON.stringify(data) })
+  updateDelivery: (id: string, data: any) => apiRequest(API_ENDPOINTS.deliveries.update(id), { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 export default api;
