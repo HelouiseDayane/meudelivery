@@ -77,7 +77,11 @@ export function ProductsManagement() {
           price: p.price !== undefined ? p.price : '',
           promotionPrice: p.promotion_price !== undefined ? p.promotion_price : '',
           category: p.category || '',
-          image_url: p.image_url || (p.image && typeof p.image === 'string' && p.image.startsWith('http') ? p.image : `${window.location.origin}/storage/${p.image}`),
+          image_url: p.image_url || (p.image && typeof p.image === 'string' && p.image.startsWith('http')
+            ? p.image
+            : p.image && p.image.startsWith('products/')
+              ? `http://localhost:8000/storage/${p.image}`
+              : `http://localhost:8000/storage/products/${p.image}`),
           image: p.image || '',
           stock: p.quantity !== undefined ? p.quantity : (p.stock !== undefined ? p.stock : ''),
           expiryDate: p.expires_at || p.expiryDate || '',
@@ -206,12 +210,14 @@ export function ProductsManagement() {
       promotion_price: formData.promotionPrice ? parseCurrency(formData.promotionPrice) : undefined,
       quantity: parseInt(formData.stock, 10),
       category: formData.category,
-      image: formData.image,
       is_promo: formData.isPromotion,
       is_new: formData.isNew,
       is_active: formData.is_active,
       expires_at: formData.expiryDate || undefined,
     };
+    if (formData.file) {
+      productData.file = formData.file;
+    }
 
     if (editingProduct) {
       updateProduct(editingProduct, productData);
@@ -369,14 +375,13 @@ export function ProductsManagement() {
                   onChange={e => {
                     const file = e.target.files?.[0];
                     if (file) {
-                      const imageUrl = URL.createObjectURL(file);
-                      setFormData({ ...formData, image: imageUrl, file });
+                      setFormData({ ...formData, file });
                     }
                   }}
                 />
                 {formData.image && (
                   <img
-                    src={formData.image.startsWith("blob:") || formData.image.startsWith("http") ? formData.image : `/uploads/${formData.image}`}
+                    src={formData.image.startsWith('http') ? formData.image : `http://localhost:8000/storage/products/${formData.image}`}
                     alt={formData.name}
                     className="mt-2 w-24 h-24 object-cover rounded"
                     onError={e => { e.currentTarget.src = '/placeholder.png'; }}
@@ -386,7 +391,7 @@ export function ProductsManagement() {
 
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                <Button onClick={handleSubmit}>{editingProduct ? 'Atualizar' : 'Adicionar'}</Button>
+                <Button type="submit" onClick={handleSubmit}>{editingProduct ? 'Atualizar' : 'Adicionar'}</Button>
               </div>
             </form>
           </DialogContent>
@@ -445,7 +450,12 @@ export function ProductsManagement() {
                     </TableCell>
                     <TableCell>
                       {prod.expiryDate
-                        ? prod.expiryDate.split("T")[0]
+                        ? (() => {
+                            const date = new Date(prod.expiryDate);
+                            const day = String(date.getDate()).padStart(2, '0');
+                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                            return `${day}/${month}`;
+                          })()
                         : <span className="text-gray-400">--</span>}
                     </TableCell>
                     <TableCell>

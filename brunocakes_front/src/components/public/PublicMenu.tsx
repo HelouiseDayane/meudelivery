@@ -20,18 +20,22 @@ export function PublicMenu() {
   // Get available categories
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
 
-  // Função utilitária para montar a URL da imagem
-  // Função utilitária para obter a URL correta da imagem
+  // Função utilitária para obter a URL correta da imagem (sempre do backend)
   const getImageUrl = (product: any) => {
     if (product.image_url && typeof product.image_url === 'string') {
-      return product.image_url;
+      // Remove barra inicial se existir
+      const cleanPath = product.image_url.replace(/^\/+/, '');
+      return `http://localhost:8000/${cleanPath}`;
     }
     if (product.image && typeof product.image === 'string' && product.image.startsWith('http')) {
       return product.image;
     }
-    // Se vier só o caminho relativo, monta a URL do storage
     if (product.image && typeof product.image === 'string') {
-      return `${window.location.origin}/storage/${product.image}`;
+      const cleanPath = product.image.replace(/^\/+/, '');
+      if (cleanPath.startsWith('products/')) {
+        return `http://localhost:8000/storage/products/${cleanPath.replace('products/', '')}`;
+      }
+      return `http://localhost:8000/storage/products/${cleanPath}`;
     }
     return undefined;
   };

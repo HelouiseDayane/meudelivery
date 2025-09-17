@@ -16,6 +16,20 @@ export const STORE_CONFIG = {
 };
 
 // Endpoints
+// Função utilitária para montar a URL da imagem do produto
+export const getProductImageUrl = (image: string | undefined | null) => {
+  if (!image) return undefined;
+  // Remove barras iniciais
+  const cleanPath = image.replace(/^\/+/, '');
+  // Se já começa com http, retorna direto
+  if (cleanPath.startsWith('http')) return cleanPath;
+  // Se já começa com storage, retorna com domínio
+  if (cleanPath.startsWith('storage/')) return `http://localhost:8000/${cleanPath}`;
+  // Se começa com products/, retorna storage/products
+  if (cleanPath.startsWith('products/')) return `http://localhost:8000/storage/products/${cleanPath.replace('products/', '')}`;
+  // Caso contrário, assume storage/products
+  return `http://localhost:8000/storage/products/${cleanPath}`;
+};
 export const API_ENDPOINTS = {
   auth: {
     adminLogin: `${API_BASE_URL}/admin/login`,
@@ -64,7 +78,6 @@ export const API_ENDPOINTS = {
 const getAuthHeaders = () => {
   const token = localStorage.getItem('admin_token');
   return {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
@@ -104,8 +117,52 @@ export const api = {
   getPublicProduct: (id: string) => apiRequest(API_ENDPOINTS.products.showPublic(id)),
 
   getAdminProducts: () => apiRequest(API_ENDPOINTS.products.listAdmin),
-  createAdminProduct: (data: any) => apiRequest(API_ENDPOINTS.products.createAdmin, { method: 'POST', body: JSON.stringify(data) }),
-  updateAdminProduct: (id: string, data: any) => apiRequest(API_ENDPOINTS.products.updateAdmin(id), { method: 'PUT', body: JSON.stringify(data) }),
+  createAdminProduct: (data: any) => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (key === 'file' && value instanceof File) {
+        formData.append('image', value);
+      } else if (value !== undefined && value !== null) {
+        // Se for boolean ou number, converte para string
+        if (typeof value === 'boolean' || typeof value === 'number') {
+          formData.append(key, String(value));
+        } else {
+          formData.append(key, value as string);
+        }
+      }
+    });
+    return apiRequest(API_ENDPOINTS.products.createAdmin, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...getAuthHeaders(),
+        'Accept': 'application/json',
+      },
+    });
+  },
+  updateAdminProduct: (id: string, data: any) => {
+    const formData = new FormData();
+    formData.append('_method', 'PATCH');
+    Object.entries(data).forEach(([key, value]) => {
+      if (key === 'file' && value instanceof File) {
+        formData.append('image', value);
+      } else if (value !== undefined && value !== null) {
+        if (typeof value === 'boolean' || typeof value === 'number') {
+          formData.append(key, String(value));
+        } else {
+          formData.append(key, value as string);
+        }
+      }
+    });
+    return apiRequest(API_ENDPOINTS.products.updateAdmin(id), {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...getAuthHeaders(),
+        'Accept': 'application/json',
+      },
+    });
+  },
   toggleAdminProduct: (id: string) => apiRequest(API_ENDPOINTS.products.toggleAdmin(id), { method: 'PATCH' }),
 
   registerClient: (data: any) => apiRequest(API_ENDPOINTS.clients.register, { method: 'POST', body: JSON.stringify(data) }),

@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import { useState, createContext, useContext, useEffect, ReactNode } from 'react';
 import { Toaster } from './components/ui/sonner';
 import { api } from './api';
+import { getProductImageUrl } from './api';
 import { toast } from 'sonner';
 
 // Auth Components
@@ -39,6 +40,7 @@ interface Product {
   price: number;
   image: string;
   image_url?: string;
+  imageUrl?: string;
   file?: File;
   category: string;
   available: boolean;
@@ -275,6 +277,8 @@ const toggleProduct = async (id: string) => {
 
     // Função para mapear os dados do backend para camelCase
     function mapProductFromBackend(p: any): Product {
+      // Importa função utilitária
+      // ...existing code...
       return {
         id: p.id,
         name: p.name,
@@ -282,8 +286,8 @@ const toggleProduct = async (id: string) => {
         price: Number(p.price),
         promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
         category: p.category,
-        image: p.image,
-        image_url: p.image_url || (p.image && typeof p.image === 'string' && p.image.startsWith('http') ? p.image : `${window.location.origin}/storage/${p.image}`),
+        image: p.image, // só o nome
+        imageUrl: p.image_url ? getProductImageUrl(p.image_url) : getProductImageUrl(p.image),
         available: Boolean(p.is_active),
         is_active: Boolean(p.is_active),
         stock: Number(p.quantity),

@@ -32,7 +32,8 @@ Route::prefix('admin')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/products', [ProductAdminController::class, 'index']);
         Route::post('/products', [ProductAdminController::class, 'store']);
-        Route::put('/products/{product}', [ProductAdminController::class, 'update']);
+     
+Route::match(['put', 'patch'], 'products/{id}', [ProductAdminController::class, 'update']);
         Route::patch('/products/{product}/toggle', [ProductAdminController::class, 'toggleActive']);
 
         Route::get('/orders', [OrderAdminController::class, 'index']);
