@@ -372,10 +372,10 @@ export function ProductsManagement() {
                   <TableRow key={prod.id}>
                     <TableCell>{prod.name || <span className="text-gray-400">(sem nome)</span>}</TableCell>
                     <TableCell>
-                      {prod.is_promo && prod.promotion_price ? (
+                      {prod.isPromotion && prod.promotionPrice ? (
                         <>
                           <span className="line-through text-gray-400 mr-2">{formatPrice(Number(prod.price))}</span>
-                          <span className="font-bold text-yellow-700">{formatPrice(Number(prod.promotion_price))}</span>
+                          <span className="font-bold text-yellow-700">{formatPrice(Number(prod.promotionPrice))}</span>
                         </>
                       ) : prod.price ? (
                         formatPrice(Number(prod.price))
@@ -384,23 +384,23 @@ export function ProductsManagement() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {prod.is_promo
+                      {prod.isPromotion
                         ? <Badge className="bg-yellow-100 text-yellow-800">Promoção</Badge>
                         : <span className="text-gray-400">--</span>}
                     </TableCell>
                     <TableCell>
-                      {prod.is_new
+                      {prod.isNew
                         ? <Badge className="bg-blue-100 text-blue-800">Novidade</Badge>
                         : <span className="text-gray-400">--</span>}
                     </TableCell>
                     <TableCell>
-                      {typeof prod.quantity === "number" || typeof prod.quantity === "string"
-                        ? prod.quantity
+                      {typeof prod.stock === "number" || typeof prod.stock === "string"
+                        ? prod.stock
                         : <span className="text-gray-400">--</span>}
                     </TableCell>
                     <TableCell>
-                      {prod.expires_at
-                        ? prod.expires_at.split("T")[0]
+                      {prod.expiryDate
+                        ? prod.expiryDate.split("T")[0]
                         : <span className="text-gray-400">--</span>}
                     </TableCell>
                     <TableCell>

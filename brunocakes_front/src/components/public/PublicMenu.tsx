@@ -20,13 +20,23 @@ export function PublicMenu() {
   // Get available categories
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
 
-  // Filter products
-  const filteredProducts = products.filter(product => {
+  // Função utilitária para montar a URL da imagem
+  const getImageUrl = (image: string | undefined) => {
+    if (!image) return undefined;
+    if (image.startsWith('http')) return image;
+    if (/^[a-f0-9\-]{36}$/.test(image)) {
+      return `${window.location.origin}/api/images/${image}`;
+    }
+    return undefined;
+  };
+
+  // Filtra produtos válidos
+  const validProducts = products.filter(product => !!product.id);
+  const filteredProducts = validProducts.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description.toLowerCase().includes(searchTerm.toLowerCase());
+      product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
     const isAvailable = product.available && product.stock > 0;
-    
     return matchesSearch && matchesCategory && isAvailable;
   });
 
@@ -34,54 +44,34 @@ export function PublicMenu() {
     const cartItem = cart.find(item => item.product.id === productId);
     return cartItem ? cartItem.quantity : 0;
   };
-
-  const getLocalQuantity = (productId: string) => {
-    return quantities[productId] || 1;
-  };
-
+  const getLocalQuantity = (productId: string) => quantities[productId] || 1;
   const setLocalQuantity = (productId: string, quantity: number) => {
     setQuantities(prev => ({ ...prev, [productId]: Math.max(1, quantity) }));
   };
-
   const handleAddToCart = (product: any) => {
+    if (!product.id) {
+      toast.error('Produto inválido: não possui ID único.');
+      return;
+    }
     const quantity = getLocalQuantity(product.id);
     const currentInCart = getProductQuantityInCart(product.id);
-    
     if (currentInCart + quantity > product.stock) {
       toast.error(`Disponível apenas ${product.stock - currentInCart} unidades`);
       return;
     }
-    
     addToCart(product, quantity);
-    setQuantities(prev => ({ ...prev, [product.id]: 1 })); // Reset to 1
+    setQuantities(prev => ({ ...prev, [product.id]: 1 }));
   };
-
   const handleUpdateCartQuantity = (productId: string, newQuantity: number) => {
     updateCartQuantity(productId, newQuantity);
   };
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(price);
-  };
-
+  const formatPrice = (price: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
   const getDisplayPrice = (product: any) => {
     if (product.isPromotion && product.promotionPrice) {
-      return {
-        current: product.promotionPrice,
-        original: product.price,
-        isPromotion: true
-      };
+      return { current: product.promotionPrice, original: product.price, isPromotion: true };
     }
-    return {
-      current: product.price,
-      original: null,
-      isPromotion: false
-    };
+    return { current: product.price, original: null, isPromotion: false };
   };
-
   const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -112,7 +102,6 @@ export function PublicMenu() {
           </div>
         </div>
       </div>
-
       {/* Search and Filters */}
       <Card>
         <CardContent className="p-6">
@@ -140,7 +129,6 @@ export function PublicMenu() {
           </div>
         </CardContent>
       </Card>
-
       {/* Cart Summary (when has items) */}
       {cartItemsCount > 0 && (
         <Card className="bg-primary/5 border-primary/20">
@@ -164,23 +152,20 @@ export function PublicMenu() {
           </CardContent>
         </Card>
       )}
-
       {/* Products Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredProducts.map(product => {
           const priceInfo = getDisplayPrice(product);
           const quantityInCart = getProductQuantityInCart(product.id);
           const localQuantity = getLocalQuantity(product.id);
-          
           return (
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 group">
               <div className="relative">
                 <ImageWithFallback
-                  src={product.image}
+                  src={getImageUrl(product.image)}
                   alt={product.name}
                   className="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-300"
                 />
-                
                 {/* Badges */}
                 <div className="absolute top-3 left-3 flex flex-col gap-2">
                   {product.isNew && (
@@ -195,7 +180,6 @@ export function PublicMenu() {
                     </Badge>
                   )}
                 </div>
-
                 {/* Stock indicator */}
                 <div className="absolute top-3 right-3">
                   <Badge variant="outline" className="bg-white/90">
@@ -203,7 +187,6 @@ export function PublicMenu() {
                     {product.stock}
                   </Badge>
                 </div>
-
                 {/* Low stock warning */}
                 {product.stock <= 3 && (
                   <div className="absolute bottom-3 right-3">
@@ -214,7 +197,6 @@ export function PublicMenu() {
                   </div>
                 )}
               </div>
-
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg leading-tight">{product.name}</CardTitle>
@@ -239,36 +221,17 @@ export function PublicMenu() {
                   {product.description}
                 </CardDescription>
               </CardHeader>
-
               <CardContent className="pt-0">
                 {/* Product details */}
                 <div className="space-y-2 text-xs text-muted-foreground mb-4">
-                  <div className="flex justify-between">
-                    <span>Peso:</span>
-                    <span>{product.weight}g</span>
-                  </div>
                   {product.expiryDate && (
                     <div className="flex justify-between">
                       <span>Validade:</span>
                       <span>{new Date(product.expiryDate).toLocaleDateString('pt-BR')}</span>
                     </div>
                   )}
-                  {product.allergens && product.allergens.length > 0 && (
-                    <div>
-                      <span className="font-medium">Alérgenos:</span>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {product.allergens.map(allergen => (
-                          <Badge key={allergen} variant="outline" className="text-xs">
-                            {allergen}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-
                 <Separator className="my-4" />
-
                 {/* Add to cart section */}
                 <div className="space-y-3">
                   {quantityInCart > 0 && (
@@ -295,7 +258,6 @@ export function PublicMenu() {
                       </div>
                     </div>
                   )}
-
                   <div className="flex items-center gap-2">
                     <div className="flex items-center border rounded">
                       <Button
@@ -316,7 +278,6 @@ export function PublicMenu() {
                         <Plus className="h-3 w-3" />
                       </Button>
                     </div>
-                    
                     <Button
                       className="flex-1 bruno-gradient hover:opacity-90"
                       onClick={() => handleAddToCart(product)}
@@ -326,7 +287,6 @@ export function PublicMenu() {
                       Adicionar
                     </Button>
                   </div>
-
                   {quantityInCart + localQuantity > product.stock && (
                     <p className="text-xs text-destructive">
                       Quantidade excede estoque disponível
@@ -338,7 +298,6 @@ export function PublicMenu() {
           );
         })}
       </div>
-
       {filteredProducts.length === 0 && (
         <div className="text-center py-12">
           <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -348,7 +307,6 @@ export function PublicMenu() {
           </p>
         </div>
       )}
-
       {/* Call to Action */}
       <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
         <CardContent className="p-8 text-center">

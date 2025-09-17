@@ -27,19 +27,19 @@ export function AdminDashboard() {
     );
   }
 
-  const todaySales = analytics.salesByDay[analytics.salesByDay.length - 1]?.amount || 0;
-  const thisMonthSales = analytics.salesByMonth[analytics.salesByMonth.length - 1]?.amount || 0;
-  const thisYearSales = analytics.salesByYear[analytics.salesByYear.length - 1]?.amount || 0;
-  
-  const totalProducts = products.length;
-  const availableProducts = products.filter(p => p.available && p.stock > 0).length;
-  const lowStockProducts = products.filter(p => p.stock <= 5 && p.stock > 0).length;
-  const outOfStockProducts = products.filter(p => p.stock === 0).length;
-  
-  const pendingOrders = orders.filter(o => o.status === 'pending').length;
-  const todayOrders = orders.filter(o => 
+  const todaySales = analytics.salesByDay?.[analytics.salesByDay?.length - 1]?.amount ?? 0;
+  const thisMonthSales = analytics.salesByMonth?.[analytics.salesByMonth?.length - 1]?.amount ?? 0;
+  const thisYearSales = analytics.salesByYear?.[analytics.salesByYear?.length - 1]?.amount ?? 0;
+
+  const totalProducts = products?.length ?? 0;
+  const availableProducts = products?.filter(p => p.available && p.stock > 0).length ?? 0;
+  const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0).length ?? 0;
+  const outOfStockProducts = products?.filter(p => p.stock === 0).length ?? 0;
+
+  const pendingOrders = orders?.filter(o => o.status === 'pending').length ?? 0;
+  const todayOrders = orders?.filter(o => 
     new Date(o.createdAt).toDateString() === new Date().toDateString()
-  ).length;
+  ).length ?? 0;
 
   return (
     <div className="space-y-6">
