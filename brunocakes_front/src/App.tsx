@@ -46,6 +46,7 @@ interface Product {
   isPromotion: boolean;
   promotionPrice?: number;
   isNew: boolean;
+  is_active?: boolean;
 }
 
 interface CartItem {
@@ -271,15 +272,37 @@ const toggleProduct = async (id: string) => {
     if (savedAdmin && savedToken) setAdmin(JSON.parse(savedAdmin));
     if (savedCart) setCart(JSON.parse(savedCart));
 
+    // Função para mapear os dados do backend para camelCase
+    function mapProductFromBackend(p: any): Product {
+      return {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: Number(p.price),
+        promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
+        category: p.category,
+        image: p.image,
+        available: Boolean(p.is_active),
+        stock: Number(p.quantity),
+        expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
+        isPromotion: Boolean(p.is_promo),
+        isNew: Boolean(p.is_new),
+      };
+    }
+
+    const handleSetProducts = (data: any[]) => {
+      setProducts(Array.isArray(data) ? data.map(mapProductFromBackend) : []);
+    };
+
     if (isAdminAuthenticated) {
-        api.getAdminProducts()
-          .then(setProducts)
-          .catch(() => toast.error('Erro ao carregar produtos admin'));
-      } else {
-        api.getPublicProducts()
-          .then(setProducts)
-          .catch(() => toast.error('Erro ao carregar produtos'));
-      }
+      api.getAdminProducts()
+        .then(handleSetProducts)
+        .catch(() => toast.error('Erro ao carregar produtos admin'));
+    } else {
+      api.getPublicProducts()
+        .then(handleSetProducts)
+        .catch(() => toast.error('Erro ao carregar produtos'));
+    }
 
     setLoading(false);
   }, []);

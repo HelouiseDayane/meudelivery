@@ -11,6 +11,7 @@ class Product extends Model
         'slug',
         'description',
         'price',
+        'promotion_price',
         'quantity',
         'expires_at',
         'is_promo',
@@ -22,6 +23,7 @@ class Product extends Model
 
     protected $casts = [
         'price' => 'decimal:2',
+        'promotion_price' => 'decimal:2',
         'expires_at' => 'datetime',
         'is_promo' => 'boolean',
         'is_new' => 'boolean',
