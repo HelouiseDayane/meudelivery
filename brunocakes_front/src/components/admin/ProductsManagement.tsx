@@ -69,9 +69,22 @@ export function ProductsManagement() {
     try {
       const data = await import('../../api').then(mod => mod.api.getAdminProducts());
       if (Array.isArray(data)) {
-        // Atualiza contexto via localStorage para disparar useEffect do App
-        localStorage.setItem('bruno_products', JSON.stringify(data));
-        window.location.reload(); // força reload para garantir atualização global
+        // Normaliza todos os campos esperados pelo frontend
+        setProducts(data.map((p: any) => ({
+          id: p.id,
+          name: p.name || '',
+          description: p.description || '',
+          price: p.price !== undefined ? p.price : '',
+          promotionPrice: p.promotion_price !== undefined ? p.promotion_price : '',
+          category: p.category || '',
+          image_url: p.image_url || (p.image && typeof p.image === 'string' && p.image.startsWith('http') ? p.image : `${window.location.origin}/storage/${p.image}`),
+          image: p.image || '',
+          stock: p.quantity !== undefined ? p.quantity : (p.stock !== undefined ? p.stock : ''),
+          expiryDate: p.expires_at || p.expiryDate || '',
+          isPromotion: p.is_promo !== undefined ? p.is_promo : (p.isPromotion !== undefined ? p.isPromotion : false),
+          isNew: p.is_new !== undefined ? p.is_new : (p.isNew !== undefined ? p.isNew : false),
+          is_active: p.is_active !== undefined ? p.is_active : true,
+        })));
       }
     } catch {
       toast.error('Erro ao atualizar lista de produtos');
@@ -80,13 +93,14 @@ export function ProductsManagement() {
   };
 
   // Garante que products sempre seja um array
-  const products = Array.isArray(contextProducts) ? contextProducts : [];
+  const [products, setProducts] = useState<any[]>([]);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
 
-  const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
-  const selectCategories: string[] = categories.length > 0 ? categories : defaultCategories;
+  // Sempre mostrar todas as categorias padrão e cadastradas
+  const categories = Array.from(new Set([...defaultCategories, ...products.map((p) => p.category).filter(Boolean)]));
+  const selectCategories: string[] = categories;
 
   const [formData, setFormData] = useState<ProductFormData>({
   name: "",
@@ -127,6 +141,11 @@ export function ProductsManagement() {
     return numericValue ? numericValue + " g" : "";
   };
 
+  // Carrega todos os produtos do backend ao montar o componente
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
   useEffect(() => {
     if (editingProduct !== null) {
       const product = products.find((p) => String(p.id) === String(editingProduct));
@@ -143,11 +162,11 @@ export function ProductsManagement() {
         setFormData({
           name: product.name || "",
           description: product.description || "",
-          price: product.price !== undefined ? product.price.toString() : "",
-          promotionPrice: product.promotionPrice !== undefined ? product.promotionPrice.toString() : "",
+          price: (product.price !== undefined && product.price !== null) ? product.price.toString() : "",
+          promotionPrice: (product.promotionPrice !== undefined && product.promotionPrice !== null) ? product.promotionPrice.toString() : "",
           category: validCategory,
           image: product.image_url || product.image || "",
-          stock: product.stock !== undefined ? product.stock.toString() : "",
+          stock: (product.stock !== undefined && product.stock !== null) ? product.stock.toString() : "",
           expiryDate,
           isPromotion: product.isPromotion !== undefined ? product.isPromotion : false,
           isNew: product.isNew !== undefined ? product.isNew : false,
@@ -213,7 +232,7 @@ export function ProductsManagement() {
       isNew: false,
       expiryDate: "",
     });
-    fetchProducts();
+    setTimeout(fetchProducts, 400); // Atualiza só o datatable
   };
 
   const formatPrice = (price: number) =>
@@ -251,10 +270,8 @@ export function ProductsManagement() {
                 <div>
                   <Label htmlFor="category">Categoria *</Label>
                   <Select
-                    value={selectCategories.includes(formData.category) ? formData.category : ""}
-                    onValueChange={(value: string) =>
-                      setFormData({ ...formData, category: value })
-                    }
+                    value={formData.category}
+                    onValueChange={(value: string) => setFormData({ ...formData, category: value })}
                   >
                     <SelectTrigger id="category">
                       <SelectValue placeholder="Selecione uma categoria" />
