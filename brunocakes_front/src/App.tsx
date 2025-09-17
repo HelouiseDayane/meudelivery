@@ -38,6 +38,7 @@ interface Product {
   description: string;
   price: number;
   image: string;
+  image_url?: string;
   file?: File;
   category: string;
   available: boolean;
@@ -282,7 +283,9 @@ const toggleProduct = async (id: string) => {
         promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
         category: p.category,
         image: p.image,
+        image_url: p.image_url || (p.image && typeof p.image === 'string' && p.image.startsWith('http') ? p.image : `${window.location.origin}/storage/${p.image}`),
         available: Boolean(p.is_active),
+        is_active: Boolean(p.is_active),
         stock: Number(p.quantity),
         expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
         isPromotion: Boolean(p.is_promo),

@@ -21,11 +21,17 @@ export function PublicMenu() {
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
 
   // Função utilitária para montar a URL da imagem
-  const getImageUrl = (image: string | undefined) => {
-    if (!image) return undefined;
-    if (image.startsWith('http')) return image;
-    if (/^[a-f0-9\-]{36}$/.test(image)) {
-      return `${window.location.origin}/api/images/${image}`;
+  // Função utilitária para obter a URL correta da imagem
+  const getImageUrl = (product: any) => {
+    if (product.image_url && typeof product.image_url === 'string') {
+      return product.image_url;
+    }
+    if (product.image && typeof product.image === 'string' && product.image.startsWith('http')) {
+      return product.image;
+    }
+    // Se vier só o caminho relativo, monta a URL do storage
+    if (product.image && typeof product.image === 'string') {
+      return `${window.location.origin}/storage/${product.image}`;
     }
     return undefined;
   };
@@ -162,7 +168,7 @@ export function PublicMenu() {
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 group">
               <div className="relative">
                 <ImageWithFallback
-                  src={getImageUrl(product.image)}
+                  src={getImageUrl(product)}
                   alt={product.name}
                   className="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-300"
                 />

@@ -38,6 +38,17 @@ const defaultCategories: string[] = [
   "Bolos",
   "Docinhos",
   "Tortas",
+  "Brigadeiro",
+  "Refrigerante",
+  "Bolo de Festa",
+  "Bolo de Pote",
+  "Cupcake Gourmet",
+  "Doce de Leite",
+  "Doce de Coco",
+  "Doce de Amendoim",
+  "Torta de Limão",
+  "Torta de Morango",
+  "Torta Holandesa",
 ];
 
 
@@ -50,6 +61,23 @@ export function ProductsManagement() {
     return v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
   };
   const { products: contextProducts, addProduct, updateProduct, toggleProduct } = useApp();
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Função para buscar produtos do backend após update
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    try {
+      const data = await import('../../api').then(mod => mod.api.getAdminProducts());
+      if (Array.isArray(data)) {
+        // Atualiza contexto via localStorage para disparar useEffect do App
+        localStorage.setItem('bruno_products', JSON.stringify(data));
+        window.location.reload(); // força reload para garantir atualização global
+      }
+    } catch {
+      toast.error('Erro ao atualizar lista de produtos');
+    }
+    setIsLoading(false);
+  };
 
   // Garante que products sempre seja um array
   const products = Array.isArray(contextProducts) ? contextProducts : [];
@@ -118,12 +146,12 @@ export function ProductsManagement() {
           price: product.price !== undefined ? product.price.toString() : "",
           promotionPrice: product.promotionPrice !== undefined ? product.promotionPrice.toString() : "",
           category: validCategory,
-          image: product.image || "",
+          image: product.image_url || product.image || "",
           stock: product.stock !== undefined ? product.stock.toString() : "",
           expiryDate,
           isPromotion: product.isPromotion !== undefined ? product.isPromotion : false,
           isNew: product.isNew !== undefined ? product.isNew : false,
-          is_active: product.available !== undefined ? product.available : true,
+          is_active: product.is_active !== undefined ? product.is_active : true,
         });
         setIsDialogOpen(true);
       }
@@ -171,21 +199,21 @@ export function ProductsManagement() {
     } else {
       addProduct(productData);
     }
-
     setIsDialogOpen(false);
     setEditingProduct(null);
     setFormData({
-  name: "",
-  description: "",
-  price: "",
-  stock: "",
-  category: "",
-  image: "",
-  is_active: true,
-  isPromotion: false,
-  isNew: false,
-  expiryDate: "",
+      name: "",
+      description: "",
+      price: "",
+      stock: "",
+      category: "",
+      image: "",
+      is_active: true,
+      isPromotion: false,
+      isNew: false,
+      expiryDate: "",
     });
+    fetchProducts();
   };
 
   const formatPrice = (price: number) =>
@@ -404,16 +432,18 @@ export function ProductsManagement() {
                         : <span className="text-gray-400">--</span>}
                     </TableCell>
                     <TableCell>
-                      <Badge
+                      <span
                         onClick={() => prod.id !== undefined && toggleProduct(String(prod.id))}
-                        className={`cursor-pointer px-3 py-1 ${
-                          prod.is_active
-                            ? "bg-green-100 text-green-800 hover:bg-green-200"
-                            : "bg-red-100 text-red-800 hover:bg-red-200"
-                        }`}
+                        className="cursor-pointer flex items-center gap-1 px-3 py-1"
+                        title={prod.is_active ? "Ativo" : "Inativo"}
                       >
-                        {prod.is_active ? "Ativo" : "Inativo"}
-                      </Badge>
+                        {prod.is_active ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="green" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="red" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                        )}
+                        <span className={prod.is_active ? "text-green-800" : "text-red-800"}>{prod.is_active ? "Ativo" : "Inativo"}</span>
+                      </span>
                     </TableCell>
                     <TableCell className="text-right flex gap-2 justify-end">
                       <Button
