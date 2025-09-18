@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import api from '../../api';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -13,73 +14,11 @@ import {
   RotateCcw,
   MessageCircle
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
-// Mock client orders data
-const mockClientOrders = [
-  {
-    id: 'ORD-105',
-    items: [
-      { name: 'Brigadeiro Premium', quantity: 6, price: 15.00, image: 'https://images.unsplash.com/photo-1729875751095-71c051759eed?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmF6aWxpYW4lMjBicmlnYWRlaXJvJTIwY2hvY29sYXRlJTIwdHJ1ZmZsZXN8ZW58MXx8fHwxNzU3NjE2MjQxfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral' },
-      { name: 'Trufa de Maracujá', quantity: 3, price: 18.00, image: 'https://images.unsplash.com/photo-1729875751095-71c051759eed?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmF6aWxpYW4lMjBicmlnYWRlaXJvJTIwY2hvY29sYXRlJTIwdHJ1ZmZsZXN8ZW58MXx8fHwxNzU3NjE2MjQxfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral' }
-    ],
-    total: 144.00,
-    status: 'shipping',
-    createdAt: '2024-01-15T10:30:00',
-    estimatedDelivery: '2024-01-15T16:00:00',
-    trackingCode: 'SW123456789BR',
-    paymentMethod: 'PIX',
-    deliveryAddress: 'Rua das Flores, 123 - Vila Madalena, São Paulo',
-    progress: 75
-  },
-  {
-    id: 'ORD-104',
-    items: [
-      { name: 'Bolo Red Velvet', quantity: 1, price: 89.90, image: 'https://images.unsplash.com/photo-1607257882338-70f7dd2ae344?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZWxpY2lvdXMlMjBjaG9jb2xhdGUlMjBkZXNzZXJ0JTIwY2FrZXxlbnwxfHx8fDE3NTc2MTYyMzN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral' }
-    ],
-    total: 89.90,
-    status: 'preparing',
-    createdAt: '2024-01-15T11:15:00',
-    estimatedDelivery: '2024-01-15T17:30:00',
-    trackingCode: 'SW123456790BR',
-    paymentMethod: 'Cartão de Crédito',
-    deliveryAddress: 'Rua das Flores, 123 - Vila Madalena, São Paulo',
-    progress: 50
-  },
-  {
-    id: 'ORD-103',
-    items: [
-      { name: 'Cupcakes Coloridos', quantity: 2, price: 48.00, image: 'https://images.unsplash.com/photo-1615557509870-98972c5e1396?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzd2VldCUyMGNvbG9yZnVsJTIwY3VwY2FrZXMlMjBkZXNzZXJ0fGVufDF8fHx8MTc1NzYxNjIzN3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral' }
-    ],
-    total: 96.00,
-    status: 'delivered',
-    createdAt: '2024-01-13T09:00:00',
-    estimatedDelivery: '2024-01-13T14:00:00',
-    deliveredAt: '2024-01-13T13:45:00',
-    trackingCode: 'SW123456791BR',
-    paymentMethod: 'PIX',
-    deliveryAddress: 'Rua das Flores, 123 - Vila Madalena, São Paulo',
-    progress: 100,
-    canReview: true
-  },
-  {
-    id: 'ORD-102',
-    items: [
-      { name: 'Cheesecake de Morango', quantity: 1, price: 65.00, image: 'https://images.unsplash.com/photo-1641424795123-9f12d697219d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHJhd2JlcnJ5JTIwY2hlZXNlY2FrZSUyMGRlc3NlcnR8ZW58MXx8fHwxNzU3NjE2MjQ0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral' }
-    ],
-    total: 65.00,
-    status: 'delivered',
-    createdAt: '2024-01-10T15:20:00',
-    estimatedDelivery: '2024-01-10T19:00:00',
-    deliveredAt: '2024-01-10T18:30:00',
-    trackingCode: 'SW123456792BR',
-    paymentMethod: 'Dinheiro',
-    deliveryAddress: 'Rua das Flores, 123 - Vila Madalena, São Paulo',
-    progress: 100,
-    reviewed: true,
-    rating: 5
-  }
-];
+// Busca email/telefone do cliente do localStorage
+const clientEmail = localStorage.getItem('client_email') || '';
+const clientPhone = localStorage.getItem('client_phone') || '';
 
 const statusConfig = {
   pending: { label: 'Aguardando Confirmação', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
@@ -88,11 +27,35 @@ const statusConfig = {
   delivered: { label: 'Entregue', color: 'bg-green-100 text-green-800', icon: CheckCircle }
 };
 
+
 export function MyOrdersPage() {
   const [selectedTab, setSelectedTab] = useState<'active' | 'completed'>('active');
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const activeOrders = mockClientOrders.filter(order => ['pending', 'preparing', 'shipping'].includes(order.status));
-  const completedOrders = mockClientOrders.filter(order => order.status === 'delivered');
+  useEffect(() => {
+    async function fetchOrders() {
+      setLoading(true);
+      try {
+        // Busca todos os pedidos e filtra por email/telefone do cliente
+        const allOrders = await api.getOrders();
+        const filtered = allOrders.filter((order: any) => {
+          const emailMatch = clientEmail && order.customer?.email === clientEmail;
+          const phoneMatch = clientPhone && order.customer?.phone === clientPhone;
+          return emailMatch || phoneMatch;
+        });
+        setOrders(filtered);
+      } catch (err) {
+        setOrders([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchOrders();
+  }, []);
+
+  const activeOrders = orders.filter(order => ['pending', 'preparing', 'shipping'].includes(order.status));
+  const completedOrders = orders.filter(order => order.status === 'delivered');
 
   const handleReorder = (order: any) => {
     // Add items to cart
@@ -159,7 +122,14 @@ export function MyOrdersPage() {
 
       {/* Orders Content */}
       <div className="space-y-4">
-        {selectedTab === 'active' && (
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Package className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg mb-2">Carregando pedidos...</h3>
+          </div>
+        ) : selectedTab === 'active' ? (
           <>
             {activeOrders.map(order => (
               <Card key={order.id} className="hover:shadow-md transition-shadow">
@@ -196,7 +166,7 @@ export function MyOrdersPage() {
 
                   {/* Items */}
                   <div className="space-y-2">
-                    {order.items.map((item, index) => (
+                    {order.items.map((item: any, index: any) => (
                       <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
                         <img 
                           src={item.image} 
@@ -273,7 +243,7 @@ export function MyOrdersPage() {
                 <CardContent className="space-y-4">
                   {/* Items */}
                   <div className="space-y-2">
-                    {order.items.map((item, index) => (
+                    {order.items.map((item: any, index: any) => (
                       <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
                         <img 
                           src={item.image} 
@@ -332,11 +302,11 @@ export function MyOrdersPage() {
               </Card>
             ))}
           </>
-        )}
+  )}
       </div>
 
       {/* Empty States */}
-      {selectedTab === 'active' && activeOrders.length === 0 && (
+      {!loading && selectedTab === 'active' && activeOrders.length === 0 && (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Package className="h-8 w-8 text-gray-400" />
@@ -348,7 +318,7 @@ export function MyOrdersPage() {
         </div>
       )}
 
-      {selectedTab === 'completed' && completedOrders.length === 0 && (
+      {!loading && selectedTab === 'completed' && completedOrders.length === 0 && (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="h-8 w-8 text-gray-400" />

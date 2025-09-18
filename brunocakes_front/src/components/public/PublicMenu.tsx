@@ -20,25 +20,7 @@ export function PublicMenu() {
   // Get available categories
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
 
-  // Função utilitária para obter a URL correta da imagem (sempre do backend)
-  const getImageUrl = (product: any) => {
-    if (product.image_url && typeof product.image_url === 'string') {
-      // Remove barra inicial se existir
-      const cleanPath = product.image_url.replace(/^\/+/, '');
-      return `http://localhost:8000/${cleanPath}`;
-    }
-    if (product.image && typeof product.image === 'string' && product.image.startsWith('http')) {
-      return product.image;
-    }
-    if (product.image && typeof product.image === 'string') {
-      const cleanPath = product.image.replace(/^\/+/, '');
-      if (cleanPath.startsWith('products/')) {
-        return `http://localhost:8000/storage/products/${cleanPath.replace('products/', '')}`;
-      }
-      return `http://localhost:8000/storage/products/${cleanPath}`;
-    }
-    return undefined;
-  };
+  // Agora a URL da imagem já vem pronta em product.imageUrl
 
   // Filtra produtos válidos
   const validProducts = products.filter(product => !!product.id);
@@ -172,7 +154,7 @@ export function PublicMenu() {
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 group">
               <div className="relative">
                 <ImageWithFallback
-                  src={getImageUrl(product)}
+                  src={product.imageUrl}
                   alt={product.name}
                   className="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-300"
                 />

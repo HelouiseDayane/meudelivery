@@ -27,9 +27,9 @@ export function AdminDashboard() {
     );
   }
 
-  const todaySales = analytics.salesByDay?.[analytics.salesByDay?.length - 1]?.amount ?? 0;
-  const thisMonthSales = analytics.salesByMonth?.[analytics.salesByMonth?.length - 1]?.amount ?? 0;
-  const thisYearSales = analytics.salesByYear?.[analytics.salesByYear?.length - 1]?.amount ?? 0;
+  const todaySales = Number(analytics.salesByDay?.[analytics.salesByDay?.length - 1]?.amount ?? 0);
+  const thisMonthSales = Number(analytics.salesByMonth?.[analytics.salesByMonth?.length - 1]?.amount ?? 0);
+  const thisYearSales = Number(analytics.salesByYear?.[analytics.salesByYear?.length - 1]?.amount ?? 0);
 
   const totalProducts = products?.length ?? 0;
   const availableProducts = products?.filter(p => p.available && p.stock > 0).length ?? 0;
@@ -85,7 +85,7 @@ export function AdminDashboard() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {analytics.totalRevenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">R$ {Number(analytics.totalRevenue ?? 0).toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
               Ano atual: R$ {thisYearSales.toFixed(2)}
             </p>
@@ -163,7 +163,7 @@ export function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {analytics.topProductsMonth.map((item, index) => (
+              {(analytics.topProductsMonth ?? []).map((item, index) => (
                 <div key={item.product} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <Badge variant="outline">{index + 1}º</Badge>
@@ -200,7 +200,7 @@ export function AdminDashboard() {
                   fill="#8884d8"
                   dataKey="revenue"
                 >
-                  {analytics.neighborhoodsSales.map((entry, index) => (
+                  {(analytics.neighborhoodsSales ?? []).map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -247,7 +247,7 @@ export function AdminDashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {analytics.neighborhoodsSales.map((item, index) => (
+            {(analytics.neighborhoodsSales ?? []).map((item, index) => (
               <div key={item.neighborhood}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">

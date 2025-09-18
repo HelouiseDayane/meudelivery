@@ -310,11 +310,10 @@ export function Checkout() {
                     ? item.product.promotionPrice 
                     : item.product.price;
                   const itemTotal = price * item.quantity;
-                  
                   return (
                     <div key={item.product.id} className="flex gap-3">
                       <ImageWithFallback
-                        src={item.product.image}
+                        src={item.product.imageUrl}
                         alt={item.product.name}
                         className="w-12 h-12 rounded object-cover"
                       />

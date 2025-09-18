@@ -121,7 +121,10 @@ function App() {
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const savedOrders = localStorage.getItem('bruno_orders');
+    return savedOrders ? JSON.parse(savedOrders) : [];
+  });
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -227,10 +230,33 @@ const toggleProduct = async (id: string) => {
   // --- Order Functions ---
   const createOrder = async (customer: CustomerData, items: CartItem[], total: number): Promise<string> => {
     try {
-      const order = await api.createOrder({ customer, items, total });
-      setOrders(prev => [...prev, order]);
+      const backendOrder = await api.createOrder({ customer, items, total });
+      const orderData = backendOrder.order ?? backendOrder;
+      const order: Order = {
+        id: String(orderData.id),
+        customer: {
+          name: orderData.customer_name ?? customer.name,
+          email: orderData.customer_email ?? customer.email,
+          phone: orderData.customer_phone ?? customer.phone,
+          address: orderData.address_street ?? customer.address,
+          neighborhood: orderData.address_neighborhood ?? customer.neighborhood,
+          additionalInfo: customer.additionalInfo ?? ''
+        },
+        items,
+        total: Number(orderData.total_amount ?? total),
+        status: orderData.status ?? 'pending',
+        paymentStatus: backendOrder.payment?.status ?? 'pending',
+        createdAt: orderData.created_at ?? new Date().toISOString(),
+        pixPaymentId: backendOrder.payment?.id ?? undefined
+      };
+      setOrders(prev => {
+        const updated = [...prev, order];
+        localStorage.setItem('bruno_orders', JSON.stringify(updated));
+        return updated;
+      });
       items.forEach(item => updateProduct(item.product.id, { stock: item.product.stock - item.quantity }));
-      toast.success('Pedido criado com sucesso');
+      toast.success('Pedido criado com sucesso! Redirecionando para pagamento...');
+      navigate(`/payment/${order.id}`);
       return order.id;
     } catch {
       toast.error('Erro ao criar pedido');
@@ -268,12 +294,14 @@ const toggleProduct = async (id: string) => {
 
   // --- Load localStorage & products ---
   useEffect(() => {
-    const savedAdmin = localStorage.getItem('bruno_admin');
-    const savedToken = localStorage.getItem('admin_token');
-    const savedCart = localStorage.getItem('bruno_cart');
+  const savedAdmin = localStorage.getItem('bruno_admin');
+  const savedToken = localStorage.getItem('admin_token');
+  const savedCart = localStorage.getItem('bruno_cart');
+  const savedOrders = localStorage.getItem('bruno_orders');
 
-    if (savedAdmin && savedToken) setAdmin(JSON.parse(savedAdmin));
-    if (savedCart) setCart(JSON.parse(savedCart));
+  if (savedAdmin && savedToken) setAdmin(JSON.parse(savedAdmin));
+  if (savedCart) setCart(JSON.parse(savedCart));
+  if (savedOrders) setOrders(JSON.parse(savedOrders));
 
     // Função para mapear os dados do backend para camelCase
     function mapProductFromBackend(p: any): Product {

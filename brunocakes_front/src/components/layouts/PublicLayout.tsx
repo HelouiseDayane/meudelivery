@@ -8,11 +8,13 @@ import { useState } from 'react';
 
 export function PublicLayout() {
   const { cart } = useApp();
+  // Garante que cart nunca seja undefined
+  const safeCart = Array.isArray(cart) ? cart : [];
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const cartItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const cartTotal = cart.reduce((sum, item) => {
+  const cartItemsCount = safeCart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartTotal = safeCart.reduce((sum, item) => {
     const price = item.product.isPromotion && item.product.promotionPrice 
       ? item.product.promotionPrice 
       : item.product.price;

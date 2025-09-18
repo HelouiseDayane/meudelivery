@@ -15,10 +15,12 @@ import {
 
 export function ClientOrders() {
   const { orders, user } = useApp();
+    // Simulação: pegar email do cliente logado do localStorage (ajuste conforme seu fluxo real)
+    const clientEmail = localStorage.getItem('client_email');
 
   // Filter orders for current user
   const userOrders = orders
-    .filter(order => order.clientId === user?.id)
+  .filter(order => order.customer.email === clientEmail)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const getStatusColor = (status: string) => {
@@ -27,6 +29,7 @@ export function ClientOrders() {
       case 'preparing': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'ready': return 'bg-green-100 text-green-800 border-green-200';
       case 'delivered': return 'bg-gray-100 text-gray-800 border-gray-200';
+    case 'completed': return 'bg-gray-100 text-gray-800 border-gray-200';
       case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -38,6 +41,7 @@ export function ClientOrders() {
       case 'preparing': return 'Preparando';
       case 'ready': return 'Pronto para Entrega';
       case 'delivered': return 'Entregue';
+    case 'completed': return 'Entregue';
       case 'cancelled': return 'Cancelado';
       default: return status;
     }
@@ -49,6 +53,7 @@ export function ClientOrders() {
       case 'preparing': return <Clock className="w-4 h-4" />;
       case 'ready': return <CheckCircle className="w-4 h-4" />;
       case 'delivered': return <Truck className="w-4 h-4" />;
+    case 'completed': return <Truck className="w-4 h-4" />;
       case 'cancelled': return <Package className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
     }
@@ -60,6 +65,7 @@ export function ClientOrders() {
       case 'preparing': return 'Nossa equipe está preparando seus itens';
       case 'ready': return 'Seu pedido está pronto e será entregue em breve';
       case 'delivered': return 'Pedido entregue com sucesso';
+    case 'completed': return 'Pedido entregue com sucesso';
       case 'cancelled': return 'Este pedido foi cancelado';
       default: return '';
     }
@@ -79,6 +85,7 @@ export function ClientOrders() {
       case 'ready':
         return 'Saindo para entrega';
       case 'delivered':
+    case 'completed':
         return 'Entregue';
       case 'cancelled':
         return 'Cancelado';
@@ -151,7 +158,7 @@ export function ClientOrders() {
                     <p className="text-sm text-orange-600">{getStatusDescription(order.status)}</p>
                   </div>
                 </div>
-                {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                {order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'confirmed' && (
                   <p className="text-sm font-medium text-orange-700 mt-2">
                     ⏱️ {getEstimatedTime(order.status, order.createdAt)}
                   </p>
@@ -163,7 +170,7 @@ export function ClientOrders() {
                 <h4 className="font-semibold text-gray-900">Itens do Pedido</h4>
                 <div className="space-y-3">
                   {order.items.map((item, index) => (
-                    <div key={index} className="flex gap-4 p-3 bg-gray-50 rounded-md">
+                    <div key={item.product.id + '-' + index} className="flex gap-4 p-3 bg-gray-50 rounded-md">
                       <div className="w-16 h-16 rounded-md overflow-hidden flex-shrink-0">
                         <ImageWithFallback
                           src={item.product.image}
@@ -186,30 +193,7 @@ export function ClientOrders() {
                 </div>
               </div>
 
-              {/* Delivery Info */}
-              {order.deliveryAddress && (
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold text-gray-900 mb-3">Informações de Entrega</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 text-gray-500 mt-0.5" />
-                      <div>
-                        <p className="font-medium">Endereço:</p>
-                        <p className="text-gray-600">{order.deliveryAddress}</p>
-                      </div>
-                    </div>
-                    {order.phone && (
-                      <div className="flex items-start gap-2">
-                        <Phone className="w-4 h-4 text-gray-500 mt-0.5" />
-                        <div>
-                          <p className="font-medium">Telefone:</p>
-                          <p className="text-gray-600">{order.phone}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Se quiser mostrar endereço, use order.customer.address e order.customer.phone */}
             </CardContent>
           </Card>
         ))}

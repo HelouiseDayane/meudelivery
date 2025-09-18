@@ -119,7 +119,7 @@ export function Cart() {
                 return (
                   <div key={item.product.id} className="flex gap-4 p-4 border rounded-lg">
                     <ImageWithFallback
-                      src={item.product.image}
+                      src={item.product.imageUrl}
                       alt={item.product.name}
                       className="w-20 h-20 rounded object-cover"
                     />

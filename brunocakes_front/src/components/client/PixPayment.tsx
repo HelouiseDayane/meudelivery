@@ -6,6 +6,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { QrCode, Copy, Clock, CheckCircle, AlertCircle, CreditCard, ArrowLeft } from 'lucide-react';
+import { Label } from '../ui/label';
+import { Input } from '../ui/input';
 import { toast } from 'sonner';
 import { STORE_CONFIG } from '../../api';
 
@@ -86,11 +88,8 @@ export function PixPayment() {
   };
 
   const handleManualConfirmation = () => {
-    // For demo purposes - simulate payment confirmation
+    // For demo purposes - simula pagamento confirmado apenas no frontend
     setPaymentStatus('paid');
-    if (order) {
-      updateOrderStatus(order.id, 'confirmed');
-    }
     toast.success('Pagamento confirmado! Seu pedido foi enviado para preparação.');
   };
 
@@ -158,7 +157,7 @@ export function PixPayment() {
             </div>
 
             <div className="flex gap-4">
-              <Button onClick={() => navigate('/orders')} className="flex-1">
+              <Button onClick={() => navigate('/clientorders')} className="flex-1">
                 Acompanhar Pedido
               </Button>
               <Button variant="outline" onClick={() => navigate('/menu')} className="flex-1">
@@ -311,11 +310,11 @@ export function PixPayment() {
               <div className="space-y-2">
                 <h4 className="font-medium">Dados do Cliente</h4>
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <p>{order.clientName}</p>
-                  <p>{order.clientPhone}</p>
-                  <p>{order.clientEmail}</p>
-                  <p>{order.clientAddress}</p>
-                  <p>{order.clientNeighborhood}</p>
+                  <p>{order.customer.name}</p>
+                  <p>{order.customer.phone}</p>
+                  <p>{order.customer.email}</p>
+                  <p>{order.customer.address}</p>
+                  <p>{order.customer.neighborhood}</p>
                 </div>
               </div>
 

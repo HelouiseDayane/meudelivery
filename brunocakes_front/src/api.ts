@@ -171,7 +171,30 @@ export const api = {
   updateClient: (id: string, data: any) => apiRequest(API_ENDPOINTS.clients.update(id), { method: 'PUT', body: JSON.stringify(data) }),
   deleteClient: (id: string) => apiRequest(API_ENDPOINTS.clients.delete(id)),
 
-  createOrder: (data: any) => apiRequest(API_ENDPOINTS.orders.create, { method: 'POST', body: JSON.stringify(data) }),
+  createOrder: (data: any) => {
+    // Monta payload conforme backend espera
+    const payload = {
+      customer_name: data.customer?.name || data.clientName || '',
+      customer_email: data.customer?.email || data.clientEmail || '',
+      customer_phone: data.customer?.phone || data.clientPhone || '',
+      address_street: data.customer?.address || data.clientAddress || '',
+      address_neighborhood: data.customer?.neighborhood || data.clientNeighborhood || '',
+      items: Array.isArray(data.items)
+        ? data.items.map((item: any) => ({
+            product_id: item.product.id,
+            quantity: item.quantity
+          }))
+        : [],
+    };
+    return apiRequest('http://localhost:8000/api/checkout', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+  },
   getOrders: () => apiRequest(API_ENDPOINTS.orders.list),
   getOrder: (id: string) => apiRequest(API_ENDPOINTS.orders.show(id)),
   updateOrder: (id: string, data: any) => apiRequest(API_ENDPOINTS.orders.update(id), { method: 'PUT', body: JSON.stringify(data) }),
@@ -183,6 +206,9 @@ export const api = {
   getDeliveries: () => apiRequest(API_ENDPOINTS.deliveries.list),
   createDelivery: (data: any) => apiRequest(API_ENDPOINTS.deliveries.create, { method: 'POST', body: JSON.stringify(data) }),
   updateDelivery: (id: string, data: any) => apiRequest(API_ENDPOINTS.deliveries.update(id), { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Analytics/Dashboard
+  getAnalytics: () => apiRequest('http://localhost:8000/api/admin/dashboard'),
 };
 
 export default api;
