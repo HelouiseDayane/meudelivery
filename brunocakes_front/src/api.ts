@@ -195,7 +195,19 @@ export const api = {
       },
     });
   },
-  getOrders: () => apiRequest(API_ENDPOINTS.orders.list),
+  getOrdersByContact: async (email?: string, phone?: string) => {
+    // Monta query string conforme backend espera
+    const params = new URLSearchParams();
+    if (email) params.append('customer_email', email);
+    if (phone) params.append('customer_phone', phone);
+    const url = `http://localhost:8000/api/checkout/pedidos?${params.toString()}`;
+    return apiRequest(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+  },
   getOrder: (id: string) => apiRequest(API_ENDPOINTS.orders.show(id)),
   updateOrder: (id: string, data: any) => apiRequest(API_ENDPOINTS.orders.update(id), { method: 'PUT', body: JSON.stringify(data) }),
 

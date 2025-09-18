@@ -80,4 +80,25 @@ class CheckoutController extends Controller
             ], 201);
         });
     }
+
+    public function getPedidos(Request $request)
+    {
+        $request->validate([
+            'customer_email' => 'nullable|email',
+            'customer_phone' => 'nullable|string|max:20',
+        ]);
+
+        $query = Order::query();
+
+        if ($request->filled('customer_email')) {
+            $query->where('customer_email', $request->customer_email);
+        }
+        if ($request->filled('customer_phone')) {
+            $query->where('customer_phone', $request->customer_phone);
+        }
+
+        $orders = $query->with('items')->get();
+
+        return response()->json($orders);
+    }
 }

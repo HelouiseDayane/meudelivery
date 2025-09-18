@@ -157,7 +157,15 @@ export function PixPayment() {
             </div>
 
             <div className="flex gap-4">
-              <Button onClick={() => navigate('/clientorders')} className="flex-1">
+              <Button
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  if (order?.customer?.email) params.append('email', order.customer.email);
+                  if (order?.customer?.phone) params.append('phone', order.customer.phone);
+                  navigate(`/orders-lookup?${params.toString()}`);
+                }}
+                className="flex-1"
+              >
                 Acompanhar Pedido
               </Button>
               <Button variant="outline" onClick={() => navigate('/menu')} className="flex-1">

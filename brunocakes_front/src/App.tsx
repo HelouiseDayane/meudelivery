@@ -20,6 +20,7 @@ import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
 import { PixPayment } from './components/client/PixPayment';
 import { ClientOrders as OrderTracking } from './components/client/ClientOrders';
+import { OrdersLookup } from './components/public/OrdersLookup';
 
 // Layouts
 import { AdminLayout } from './components/layouts/AdminLayout';
@@ -386,6 +387,7 @@ const toggleProduct = async (id: string) => {
             <Route path="checkout" element={<Checkout />} />
             <Route path="payment/:orderId" element={<PixPayment />} />
             <Route path="order/:orderId" element={<OrderTracking />} />
+            <Route path="/orders-lookup" element={<OrdersLookup />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" />} />

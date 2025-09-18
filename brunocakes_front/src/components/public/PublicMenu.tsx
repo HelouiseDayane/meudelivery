@@ -69,6 +69,11 @@ export function PublicMenu() {
   return (
     <div className="space-y-8">
       {/* Hero Section */}
+      <div className="flex justify-end mb-4">
+        <Button variant="outline" onClick={() => window.location.href = '/orders-lookup'}>
+          Meus Pedidos
+        </Button>
+      </div>
       <div className="text-center space-y-4 py-8">
         <div className="flex items-center justify-center space-x-4 mb-4">
           <div className="w-16 h-16 bruno-gradient rounded-full flex items-center justify-center">

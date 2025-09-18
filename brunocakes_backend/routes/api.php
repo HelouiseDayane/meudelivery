@@ -24,6 +24,8 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::post('/checkout', [CheckoutController::class, 'store']);
 Route::post('/payment/notify', [PaymentWebhookController::class, 'notify']);
 
+Route::get('/checkout/pedidos', [CheckoutController::class, 'getPedidos']);
+
 // Rotas admin (Sanctum auth)
 Route::prefix('admin')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);

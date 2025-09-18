@@ -193,7 +193,20 @@ export function ClientOrders() {
                 </div>
               </div>
 
-              {/* Se quiser mostrar endereço, use order.customer.address e order.customer.phone */}
+              {/* Botão acompanhar pedido */}
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    if (order.customer?.email) params.append('email', order.customer.email);
+                    if (order.customer?.phone) params.append('phone', order.customer.phone);
+                    window.location.href = `/orders-lookup?${params.toString()}`;
+                  }}
+                >
+                  Acompanhar pedido
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}
