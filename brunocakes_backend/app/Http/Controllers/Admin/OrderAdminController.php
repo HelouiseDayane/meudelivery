@@ -125,4 +125,43 @@ class OrderAdminController extends Controller
 
             return response()->json(['updated_count' => $updatedCount]);
         }
+
+            
+    
+public function getUniqueCustomers()
+{
+    $customers = Order::select([
+        'customer_name',
+        'customer_email',
+        'customer_phone',
+        \DB::raw('COUNT(*) as total_orders'),
+        \DB::raw('SUM(total_amount) as total_spent'),
+        \DB::raw('MAX(created_at) as last_order_date'),
+        \DB::raw('MAX(address_street) as address_street'),
+        \DB::raw('MAX(address_neighborhood) as address_neighborhood')
+    ])
+    ->whereNotNull('customer_phone')
+    ->where('customer_phone', '!=', '')
+    ->groupBy([
+        'customer_name',
+        'customer_email',
+        'customer_phone'
+    ])
+    ->orderBy('customer_name')
+    ->get()
+    ->map(function ($customer) {
+        return [
+            'name' => $customer->customer_name,
+            'email' => $customer->customer_email,
+            'phone' => $customer->customer_phone,
+            'address' => $customer->address_street,
+            'neighborhood' => $customer->address_neighborhood,
+            'totalOrders' => (int) $customer->total_orders,
+            'totalSpent' => (float) $customer->total_spent,
+            'lastOrderDate' => $customer->last_order_date
+        ];
+    });
+
+    return response()->json($customers);
+}
      }

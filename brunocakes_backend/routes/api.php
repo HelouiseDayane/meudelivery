@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\ProductAdminController;
 use App\Http\Controllers\Admin\OrderAdminController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Api\AnalyticsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +22,7 @@ Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::post('/checkout', [CheckoutController::class, 'store']);
 Route::post('/payment/notify', [PaymentWebhookController::class, 'notify']);
+Route::get('/analytics', [AnalyticsController::class, 'index']);
 
 Route::get('/checkout/pedidos', [CheckoutController::class, 'getPedidos']);
 
@@ -41,5 +43,7 @@ Route::prefix('admin')->group(function () {
         Route::patch('/orders/finish', [OrderAdminController::class, 'markAsCompleted']); // Corrigido
         Route::patch('/orders/cancel-payment', [OrderAdminController::class, 'cancelPayment']); // Corrigido
         Route::match(['post', 'patch'], '/orders/confirm-many', [OrderAdminController::class, 'confirmMany']);
+
+        Route::get('customers/unique', [OrderAdminController::class, 'getUniqueCustomers']);
     });
 });
