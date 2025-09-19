@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Separator } from '../ui/separator';
-import { ArrowLeft, MessageCircle, User, Mail, Phone, MapPin } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
+import { ArrowLeft, MessageCircle, User, Mail, Phone, MapPin, Users } from 'lucide-react';
 import { useApp } from '../../App';
 import { toast } from 'sonner';
+import api from '../../api';
 
 interface CustomerData {
   name: string;
@@ -22,6 +26,12 @@ export const Checkout = () => {
   const navigate = useNavigate();
   const { cart, createOrder, clearCart } = useApp();
   const [isLoading, setIsLoading] = useState(false);
+  const [isExistingCustomerModalOpen, setIsExistingCustomerModalOpen] = useState(false);
+  const [customerContact, setCustomerContact] = useState('');
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [searchByPhone, setSearchByPhone] = useState(false); // true = telefone, false = email
+  const [foundCustomerData, setFoundCustomerData] = useState<any>(null);
+  const [isConfirmCustomerModalOpen, setIsConfirmCustomerModalOpen] = useState(false);
   
   const [customerData, setCustomerData] = useState<CustomerData>({
     name: '',
@@ -29,8 +39,21 @@ export const Checkout = () => {
     phone: '',
     address: '',
     neighborhood: '',
-    additionalInfo: '',
+    additionalInfo: ''
   });
+
+  // Debug - mostra os dados atuais do customerData
+  useEffect(() => {
+    console.log('customerData atual:', customerData);
+  }, [customerData]);
+
+  // Debug - mostra se o botão deve estar habilitado
+  useEffect(() => {
+    console.log('isSearchingCustomer:', isSearchingCustomer);
+    console.log('customerContact:', customerContact);
+    console.log('customerContact.trim():', customerContact.trim());
+    console.log('Botão habilitado:', !isSearchingCustomer && customerContact.trim());
+  }, [isSearchingCustomer, customerContact]);
 
   const total = cart.reduce((sum, item) => {
     const price = item.product.isPromotion ? item.product.promotionPrice || item.product.price : item.product.price;
@@ -39,6 +62,123 @@ export const Checkout = () => {
 
   const handleInputChange = (field: keyof CustomerData, value: string) => {
     setCustomerData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Função para formatar telefone
+  const formatPhoneInput = (value: string) => {
+    // Remove all non-digits
+    const digits = value.replace(/\D/g, '');
+    
+    // Apply mask: (11) 99999-9999
+    if (digits.length <= 2) {
+      return `(${digits}`;
+    } else if (digits.length <= 7) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    } else {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+    }
+  };
+
+  // Função para lidar com mudança no campo de contato
+  const handleContactChange = (value: string) => {
+    if (searchByPhone) {
+      // Aplicar máscara de telefone
+      const formatted = formatPhoneInput(value);
+      setCustomerContact(formatted);
+    } else {
+      // Email sem máscara
+      setCustomerContact(value);
+    }
+  };
+
+  const handleSearchExistingCustomer = async () => {
+    if (!customerContact.trim()) {
+      toast.error('Por favor, digite um email ou telefone.');
+      return;
+    }
+
+    // Validação básica
+    if (searchByPhone) {
+      const digits = customerContact.replace(/\D/g, '');
+      if (digits.length < 10) {
+        toast.error('Por favor, digite um telefone válido.');
+        return;
+      }
+    } else {
+      if (!customerContact.includes('@')) {
+        toast.error('Por favor, digite um email válido.');
+        return;
+      }
+    }
+
+    setIsSearchingCustomer(true);
+    try {
+      // Se for telefone, enviar apenas os dígitos
+      const contactToSend = searchByPhone 
+        ? customerContact.replace(/\D/g, '') 
+        : customerContact;
+      
+      console.log('Enviando para API:', contactToSend);
+      console.log('Tipo de busca:', searchByPhone ? 'telefone' : 'email');
+      
+      const response = await api.getCustomerLastOrder(contactToSend);
+      console.log('Resposta da API:', response);
+      
+      if (response && response.customer_name) {
+        // Salva os dados encontrados para confirmação
+        setFoundCustomerData(response);
+        setIsConfirmCustomerModalOpen(true);
+        setIsExistingCustomerModalOpen(false);
+      } else {
+        // Cliente não encontrado - mantém o modal aberto para nova tentativa
+        toast.error('❌ Cliente não encontrado. Verifique o email ou telefone informado e tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados do cliente:', error);
+      toast.error('Cliente não encontrado ou erro no servidor. Tente novamente.');
+    } finally {
+      setIsSearchingCustomer(false);
+    }
+  };
+
+  const handleConfirmCustomer = () => {
+    console.log('handleConfirmCustomer chamado');
+    console.log('foundCustomerData:', foundCustomerData);
+    
+    if (foundCustomerData) {
+      console.log('Preenchendo dados do formulário...');
+      
+      // Preenche os dados do formulário
+      setCustomerData((prev: CustomerData) => {
+        const newData = {
+          ...prev,
+          name: foundCustomerData.customer_name || '',
+          email: foundCustomerData.customer_email || '',
+          phone: foundCustomerData.customer_phone || '',
+          address: foundCustomerData.address_street 
+            ? `${foundCustomerData.address_street}${foundCustomerData.address_number ? ', ' + foundCustomerData.address_number : ''}`
+            : '',
+          neighborhood: foundCustomerData.address_neighborhood || ''
+        };
+        
+        console.log('Dados que serão setados:', newData);
+        return newData;
+      });
+      
+      toast.success('✅ Dados do cliente preenchidos com sucesso! Verifique os campos abaixo.');
+      setIsConfirmCustomerModalOpen(false);
+      setFoundCustomerData(null);
+      setCustomerContact('');
+      setSearchByPhone(false); // Reset para email
+    } else {
+      console.log('foundCustomerData é null ou undefined');
+    }
+  };
+
+  const handleRejectCustomer = () => {
+    setIsConfirmCustomerModalOpen(false);
+    setFoundCustomerData(null);
+    setIsExistingCustomerModalOpen(true); // Volta para o modal de busca
   };
 
   const generateWhatsAppMessage = () => {
@@ -159,6 +299,18 @@ export const Checkout = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Botão Já sou cliente */}
+            <div className="flex justify-center mb-6">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="flex items-center gap-2 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                onClick={() => setIsExistingCustomerModalOpen(true)}
+              >
+                <Users className="h-4 w-4" />
+                👤 Já sou cliente
+              </Button>
+            </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="text-sm font-medium mb-1 block">Nome Completo *</label>
@@ -285,6 +437,148 @@ export const Checkout = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal para buscar cliente existente */}
+      <Dialog open={isExistingCustomerModalOpen} onOpenChange={setIsExistingCustomerModalOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto w-full">
+          <DialogHeader>
+            <DialogTitle>Buscar dados do cliente</DialogTitle>
+            <DialogDescription>
+              Escolha como você deseja nos encontrar e preencha o campo abaixo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Checkbox para escolher tipo de busca */}
+            <div className="flex items-center space-x-2 mb-4">
+              <Checkbox 
+                id="search-type" 
+                checked={searchByPhone}
+                onCheckedChange={(checked: boolean) => {
+                  setSearchByPhone(checked);
+                  setCustomerContact(''); // Limpa o campo quando muda o tipo
+                }}
+              />
+              <Label htmlFor="search-type" className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Buscar por telefone
+              </Label>
+              {!searchByPhone && (
+                <Label className="flex items-center gap-2 ml-4 text-muted-foreground">
+                  <Mail className="h-4 w-4" />
+                  Buscar por email
+                </Label>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customer-contact">
+                {searchByPhone ? 'Telefone' : 'Email'}
+              </Label>
+              <Input
+                id="customer-contact"
+                type={searchByPhone ? "tel" : "email"}
+                placeholder={searchByPhone ? "(11) 99999-9999" : "exemplo@email.com"}
+                value={customerContact}
+                onChange={(e) => handleContactChange(e.target.value)}
+                className="w-full"
+              />
+              {searchByPhone && (
+                <p className="text-xs text-muted-foreground">
+                  Digite apenas números, a máscara será aplicada automaticamente
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {/* Footer com botões - TESTE */}
+          <div className="w-full flex justify-between gap-3 pt-4 border-t bg-gray-50 p-4 -mx-6 -mb-6 mt-4">
+            <button 
+              type="button" 
+              className="flex-1 px-4 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50"
+              onClick={() => {
+                setIsExistingCustomerModalOpen(false);
+                setCustomerContact('');
+                setSearchByPhone(false);
+              }}
+            >
+              ❌ Cancelar
+            </button>
+            <button 
+              type="button" 
+              className="flex-1 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+              onClick={handleSearchExistingCustomer}
+              disabled={isSearchingCustomer || !customerContact.trim()}
+            >
+              {isSearchingCustomer ? '⏳ Buscando...' : '🔍 Buscar Dados'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação dos Dados do Cliente */}
+      <Dialog open={isConfirmCustomerModalOpen} onOpenChange={setIsConfirmCustomerModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-green-600" />
+              ✅ Cliente encontrado!
+            </DialogTitle>
+            <DialogDescription>
+              Encontramos os dados deste cliente. Deseja preencher o formulário automaticamente com essas informações?
+            </DialogDescription>
+          </DialogHeader>
+          
+          {foundCustomerData && (
+            <div className="space-y-4 py-4 border rounded-lg p-4 bg-green-50">
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <Label className="text-sm font-medium text-green-800">Nome:</Label>
+                  <p className="text-sm font-semibold text-green-900">{foundCustomerData.customer_name}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-green-800">Email:</Label>
+                  <p className="text-sm text-green-700">{foundCustomerData.customer_email}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-green-800">Telefone:</Label>
+                  <p className="text-sm text-green-700">{foundCustomerData.customer_phone}</p>
+                </div>
+                {foundCustomerData.address_street && (
+                  <div>
+                    <Label className="text-sm font-medium text-green-800">Endereço:</Label>
+                    <p className="text-sm text-green-700">
+                      {foundCustomerData.address_street}
+                      {foundCustomerData.address_number && `, ${foundCustomerData.address_number}`}
+                    </p>
+                  </div>
+                )}
+                {foundCustomerData.address_neighborhood && (
+                  <div>
+                    <Label className="text-sm font-medium text-green-800">Bairro:</Label>
+                    <p className="text-sm text-green-700">{foundCustomerData.address_neighborhood}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
+            <Button 
+              variant="outline" 
+              onClick={handleRejectCustomer}
+              className="w-full sm:w-auto border-red-200 text-red-700 hover:bg-red-50"
+            >
+              ❌ Não, buscar novamente
+            </Button>
+            <Button 
+              onClick={handleConfirmCustomer}
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
+            >
+              ✅ Sim, preencher formulário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

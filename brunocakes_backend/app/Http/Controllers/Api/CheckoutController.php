@@ -101,4 +101,31 @@ class CheckoutController extends Controller
 
         return response()->json($orders);
     }
+
+    public function getLastOrderCustomer(Request $request)
+    {
+        $request->validate([
+            'customer_phone' => 'required|string|max:20',
+        ]);
+
+        $customer = Order::select([
+            'customer_name',
+            'customer_email',
+            'customer_phone',
+            'address_street',
+            'address_number',
+            'address_neighborhood'
+        ])
+        ->where('customer_phone', $request->customer_phone)
+        ->orderBy('created_at', 'desc')
+        ->first();
+
+        if (!$customer) {
+            return response()->json([
+                'message' => 'Cliente não encontrado'
+            ], 404);
+        }
+
+        return response()->json($customer);
+    }
 }

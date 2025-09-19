@@ -128,7 +128,23 @@ function AppWrapper() {
 // App
 function App() {
   const [admin, setAdmin] = useState<Admin | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
+  
+  // Inicializar carrinho direto do localStorage
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const savedCart = localStorage.getItem('bruno_cart');
+      if (savedCart) {
+        const parsedCart = JSON.parse(savedCart);
+        console.log('Carrinho inicializado do localStorage:', parsedCart);
+        return Array.isArray(parsedCart) ? parsedCart : [];
+      }
+    } catch (error) {
+      console.error('Erro ao carregar carrinho do localStorage na inicialização:', error);
+      localStorage.removeItem('bruno_cart');
+    }
+    return [];
+  });
+  
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -310,7 +326,6 @@ function App() {
   useEffect(() => {
     const savedAdmin = localStorage.getItem('bruno_admin');
     const savedToken = localStorage.getItem('admin_token');
-    const savedCart = localStorage.getItem('bruno_cart');
 
     // Limpar dados mock antigos se existirem
     const oldMockData = localStorage.getItem('bruno_orders');
@@ -328,7 +343,6 @@ function App() {
     }
 
     if (savedAdmin && savedToken) setAdmin(JSON.parse(savedAdmin));
-    if (savedCart) setCart(JSON.parse(savedCart));
 
     // Função para mapear os dados do backend para camelCase
     function mapProductFromBackend(p: any): Product {
@@ -415,7 +429,10 @@ function App() {
 
   // Save cart to localStorage whenever it changes
   useEffect(() => {
+    console.log('useEffect de salvamento executado. Carrinho atual:', cart);
+    console.log('Tamanho do carrinho:', cart.length);
     localStorage.setItem('bruno_cart', JSON.stringify(cart));
+    console.log('Carrinho salvo no localStorage:', JSON.stringify(cart));
   }, [cart]);
 
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center">Carregando...</div>;

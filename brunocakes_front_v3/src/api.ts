@@ -240,6 +240,23 @@ export const api = {
       },
     });
   },
+  getCustomerLastOrder: async (contact: string) => {
+    // Busca dados do último pedido do cliente por email ou telefone
+    const params = new URLSearchParams();
+    // Verifica se é email (contém @) ou telefone
+    if (contact.includes('@')) {
+      params.append('customer_email', contact);
+    } else {
+      params.append('customer_phone', contact);
+    }
+    const url = `http://localhost:8000/api/customer/last-order?${params.toString()}`;
+    return apiRequest(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+  },
   getOrder: (id: string) => apiRequest(API_ENDPOINTS.orders.show(id)),
   updateOrder: (id: string, data: any) => apiRequest(API_ENDPOINTS.orders.update(id), { method: 'PUT', body: JSON.stringify(data) }),
 

@@ -23,6 +23,7 @@ Route::get('/products/{id}', [ProductController::class, 'show']);
 Route::post('/checkout', [CheckoutController::class, 'store']);
 Route::post('/payment/notify', [PaymentWebhookController::class, 'notify']);
 Route::get('/analytics', [AnalyticsController::class, 'index']);
+Route::get('/customer/last-order', [CheckoutController::class, 'getLastOrderCustomer']);
 
 Route::get('/checkout/pedidos', [CheckoutController::class, 'getPedidos']);
 

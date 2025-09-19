@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { 
   ArrowLeft, 
   Minus, 
@@ -20,14 +21,19 @@ import {
   CreditCard,
   Smartphone,
   Banknote,
-  ShoppingCart
+  ShoppingCart,
+  Users
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import api from '../../api';
 
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { cart, removeFromCart, addToCart, clearCart } = useApp();
   const [isLoading, setIsLoading] = useState(false);
+  const [isExistingCustomerModalOpen, setIsExistingCustomerModalOpen] = useState(false);
+  const [customerContact, setCustomerContact] = useState('');
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
 
   const [orderData, setOrderData] = useState({
     deliveryAddress: '',
@@ -43,7 +49,7 @@ export function CheckoutPage() {
   });
 
   // Calculate totals
-  const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const deliveryFee = subtotal >= 50 ? 0 : 8.90;
   const total = subtotal + deliveryFee;
 
@@ -51,14 +57,14 @@ export function CheckoutPage() {
     if (newQuantity === 0) {
       removeFromCart(productId);
     } else {
-      const item = cart.find(i => i.id === productId);
-      if (item && newQuantity < item.quantity) {
+      const cartItem = cart.find(i => i.product.id === productId);
+      if (cartItem && newQuantity < cartItem.quantity) {
         removeFromCart(productId);
         if (newQuantity > 0) {
-          addToCart({ ...item, quantity: newQuantity - 1 });
+          addToCart(cartItem.product, newQuantity);
         }
-      } else if (item) {
-        addToCart(item);
+      } else if (cartItem) {
+        addToCart(cartItem.product, 1);
       }
     }
   };
@@ -95,6 +101,44 @@ export function CheckoutPage() {
   const handlePhoneChange = (value: string) => {
     const formatted = formatPhoneInput(value);
     handleInputChange('customerInfo.phone', formatted);
+  };
+
+  const handleSearchExistingCustomer = async () => {
+    if (!customerContact.trim()) {
+      toast.error('Por favor, digite um email ou telefone.');
+      return;
+    }
+
+    setIsSearchingCustomer(true);
+    try {
+      const response = await api.getCustomerLastOrder(customerContact);
+      
+      if (response && response.customer_name) {
+        // Preenche os dados do formulário
+        setOrderData(prev => ({
+          ...prev,
+          customerInfo: {
+            name: response.customer_name || '',
+            email: response.customer_email || '',
+            phone: response.customer_phone || ''
+          },
+          deliveryAddress: response.address_street 
+            ? `${response.address_street}${response.address_number ? ', ' + response.address_number : ''}${response.address_neighborhood ? ', ' + response.address_neighborhood : ''}`
+            : ''
+        }));
+        
+        toast.success('Dados do cliente preenchidos com sucesso!');
+        setIsExistingCustomerModalOpen(false);
+        setCustomerContact('');
+      } else {
+        toast.error('Cliente não encontrado. Verifique o email ou telefone.');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar dados do cliente:', error);
+      toast.error('Erro ao buscar dados do cliente. Tente novamente.');
+    } finally {
+      setIsSearchingCustomer(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -198,6 +242,17 @@ export function CheckoutPage() {
               <CardTitle>Informações de Contato</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Botão Já é cliente */}
+              <div className="flex justify-center mb-4">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="flex items-center gap-2 bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={() => setIsExistingCustomerModalOpen(true)}
+                >
+                  👤 Já é nosso cliente? Clique aqui!
+                </Button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="customerName">Nome Completo *</Label>
@@ -353,17 +408,17 @@ export function CheckoutPage() {
             <CardContent className="space-y-4">
               {/* Items */}
               <div className="space-y-3">
-                {cart.map(item => (
-                  <div key={item.id} className="flex items-center gap-3">
+                {cart.map(cartItem => (
+                  <div key={cartItem.product.id} className="flex items-center gap-3">
                     <img
-                      src={item.image}
-                      alt={item.name}
+                      src={cartItem.product.imageUrl || cartItem.product.image}
+                      alt={cartItem.product.name}
                       className="w-12 h-12 object-cover rounded"
                     />
                     <div className="flex-1">
-                      <p className="text-sm">{item.name}</p>
+                      <p className="text-sm">{cartItem.product.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        R$ {item.price.toFixed(2)} cada
+                        R$ {cartItem.product.price.toFixed(2)} cada
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -372,17 +427,17 @@ export function CheckoutPage() {
                         variant="outline"
                         size="sm"
                         className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() => updateQuantity(cartItem.product.id, cartItem.quantity - 1)}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="text-sm w-6 text-center">{item.quantity}</span>
+                      <span className="text-sm w-6 text-center">{cartItem.quantity}</span>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="h-6 w-6 p-0"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={() => updateQuantity(cartItem.product.id, cartItem.quantity + 1)}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -391,7 +446,7 @@ export function CheckoutPage() {
                         variant="ghost"
                         size="sm"
                         className="h-6 w-6 p-0 text-red-500"
-                        onClick={() => removeFromCart(item.id)}
+                        onClick={() => removeFromCart(cartItem.product.id)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -453,6 +508,50 @@ export function CheckoutPage() {
           </Card>
         </div>
       </form>
+
+      {/* Modal para buscar cliente existente */}
+      <Dialog open={isExistingCustomerModalOpen} onOpenChange={setIsExistingCustomerModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buscar dados do cliente</DialogTitle>
+            <DialogDescription>
+              Digite seu email ou telefone para preenchermos automaticamente seus dados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="customer-contact">Email ou Telefone</Label>
+              <Input
+                id="customer-contact"
+                type="text"
+                placeholder="exemplo@email.com ou (11) 99999-9999"
+                value={customerContact}
+                onChange={(e) => setCustomerContact(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setIsExistingCustomerModalOpen(false);
+                setCustomerContact('');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="button" 
+              onClick={handleSearchExistingCustomer}
+              disabled={isSearchingCustomer}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              {isSearchingCustomer ? 'Buscando...' : 'Buscar Dados'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
