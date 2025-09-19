@@ -16,8 +16,6 @@ use App\Http\Controllers\Admin\DashboardController;
 |--------------------------------------------------------------------------
 */
 
-
-
 // Rotas públicas
 Route::get('/products', [ProductController::class, 'index']);
 Route::get('/products/{id}', [ProductController::class, 'show']);
@@ -34,12 +32,14 @@ Route::prefix('admin')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/products', [ProductAdminController::class, 'index']);
         Route::post('/products', [ProductAdminController::class, 'store']);
-     
-Route::match(['put', 'patch'], 'products/{id}', [ProductAdminController::class, 'update']);
+        Route::match(['put', 'patch'], 'products/{id}', [ProductAdminController::class, 'update']);
         Route::patch('/products/{product}/toggle', [ProductAdminController::class, 'toggleActive']);
 
         Route::get('/orders', [OrderAdminController::class, 'index']);
         Route::get('/orders/{order}', [OrderAdminController::class, 'show']);
-        Route::post('/orders/{order}/confirm', [OrderAdminController::class, 'confirm']);
+        Route::patch('/orders/approve-payment', [OrderAdminController::class, 'approvePayment']);
+        Route::patch('/orders/finish', [OrderAdminController::class, 'markAsCompleted']); // Corrigido
+        Route::patch('/orders/cancel-payment', [OrderAdminController::class, 'cancelPayment']); // Corrigido
+        Route::match(['post', 'patch'], '/orders/confirm-many', [OrderAdminController::class, 'confirmMany']);
     });
 });

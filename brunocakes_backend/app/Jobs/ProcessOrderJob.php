@@ -27,6 +27,7 @@ class ProcessOrderJob implements ShouldQueue
         DB::transaction(function () {
             $order = Order::with('items.product')->findOrFail($this->orderId);
 
+            // Decrementa estoque (reserva) assim que o pedido for processado
             foreach ($order->items as $item) {
                 $product = Product::where('id', $item->product_id)
                     ->lockForUpdate()
@@ -51,5 +52,22 @@ class ProcessOrderJob implements ShouldQueue
             $order->status = 'stock_reserved';
             $order->save();
         });
+    }
+
+    // Método para reverter o estoque se o pagamento não for confirmado
+    public function revertStock()
+    {
+        $order = Order::with('items.product')->findOrFail($this->orderId);
+
+        foreach ($order->items as $item) {
+            $product = Product::where('id', $item->product_id)->first();
+            if ($product) {
+                $product->increment('quantity', $item->quantity);
+            }
+        }
+
+        // Atualiza o status do pedido
+        $order->status = 'payment_failed'; // ou outro status apropriado
+        $order->save();
     }
 }

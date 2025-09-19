@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=32" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#228B22" />
+    <meta name="description" content="Bruno Cakes - A melhor doceria da cidade! Aqui não é fatia nem pedaço, aqui é tora!" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Bruno Cakes" />
+    <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=180" />
+    
+    <!-- Microsoft PWA Meta Tags -->
+    <meta name="msapplication-TileColor" content="#228B22" />
+    <meta name="msapplication-TileImage" content="https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=144" />
+    
+    <title>Bruno Cakes - Aqui não é fatia nem pedaço, aqui é tora!</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- PWA Installation Script -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

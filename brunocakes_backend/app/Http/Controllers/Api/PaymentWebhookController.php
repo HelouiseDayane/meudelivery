@@ -14,9 +14,7 @@ class PaymentWebhookController extends Controller
     public function notify(Request $request)
     {
         $paymentId = $request->input('provider_payment_id');
-        $status    = $request->input('status'); // paid, failed, pending
-
-        $payment = Payment::where('provider_payment_id', $paymentId)->first();
+        $status    = $request->input('status'); // paid, failed, pendin$payment = Payment::where('id', $paymentId)->first();
 
         if (!$payment) {
             return response()->json(['error' => 'Payment not found'], 404);
