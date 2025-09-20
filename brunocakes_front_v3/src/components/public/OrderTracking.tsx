@@ -135,6 +135,7 @@ export const OrderTracking = () => {
       case 'completed':
         return <CheckCircle className="w-4 h-4" />;
       case 'cancelled':
+      case 'canceled':
         return <XCircle className="w-4 h-4" />;
       default:
         return <Clock className="w-4 h-4" />;
@@ -158,6 +159,7 @@ export const OrderTracking = () => {
       case 'completed':
         return 'Concluído';
       case 'cancelled':
+      case 'canceled':
         return 'Cancelado';
       default:
         return status;
@@ -178,6 +180,7 @@ export const OrderTracking = () => {
       case 'completed':
         return 'bg-primary/10 text-primary';
       case 'cancelled':
+      case 'canceled':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
