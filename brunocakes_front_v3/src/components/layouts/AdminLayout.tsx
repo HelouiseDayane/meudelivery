@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom';
 import { useApp } from '../../App';
 import { Button } from '../ui/button';
 import { 
@@ -14,9 +14,19 @@ import {
 import { useState } from 'react';
 
 export function AdminLayout() {
-  const { user, logout } = useApp();
+  const { admin, logout } = useApp();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  console.log('🔍 AdminLayout Debug:');
+  console.log('  - Admin:', admin);
+  console.log('  - Current path:', location.pathname);
+
+  // Redirect para login se não estiver logado
+  if (!admin) {
+    console.log('🚫 Admin não logado, redirecionando para login');
+    return <Navigate to="/admin/login" replace />;
+  }
 
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -60,7 +70,7 @@ export function AdminLayout() {
             </div>
             <div>
               <h2 className="font-semibold">Admin Panel</h2>
-              <p className="text-sm text-muted-foreground">{user?.name}</p>
+              <p className="text-sm text-muted-foreground">{admin?.name || 'Admin'}</p>
             </div>
           </div>
 

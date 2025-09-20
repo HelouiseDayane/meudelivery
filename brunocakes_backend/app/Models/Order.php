@@ -21,11 +21,21 @@ class Order extends Model
         'payment_reference',
         'status',
         'pickup_info_visible',
+        
+        // ✅ NOVAS COLUNAS ADICIONADAS
+        'cart_expires_at',
+        'checkout_expires_at',
+        'stock_reserved',
     ];
 
     protected $casts = [
         'total_amount' => 'decimal:2',
         'pickup_info_visible' => 'boolean',
+        
+        // ✅ NOVOS CASTS ADICIONADOS
+        'cart_expires_at' => 'datetime',
+        'checkout_expires_at' => 'datetime',
+        'stock_reserved' => 'boolean',
     ];
 
     public function items()
@@ -36,5 +46,26 @@ class Order extends Model
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+
+    // ✅ MÉTODOS ÚTEIS ADICIONADOS
+    public function isCheckoutExpired()
+    {
+        return $this->checkout_expires_at && now()->greaterThan($this->checkout_expires_at);
+    }
+
+    public function hasStockReserved()
+    {
+        return $this->stock_reserved === true;
+    }
+
+    public function getTimeUntilExpiration()
+    {
+        if (!$this->checkout_expires_at) {
+            return null;
+        }
+        
+        $diff = now()->diffInMinutes($this->checkout_expires_at, false);
+        return $diff > 0 ? $diff : 0;
     }
 }

@@ -8,10 +8,12 @@ import { Separator } from '../ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
-import { ArrowLeft, MessageCircle, User, Mail, Phone, MapPin, Users } from 'lucide-react';
+import { Alert, AlertDescription } from '../ui/alert';
+import { ArrowLeft, MessageCircle, User, Mail, Phone, MapPin, Users, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../../App';
 import { toast } from 'sonner';
 import api from '../../api';
+import { useCartExpiration } from '../../hooks/useCartExpiration';
 
 interface CustomerData {
   name: string;
@@ -24,7 +26,8 @@ interface CustomerData {
 
 export const Checkout = () => {
   const navigate = useNavigate();
-  const { cart, createOrder, clearCart } = useApp();
+  const { cart, clearCart, refreshProducts } = useApp();
+  const { currentStatus, startCheckoutExpiration, clearAllExpirationItems, CHECKOUT_EXPIRATION_MINUTES } = useCartExpiration();
   const [isLoading, setIsLoading] = useState(false);
   const [isExistingCustomerModalOpen, setIsExistingCustomerModalOpen] = useState(false);
   const [customerContact, setCustomerContact] = useState('');
@@ -32,6 +35,7 @@ export const Checkout = () => {
   const [searchByPhone, setSearchByPhone] = useState(false); // true = telefone, false = email
   const [foundCustomerData, setFoundCustomerData] = useState<any>(null);
   const [isConfirmCustomerModalOpen, setIsConfirmCustomerModalOpen] = useState(false);
+  const [isRefreshingStock, setIsRefreshingStock] = useState(false);
   
   const [customerData, setCustomerData] = useState<CustomerData>({
     name: '',
@@ -42,10 +46,62 @@ export const Checkout = () => {
     additionalInfo: ''
   });
 
-  // Debug - mostra os dados atuais do customerData
+  // Função para criar pedido
+  const createOrder = async (customerData: CustomerData, cart: any[], total: number) => {
+    try {
+      // Obter session ID do localStorage
+      const sessionId = localStorage.getItem('bruno_session_id') || '';
+      
+      const orderData = {
+        session_id: sessionId,
+        customer_name: customerData.name,
+        customer_email: customerData.email,
+        customer_phone: customerData.phone,
+        customer_address: `${customerData.address}, ${customerData.neighborhood}`,
+        address_street: customerData.address,
+        address_neighborhood: customerData.neighborhood,
+        observations: customerData.additionalInfo || '',
+        items: cart.map(item => ({
+          product_id: item.product.id,
+          quantity: item.quantity
+        }))
+      };
+
+      const response = await api.createOrder(orderData);
+      
+      // Iniciar timer de expiração do checkout
+      if (response?.id) {
+        startCheckoutExpiration(response.id.toString(), sessionId);
+      }
+      
+      return response?.id || Date.now().toString();
+    } catch (error) {
+      console.error('Erro ao criar pedido:', error);
+      throw error;
+    }
+  };
+
+  // Função para atualizar estoque
+  const handleRefreshStock = async () => {
+    setIsRefreshingStock(true);
+    try {
+      await refreshProducts();
+      toast.success('Estoque atualizado!');
+    } catch (error) {
+      toast.error('Erro ao atualizar estoque');
+    } finally {
+      setIsRefreshingStock(false);
+    }
+  };
+
+  // Limpar expiração quando sair do checkout
   useEffect(() => {
-    console.log('customerData atual:', customerData);
-  }, [customerData]);
+    return () => {
+      if (cart.length === 0) {
+        clearAllExpirationItems();
+      }
+    };
+  }, [cart.length, clearAllExpirationItems]);
 
   // Debug - mostra se o botão deve estar habilitado
   useEffect(() => {
@@ -81,45 +137,31 @@ export const Checkout = () => {
 
   // Função para lidar com mudança no campo de contato
   const handleContactChange = (value: string) => {
-    if (searchByPhone) {
-      // Aplicar máscara de telefone
-      const formatted = formatPhoneInput(value);
-      setCustomerContact(formatted);
-    } else {
-      // Email sem máscara
-      setCustomerContact(value);
-    }
+    // Aplicar máscara de telefone sempre
+    const formatted = formatPhoneInput(value);
+    setCustomerContact(formatted);
   };
 
   const handleSearchExistingCustomer = async () => {
     if (!customerContact.trim()) {
-      toast.error('Por favor, digite um email ou telefone.');
+      toast.error('Por favor, digite um telefone.');
       return;
     }
 
-    // Validação básica
-    if (searchByPhone) {
-      const digits = customerContact.replace(/\D/g, '');
-      if (digits.length < 10) {
-        toast.error('Por favor, digite um telefone válido.');
-        return;
-      }
-    } else {
-      if (!customerContact.includes('@')) {
-        toast.error('Por favor, digite um email válido.');
-        return;
-      }
+    // Validação básica para telefone
+    const digits = customerContact.replace(/\D/g, '');
+    if (digits.length < 10) {
+      toast.error('Por favor, digite um telefone válido com pelo menos 10 dígitos.');
+      return;
     }
 
     setIsSearchingCustomer(true);
     try {
-      // Se for telefone, enviar apenas os dígitos
-      const contactToSend = searchByPhone 
-        ? customerContact.replace(/\D/g, '') 
-        : customerContact;
+      // Enviar apenas os dígitos do telefone
+      const contactToSend = customerContact.replace(/\D/g, '');
       
       console.log('Enviando para API:', contactToSend);
-      console.log('Tipo de busca:', searchByPhone ? 'telefone' : 'email');
+      console.log('Tipo de busca: telefone');
       
       const response = await api.getCustomerLastOrder(contactToSend);
       console.log('Resposta da API:', response);
@@ -131,7 +173,7 @@ export const Checkout = () => {
         setIsExistingCustomerModalOpen(false);
       } else {
         // Cliente não encontrado - mantém o modal aberto para nova tentativa
-        toast.error('❌ Cliente não encontrado. Verifique o email ou telefone informado e tente novamente.');
+        toast.error('❌ Cliente não encontrado. Verifique o telefone informado e tente novamente.');
       }
     } catch (error) {
       console.error('Erro ao buscar dados do cliente:', error);
@@ -148,13 +190,17 @@ export const Checkout = () => {
     if (foundCustomerData) {
       console.log('Preenchendo dados do formulário...');
       
+      // Formatar telefone com máscara antes de setar
+      const phoneNumber = foundCustomerData.customer_phone || '';
+      const formattedPhone = formatPhoneInput(phoneNumber);
+      
       // Preenche os dados do formulário
       setCustomerData((prev: CustomerData) => {
         const newData = {
           ...prev,
           name: foundCustomerData.customer_name || '',
           email: foundCustomerData.customer_email || '',
-          phone: foundCustomerData.customer_phone || '',
+          phone: formattedPhone, // Usar telefone formatado
           address: foundCustomerData.address_street 
             ? `${foundCustomerData.address_street}${foundCustomerData.address_number ? ', ' + foundCustomerData.address_number : ''}`
             : '',
@@ -169,7 +215,7 @@ export const Checkout = () => {
       setIsConfirmCustomerModalOpen(false);
       setFoundCustomerData(null);
       setCustomerContact('');
-      setSearchByPhone(false); // Reset para email
+      // Resetar para telefone sempre, já que só suportamos telefone
     } else {
       console.log('foundCustomerData é null ou undefined');
     }
@@ -289,6 +335,46 @@ export const Checkout = () => {
         </p>
       </div>
 
+      {/* Checkout Expiration Timer */}
+      {currentStatus && (
+        <Alert className={`mb-6 border-2 ${
+          currentStatus.isCritical ? 'border-red-500 bg-red-50' :
+          currentStatus.isWarning ? 'border-yellow-500 bg-yellow-50' :
+          'border-orange-500 bg-orange-50'
+        }`}>
+          <div className="flex items-center gap-2">
+            {currentStatus.isCritical ? (
+              <AlertCircle className="h-4 w-4 text-red-600" />
+            ) : (
+              <Clock className="h-4 w-4 text-orange-600" />
+            )}
+            <AlertDescription className={`font-medium ${
+              currentStatus.isCritical ? 'text-red-800' :
+              currentStatus.isWarning ? 'text-yellow-800' :
+              'text-orange-800'
+            }`}>
+              {currentStatus.isCritical ? (
+                <>🚨 Checkout expira em {currentStatus.formattedTime}! Complete agora ou seus produtos voltarão ao estoque.</>
+              ) : currentStatus.isWarning ? (
+                <>⚠️ Checkout expira em {currentStatus.formattedTime}. Complete sua compra!</>
+              ) : (
+                <>⏰ Tempo restante para finalizar: {currentStatus.formattedTime} (Total: {CHECKOUT_EXPIRATION_MINUTES} min)</>
+              )}
+            </AlertDescription>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshStock}
+              disabled={isRefreshingStock}
+              className="ml-auto"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingStock ? 'animate-spin' : ''}`} />
+              {isRefreshingStock ? 'Atualizando...' : 'Atualizar Estoque'}
+            </Button>
+          </div>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Formulário */}
         <Card>
@@ -340,7 +426,7 @@ export const Checkout = () => {
                     type="tel"
                     placeholder="(11) 99999-9999"
                     value={customerData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    onChange={(e) => handleInputChange('phone', formatPhoneInput(e.target.value))}
                     required
                   />
                 </div>
@@ -444,53 +530,30 @@ export const Checkout = () => {
           <DialogHeader>
             <DialogTitle>Buscar dados do cliente</DialogTitle>
             <DialogDescription>
-              Escolha como você deseja nos encontrar e preencha o campo abaixo.
+              Digite o telefone do cliente para buscar os dados de pedidos anteriores.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Checkbox para escolher tipo de busca */}
-            <div className="flex items-center space-x-2 mb-4">
-              <Checkbox 
-                id="search-type" 
-                checked={searchByPhone}
-                onCheckedChange={(checked: boolean) => {
-                  setSearchByPhone(checked);
-                  setCustomerContact(''); // Limpa o campo quando muda o tipo
-                }}
-              />
-              <Label htmlFor="search-type" className="flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                Buscar por telefone
-              </Label>
-              {!searchByPhone && (
-                <Label className="flex items-center gap-2 ml-4 text-muted-foreground">
-                  <Mail className="h-4 w-4" />
-                  Buscar por email
-                </Label>
-              )}
-            </div>
-
             <div className="space-y-2">
-              <Label htmlFor="customer-contact">
-                {searchByPhone ? 'Telefone' : 'Email'}
+              <Label htmlFor="customer-contact" className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Telefone
               </Label>
               <Input
                 id="customer-contact"
-                type={searchByPhone ? "tel" : "email"}
-                placeholder={searchByPhone ? "(11) 99999-9999" : "exemplo@email.com"}
+                type="tel"
+                placeholder="(84) 99999-9999"
                 value={customerContact}
                 onChange={(e) => handleContactChange(e.target.value)}
                 className="w-full"
               />
-              {searchByPhone && (
-                <p className="text-xs text-muted-foreground">
-                  Digite apenas números, a máscara será aplicada automaticamente
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                Digite o telefone no formato (84) 99999-9999. A máscara será aplicada automaticamente.
+              </p>
             </div>
           </div>
           
-          {/* Footer com botões - TESTE */}
+          {/* Footer com botões */}
           <div className="w-full flex justify-between gap-3 pt-4 border-t bg-gray-50 p-4 -mx-6 -mb-6 mt-4">
             <button 
               type="button" 

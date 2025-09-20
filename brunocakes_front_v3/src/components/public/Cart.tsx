@@ -4,12 +4,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
-import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, ArrowRight, Package, MapPin } from 'lucide-react';
+import { Alert, AlertDescription } from '../ui/alert';
+import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, ArrowRight, Package, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { STORE_CONFIG, getProductImageUrl } from '../../api';
+import { useCartExpiration } from '../../hooks/useCartExpiration';
+import { useEffect } from 'react';
 
 export function Cart() {
   const { cart, updateCartQuantity, removeFromCart, clearCart } = useApp();
+  const { currentStatus, clearAllExpirationItems, CART_EXPIRATION_MINUTES } = useCartExpiration();
+
+  // Limpar expiração quando o carrinho for limpo
+  useEffect(() => {
+    if (cart.length === 0) {
+      clearAllExpirationItems();
+    }
+  }, [cart.length, clearAllExpirationItems]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -86,13 +97,43 @@ export function Cart() {
             Continuar Comprando
           </Button>
         </Link>
-        <div>
+        <div className="flex-1">
           <h1>Seu Carrinho</h1>
           <p className="text-muted-foreground">
             {totalItems} {totalItems === 1 ? 'tora selecionada' : 'toras selecionadas'}
           </p>
         </div>
       </div>
+
+      {/* Cart Expiration Timer */}
+      {currentStatus && cart.length > 0 && (
+        <Alert className={`border-2 ${
+          currentStatus.isCritical ? 'border-red-500 bg-red-50' :
+          currentStatus.isWarning ? 'border-yellow-500 bg-yellow-50' :
+          'border-blue-500 bg-blue-50'
+        }`}>
+          <div className="flex items-center gap-2">
+            {currentStatus.isCritical ? (
+              <AlertCircle className="h-4 w-4 text-red-600" />
+            ) : (
+              <Clock className="h-4 w-4 text-blue-600" />
+            )}
+            <AlertDescription className={`font-medium ${
+              currentStatus.isCritical ? 'text-red-800' :
+              currentStatus.isWarning ? 'text-yellow-800' :
+              'text-blue-800'
+            }`}>
+              {currentStatus.isCritical ? (
+                <>🚨 Seu carrinho expira em {currentStatus.formattedTime}! Complete sua compra agora.</>
+              ) : currentStatus.isWarning ? (
+                <>⚠️ Seu carrinho expira em {currentStatus.formattedTime}. Finalize logo sua compra!</>
+              ) : (
+                <>⏰ Tempo restante no carrinho: {currentStatus.formattedTime} (Total: {CART_EXPIRATION_MINUTES} min)</>
+              )}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Cart Items */}

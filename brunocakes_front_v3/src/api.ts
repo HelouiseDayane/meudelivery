@@ -1,7 +1,5 @@
-// Configuração da API para Bruno Cakes
-const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'production')
-  ? 'https://api.brunocakes.com.br'
-  : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000/api';
+// Configuração da API pública para Bruno Cakes
+const API_BASE_URL = 'http://localhost:8000/api';
 
 // Configuração da loja Bruno Cakes
 export const STORE_CONFIG = {
@@ -32,64 +30,46 @@ export const getProductImageUrl = (image: string | undefined | null) => {
 };
 
 export const API_ENDPOINTS = {
-  auth: {
-    adminLogin: `${API_BASE_URL}/admin/login`,
-    logout: `${API_BASE_URL}/admin/logout`,
-    me: `${API_BASE_URL}/admin/me`,
-  },
-  clients: {
-    register: `${API_BASE_URL}/register-cliente`,
-    list: `${API_BASE_URL}/clients`,
-    unique: `${API_BASE_URL}/admin/customers/unique`,
-    show: (id: string) => `${API_BASE_URL}/clients/${id}`,
-    update: (id: string) => `${API_BASE_URL}/clients/${id}`,
-    delete: (id: string) => `${API_BASE_URL}/clients/${id}`,
-  },
   products: {
     listPublic: `${API_BASE_URL}/products`,
     showPublic: (id: string) => `${API_BASE_URL}/products/${id}`,
-    listAdmin: `${API_BASE_URL}/admin/products`,
-    createAdmin: `${API_BASE_URL}/admin/products`,
-    updateAdmin: (id: string) => `${API_BASE_URL}/admin/products/${id}`,
-    toggleAdmin: (id: string) => `${API_BASE_URL}/admin/products/${id}/toggle`,
+    withStock: `${API_BASE_URL}/products/with-stock`,
+    stock: (id: string) => `${API_BASE_URL}/products/${id}/stock`,
+    allStock: `${API_BASE_URL}/products/stock/all`,
   },
   orders: {
     create: `${API_BASE_URL}/orders`,
-    list: `${API_BASE_URL}/orders`,
     show: (id: string) => `${API_BASE_URL}/orders/${id}`,
-    update: (id: string) => `${API_BASE_URL}/orders/${id}`,
-    delete: (id: string) => `${API_BASE_URL}/orders/${id}`,
-    myOrders: `${API_BASE_URL}/orders`
+    byContact: `${API_BASE_URL}/checkout/pedidos`,
+  },
+  customer: {
+    lastOrder: `${API_BASE_URL}/customer/last-order`,
+  },
+  checkout: {
+    create: `${API_BASE_URL}/checkout`,
+  },
+  cart: {
+    add: `${API_BASE_URL}/cart/add`,
+    remove: `${API_BASE_URL}/cart/remove`,
+    update: `${API_BASE_URL}/cart/update`,
+    get: (sessionId: string) => `${API_BASE_URL}/cart/session/${sessionId}`,
+    clear: (sessionId: string) => `${API_BASE_URL}/cart/session/${sessionId}`,
   },
   payments: {
-    create: `${API_BASE_URL}/payments`,
-    list: `${API_BASE_URL}/payments`,
-    show: (id: string) => `${API_BASE_URL}/payments/${id}`,
-    myPayments: `${API_BASE_URL}/payments`
-  },
-  deliveries: {
-    list: `${API_BASE_URL}/deliveries`,
-    create: `${API_BASE_URL}/deliveries`,
-    show: (id: string) => `${API_BASE_URL}/deliveries/${id}`,
-    update: (id: string) => `${API_BASE_URL}/deliveries/${id}`,
-    delete: (id: string) => `${API_BASE_URL}/deliveries/${id}`
+    notify: `${API_BASE_URL}/payment/notify`,
   }
 };
 
-// Headers com token
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('admin_token');
-  return {
-    'Accept': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-};
+// Headers básicos sem autenticação
+const getPublicHeaders = () => ({
+  'Accept': 'application/json',
+});
 
-// Função genérica de requisição
+// Função genérica de requisição pública
 export const apiRequest = async (url: string, options: RequestInit = {}) => {
   try {
     const defaultOptions: RequestInit = { 
-      headers: { ...getAuthHeaders(), ...options.headers }, 
+      headers: { ...getPublicHeaders(), ...options.headers }, 
       ...options 
     };
 
@@ -102,107 +82,24 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
     }
     return await response.json();
   } catch (error) {
-    console.error('API Error:', error);
     throw error;
   }
 };
 
-// API pública/admin
+// API pública
 export const api = {
-  confirmManyOrders: (orderIds: string[] | number[]) => {
-    if (orderIds.length === 0) {
-      throw new Error('Nenhum ID de pedido fornecido para confirmação.');
-    }
-
-    return apiRequest(`${API_BASE_URL}/admin/orders/confirm-many`, {
-      method: 'POST',
-      body: JSON.stringify({ order_ids: orderIds }),
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
-    });
-  },
-  adminLogin: async (email: string, password: string) => {
-    try {
-      console.log('Tentando login com email:', email);
-      const response = await apiRequest(API_ENDPOINTS.auth.adminLogin, {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      console.log('Resposta do backend:', response);
-      return response;
-    } catch (error) {
-      console.error('Erro ao tentar login:', error);
-      throw error;
-    }
-  },
-  
-  logout: () => apiRequest(API_ENDPOINTS.auth.logout, { method: 'POST' }),
-  getMe: () => apiRequest(API_ENDPOINTS.auth.me),
-
+  // === PRODUTOS PÚBLICOS ===
   getPublicProducts: () => apiRequest(API_ENDPOINTS.products.listPublic),
+  
   getPublicProduct: (id: string) => apiRequest(API_ENDPOINTS.products.showPublic(id)),
 
-  getAdminProducts: () => apiRequest(API_ENDPOINTS.products.listAdmin),
-  createAdminProduct: (data: any) => {
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (key === 'file' && value instanceof File) {
-        formData.append('image', value);
-      } else if (value !== undefined && value !== null) {
-        // Se for boolean ou number, converte para string
-        if (typeof value === 'boolean' || typeof value === 'number') {
-          formData.append(key, String(value));
-        } else {
-          formData.append(key, value as string);
-        }
-      }
-    });
-    return apiRequest(API_ENDPOINTS.products.createAdmin, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        ...getAuthHeaders(),
-        'Accept': 'application/json',
-      },
-    });
-  },
-  updateAdminProduct: (id: string, data: any) => {
-    const formData = new FormData();
-    formData.append('_method', 'PATCH');
-    Object.entries(data).forEach(([key, value]) => {
-      if (key === 'file' && value instanceof File) {
-        formData.append('image', value);
-      } else if (value !== undefined && value !== null) {
-        if (typeof value === 'boolean' || typeof value === 'number') {
-          formData.append(key, String(value));
-        } else {
-          formData.append(key, value as string);
-        }
-      }
-    });
-    return apiRequest(API_ENDPOINTS.products.updateAdmin(id), {
-      method: 'POST',
-      body: formData,
-      headers: {
-        ...getAuthHeaders(),
-        'Accept': 'application/json',
-      },
-    });
-  },
-  toggleAdminProduct: (id: string) => apiRequest(API_ENDPOINTS.products.toggleAdmin(id), { method: 'PATCH' }),
+  getProductsWithStock: () => apiRequest(API_ENDPOINTS.products.withStock),
 
-  registerClient: (data: any) => apiRequest(API_ENDPOINTS.clients.register, { method: 'POST', body: JSON.stringify(data) }),
-  getClients: () => apiRequest(API_ENDPOINTS.clients.list),
-  getUniqueClients: () => apiRequest(API_ENDPOINTS.clients.unique),
-  getClient: (id: string) => apiRequest(API_ENDPOINTS.clients.show(id)),
-  updateClient: (id: string, data: any) => apiRequest(API_ENDPOINTS.clients.update(id), { method: 'PUT', body: JSON.stringify(data) }),
-  deleteClient: (id: string) => apiRequest(API_ENDPOINTS.clients.delete(id)),
+  getProductStock: (productId: string) => apiRequest(API_ENDPOINTS.products.stock(productId)),
 
+  getAllProductsStock: () => apiRequest(API_ENDPOINTS.products.allStock),
+
+  // === CHECKOUT E PEDIDOS PÚBLICOS ===
   createOrder: (data: any) => {
     // Monta payload conforme backend espera
     const payload = {
@@ -217,8 +114,9 @@ export const api = {
             quantity: item.quantity
           }))
         : [],
+      session_id: data.session_id || '',
     };
-    return apiRequest('http://localhost:8000/api/checkout', {
+    return apiRequest(API_ENDPOINTS.checkout.create, {
       method: 'POST',
       body: JSON.stringify(payload),
       headers: {
@@ -227,53 +125,110 @@ export const api = {
       },
     });
   },
-  getOrdersByContact: async (email?: string, phone?: string) => {
-    // Monta query string conforme backend espera
-    const params = new URLSearchParams();
-    if (email) params.append('customer_email', email);
-    if (phone) params.append('customer_phone', phone);
-    const url = `http://localhost:8000/api/checkout/pedidos?${params.toString()}`;
-    return apiRequest(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-  },
-  getCustomerLastOrder: async (contact: string) => {
-    // Busca dados do último pedido do cliente por email ou telefone
-    const params = new URLSearchParams();
-    // Verifica se é email (contém @) ou telefone
-    if (contact.includes('@')) {
-      params.append('customer_email', contact);
-    } else {
-      params.append('customer_phone', contact);
-    }
-    const url = `http://localhost:8000/api/customer/last-order?${params.toString()}`;
-    return apiRequest(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-  },
+
   getOrder: (id: string) => apiRequest(API_ENDPOINTS.orders.show(id)),
-  updateOrder: (id: string, data: any) => apiRequest(API_ENDPOINTS.orders.update(id), { method: 'PUT', body: JSON.stringify(data) }),
 
-  createPayment: (data: any) => apiRequest(API_ENDPOINTS.payments.create, { method: 'POST', body: JSON.stringify(data) }),
-  getPayments: () => apiRequest(API_ENDPOINTS.payments.list),
-  getPayment: (id: string) => apiRequest(API_ENDPOINTS.payments.show(id)),
+  getOrdersByContact: async (email?: string, phone?: string) => {
+    const params = new URLSearchParams();
+    if (email) params.append('email', email);
+    if (phone) params.append('phone', phone);
+    const url = `${API_ENDPOINTS.orders.byContact}?${params.toString()}`;
+    return apiRequest(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+  },
 
-  getDeliveries: () => apiRequest(API_ENDPOINTS.deliveries.list),
-  createDelivery: (data: any) => apiRequest(API_ENDPOINTS.deliveries.create, { method: 'POST', body: JSON.stringify(data) }),
-  updateDelivery: (id: string, data: any) => apiRequest(API_ENDPOINTS.deliveries.update(id), { method: 'PUT', body: JSON.stringify(data) }),
+  getCustomerLastOrder: async (contact: string) => {
+    const params = new URLSearchParams();
+    // Backend só aceita telefone por enquanto
+    params.append('phone', contact);
+    const url = `${API_ENDPOINTS.customer.lastOrder}?${params.toString()}`;
+    return apiRequest(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+  },
 
-  // Analytics/Dashboard
-  getAnalytics: () => apiRequest('http://localhost:8000/api/admin/dashboard'),
+  // === CARRINHO ===
+  generateSessionId: () => {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  },
 
-  // Webhook de pagamento Pix
+  addToCart: (sessionId: string, productId: string, quantity: number) => {
+    return apiRequest(API_ENDPOINTS.cart.add, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        session_id: sessionId,
+        product_id: productId,
+        quantity 
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+  },
+
+  removeFromCart: (sessionId: string, productId: string, quantity?: number) => {
+    const body: any = { 
+      session_id: sessionId,
+      product_id: productId
+    };
+    if (quantity) body.quantity = quantity;
+
+    return apiRequest(API_ENDPOINTS.cart.remove, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+  },
+
+  updateCartQuantity: (sessionId: string, productId: string, quantity: number) => {
+    return apiRequest(API_ENDPOINTS.cart.update, {
+      method: 'POST',
+      body: JSON.stringify({ 
+        session_id: sessionId,
+        product_id: productId,
+        quantity 
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+  },
+
+  getCart: (sessionId: string) => {
+    return apiRequest(API_ENDPOINTS.cart.get(sessionId), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+  },
+
+  clearCart: (sessionId: string) => {
+    return apiRequest(API_ENDPOINTS.cart.clear(sessionId), {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
+  },
+
+  // === PAGAMENTOS ===
   notifyPaymentWebhook: (providerPaymentId: string, status: string) => {
-    return apiRequest('http://localhost:8000/api/payment/notify', {
+    return apiRequest(API_ENDPOINTS.payments.notify, {
       method: 'POST',
       body: JSON.stringify({
         provider_payment_id: providerPaymentId,
@@ -286,59 +241,18 @@ export const api = {
     });
   },
 
-  // Novas funções para admin
-  approvePayments: (orderIds: string[] | number[]) => {
-    if (orderIds.length === 0) {
-      throw new Error('A lista de IDs de pedidos está vazia.');
-    }
-    return apiRequest(`${API_BASE_URL}/admin/orders/approve-payment`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        order_ids: orderIds,
-      }),
+  // === FUNÇÕES LEGACY (DEPRECATED) ===
+  decrementStock: (productId: string, quantity: number) => {
+    return apiRequest(`${API_BASE_URL}/products/${productId}/decrement-stock`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity }),
       headers: {
         'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
-    });
-  },
-
-  cancelPayments: (orderIds: string[] | number[]) => {
-    return apiRequest(`${API_BASE_URL}/admin/orders/${orderIds[0]}/cancel-payment`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        order_ids: orderIds,
-      }),
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
-    });
-  },
-
-  getAdminOrders: () => {
-    return apiRequest(`${API_BASE_URL}/admin/orders`, {
-      method: 'GET',
-      headers: getAuthHeaders(),
-    });
-  },
-
-  markAsCompleted: (orderIds: string[] | number[]) => {
-    if (orderIds.length === 0) {
-      throw new Error('A lista de IDs de pedidos está vazia.');
-    }
-    return apiRequest(`${API_BASE_URL}/admin/orders/finish`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        order_ids: orderIds,
-      }),
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
+        'Accept': 'application/json',
       },
     });
   },
 };
 
-export { API_BASE_URL, getAuthHeaders };
+export { API_BASE_URL, getPublicHeaders };
 export default api;

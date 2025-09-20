@@ -6,126 +6,476 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Jobs\ProcessOrderJob;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Log;
+use App\Jobs\ExpireCartJob;
+use App\Jobs\ExpireCheckoutJob;
+use App\Jobs\SyncStockJob;
 
 class CheckoutController extends Controller
 {
+    /**
+     * ✅ Adiciona item ao carrinho com expiração automática
+     */
+    public function addToCart(Request $request)
+    {
+        $data = $request->validate([
+            'session_id' => 'required|string',
+            'product_id' => 'required|integer|exists:products,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        $sessionId = $data['session_id'];
+        $productId = $data['product_id'];
+        $quantity = $data['quantity'];
+
+        // Buscar produto
+        $product = Product::findOrFail($productId);
+
+        // Verificar estoque disponível
+        $currentStock = Redis::get("product_stock_{$productId}") ?? $product->quantity;
+        $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
+        $availableStock = $currentStock - $reservedStock;
+
+        if ($availableStock < $quantity) {
+            return response()->json([
+                'message' => 'Estoque insuficiente',
+                'available_stock' => $availableStock,
+                'requested_quantity' => $quantity
+            ], 400);
+        }
+
+        // Reservar estoque
+        Redis::incrby("product_reserved_{$productId}", $quantity);
+        
+        // Salvar reserva individual (para limpeza posterior)
+        Redis::setex("reserve:{$sessionId}:{$productId}", 600, $quantity); // 10 min TTL
+
+        // Adicionar ao carrinho
+        $cartKey = "cart:{$sessionId}";
+        $cartItem = [
+            'product_id' => $productId,
+            'product_name' => $product->name,
+            'unit_price' => $product->price,
+            'quantity' => $quantity,
+            'total_price' => $product->price * $quantity,
+            'image_url' => $product->image ? asset('storage/' . $product->image) : null,
+            'expires_at' => now()->addMinutes(10)->toISOString()
+        ];
+
+        Redis::setex($cartKey, 600, json_encode([$productId => $cartItem])); // 10 min TTL
+
+        // ✅ DISPARAR JOB DE EXPIRAÇÃO
+        try {
+            ExpireCartJob::dispatch($sessionId, $productId, $quantity)
+                ->delay(now()->addMinutes(10)); // 10 minutos
+
+            Log::info('🛒 Job ExpireCartJob disparado com sucesso', [
+                'session_id' => $sessionId,
+                'product_id' => $productId,
+                'quantity' => $quantity,
+                'delay' => '10 minutes',
+                'will_expire_at' => now()->addMinutes(10)->format('H:i:s')
+            ]);
+        } catch (\Exception $e) {
+            Log::error('❌ Erro ao disparar ExpireCartJob', [
+                'session_id' => $sessionId,
+                'product_id' => $productId,
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Produto adicionado ao carrinho',
+            'cart_item' => $cartItem,
+            'available_stock' => $availableStock - $quantity,
+            'cart_expires_in_minutes' => 10,
+            'debug_job_dispatched' => true
+        ], 201);
+    }
+
+    /**
+     * ✅ Remove item do carrinho
+     */
+    public function removeFromCart(Request $request)
+    {
+        $data = $request->validate([
+            'session_id' => 'required|string',
+            'product_id' => 'required|integer'
+        ]);
+
+        $sessionId = $data['session_id'];
+        $productId = $data['product_id'];
+        
+        $cartKey = "cart:{$sessionId}";
+        $reserveKey = "reserve:{$sessionId}:{$productId}";
+        
+        // Obter quantidade reservada antes de remover
+        $reservedQuantity = Redis::get($reserveKey) ?? 0;
+        
+        if ($reservedQuantity > 0) {
+            // Liberar estoque reservado
+            Redis::decrby("product_reserved_{$productId}", $reservedQuantity);
+            
+            // Garantir que não fique negativo
+            $currentReserved = Redis::get("product_reserved_{$productId}") ?? 0;
+            if ($currentReserved < 0) {
+                Redis::set("product_reserved_{$productId}", 0);
+            }
+        }
+        
+        // Remover reserva
+        Redis::del($reserveKey);
+        
+        // Atualizar carrinho (removendo o item)
+        $cartData = Redis::get($cartKey);
+        if ($cartData) {
+            $cart = json_decode($cartData, true);
+            unset($cart[$productId]);
+            
+            if (empty($cart)) {
+                Redis::del($cartKey);
+            } else {
+                Redis::setex($cartKey, 600, json_encode($cart));
+            }
+        }
+
+        return response()->json([
+            'message' => 'Produto removido do carrinho',
+            'released_quantity' => $reservedQuantity
+        ]);
+    }
+
+    /**
+     * ✅ Atualiza quantidade no carrinho
+     */
+    public function updateCart(Request $request)
+    {
+        $data = $request->validate([
+            'session_id' => 'required|string',
+            'product_id' => 'required|integer',
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        $sessionId = $data['session_id'];
+        $productId = $data['product_id'];
+        $newQuantity = $data['quantity'];
+        
+        $reserveKey = "reserve:{$sessionId}:{$productId}";
+        $oldQuantity = Redis::get($reserveKey) ?? 0;
+        $quantityDiff = $newQuantity - $oldQuantity;
+        
+        // Verificar se há estoque suficiente para o aumento
+        if ($quantityDiff > 0) {
+            $product = Product::findOrFail($productId);
+            $currentStock = Redis::get("product_stock_{$productId}") ?? $product->quantity;
+            $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
+            $availableStock = $currentStock - $reservedStock;
+            
+            if ($availableStock < $quantityDiff) {
+                return response()->json([
+                    'message' => 'Estoque insuficiente para aumentar quantidade',
+                    'available_stock' => $availableStock,
+                    'requested_increase' => $quantityDiff
+                ], 400);
+            }
+        }
+        
+        // Atualizar reserva
+        Redis::incrby("product_reserved_{$productId}", $quantityDiff);
+        Redis::setex($reserveKey, 600, $newQuantity);
+        
+        // Atualizar carrinho
+        $cartKey = "cart:{$sessionId}";
+        $cartData = Redis::get($cartKey);
+        if ($cartData) {
+            $cart = json_decode($cartData, true);
+            if (isset($cart[$productId])) {
+                $cart[$productId]['quantity'] = $newQuantity;
+                $cart[$productId]['total_price'] = $cart[$productId]['unit_price'] * $newQuantity;
+                Redis::setex($cartKey, 600, json_encode($cart));
+            }
+        }
+
+        return response()->json([
+            'message' => 'Carrinho atualizado',
+            'new_quantity' => $newQuantity,
+            'quantity_change' => $quantityDiff
+        ]);
+    }
+
+    /**
+     * ✅ Obter carrinho
+     */
+    public function getCart($sessionId)
+    {
+        $cartKey = "cart:{$sessionId}";
+        $cartData = Redis::get($cartKey);
+        
+        if (!$cartData) {
+            return response()->json([
+                'message' => 'Carrinho vazio ou expirado',
+                'cart' => [],
+                'total' => 0
+            ]);
+        }
+        
+        $cart = json_decode($cartData, true);
+        $total = array_sum(array_column($cart, 'total_price'));
+        
+        return response()->json([
+            'cart' => array_values($cart),
+            'total' => $total,
+            'items_count' => count($cart)
+        ]);
+    }
+
+    /**
+     * ✅ Limpar carrinho
+     */
+    public function clearCart($sessionId)
+    {
+        $cartKey = "cart:{$sessionId}";
+        $cartData = Redis::get($cartKey);
+        
+        if ($cartData) {
+            $cart = json_decode($cartData, true);
+            
+            // Liberar todas as reservas
+            foreach ($cart as $productId => $item) {
+                $reserveKey = "reserve:{$sessionId}:{$productId}";
+                $reservedQuantity = Redis::get($reserveKey) ?? 0;
+                
+                if ($reservedQuantity > 0) {
+                    Redis::decrby("product_reserved_{$productId}", $reservedQuantity);
+                    Redis::del($reserveKey);
+                }
+            }
+        }
+        
+        // Remover carrinho
+        Redis::del($cartKey);
+        
+        return response()->json(['message' => 'Carrinho limpo']);
+    }
+
+    /**
+     * ✅ Obter estoque de todos os produtos
+     */
+    public function getAllProductsStock()
+    {
+        $products = Product::where('is_active', true)->get();
+        $productsWithStock = [];
+
+        foreach ($products as $product) {
+            $redisStock = Redis::get("product_stock_{$product->id}") ?? $product->quantity;
+            $reservedStock = Redis::get("product_reserved_{$product->id}") ?? 0;
+            $availableStock = $redisStock - $reservedStock;
+
+            $productsWithStock[] = [
+                'id' => $product->id,
+                'name' => $product->name,
+                'slug' => $product->slug,
+                'price' => $product->price,
+                'promotion_price' => $product->promotion_price,
+                'category' => $product->category,
+                'description' => $product->description,
+                'image' => $product->image ? asset('storage/' . $product->image) : null,
+                'is_promo' => $product->is_promo,
+                'is_new' => $product->is_new,
+                'total_stock' => (int)$redisStock,
+                'reserved_stock' => (int)$reservedStock,
+                'available_stock' => max(0, $availableStock),
+                'in_stock' => $availableStock > 0,
+                'created_at' => $product->created_at,
+                'updated_at' => $product->updated_at
+            ];
+        }
+
+        return response()->json($productsWithStock);
+    }
+
+    /**
+     * ✅ Obter estoque de produto específico
+     */
+    public function getProductStock($id)
+    {
+        $product = Product::findOrFail($id);
+        $redisStock = Redis::get("product_stock_{$id}") ?? $product->quantity;
+        $reservedStock = Redis::get("product_reserved_{$id}") ?? 0;
+        $availableStock = $redisStock - $reservedStock;
+
+        return response()->json([
+            'product_id' => $id,
+            'total_stock' => (int)$redisStock,
+            'reserved_stock' => (int)$reservedStock,
+            'available_stock' => max(0, $availableStock),
+            'in_stock' => $availableStock > 0
+        ]);
+    }
+
+    /**
+     * ✅ Criar pedido (checkout)
+     */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'customer_name'     => 'required|string|max:255',
-            'customer_email'    => 'nullable|email',
-            'customer_phone'    => 'required|string|max:20',
-            'address_street'    => 'nullable|string|max:255',
-            'address_number'    => 'nullable|string|max:50',
-            'address_neighborhood' => 'nullable|string|max:255',
-            'address_city'      => 'nullable|string|max:255',
-            'address_state'     => 'nullable|string|max:50',
-            'address_zip'       => 'nullable|string|max:20',
-            'items'             => 'required|array|min:1',
-            'items.*.product_id'=> 'required|exists:products,id',
-            'items.*.quantity'  => 'required|integer|min:1',
+            'session_id' => 'required|string',
+            'customer_name' => 'required|string|max:255',
+            'customer_phone' => 'required|string|max:20',
+            'customer_address' => 'nullable|string'
         ]);
 
-        return DB::transaction(function () use ($data) {
+        $sessionId = $data['session_id'];
+        $cartKey = "cart:{$sessionId}";
+        $cartData = Redis::get($cartKey);
+
+        if (!$cartData) {
+            return response()->json([
+                'message' => 'Carrinho vazio ou expirado'
+            ], 400);
+        }
+
+        $cart = json_decode($cartData, true);
+        $totalAmount = array_sum(array_column($cart, 'total_price'));
+
+        DB::beginTransaction();
+        
+        try {
+            // Criar ordem
             $order = Order::create([
-                'customer_name'  => $data['customer_name'],
-                'customer_email' => $data['customer_email'] ?? null,
+                'customer_name' => $data['customer_name'],
                 'customer_phone' => $data['customer_phone'],
-                'address_street' => $data['address_street'] ?? null,
-                'address_number' => $data['address_number'] ?? null,
-                'address_neighborhood' => $data['address_neighborhood'] ?? null,
-                'address_city'   => $data['address_city'] ?? null,
-                'address_state'  => $data['address_state'] ?? null,
-                'address_zip'    => $data['address_zip'] ?? null,
-                'total_amount'   => 0,
-                'status'         => 'pending_payment',
+                'customer_address' => $data['customer_address'] ?? null,
+                'total_amount' => $totalAmount,
+                'status' => 'pending_payment',
+                'checkout_expires_at' => now()->addMinutes(10),
+                'stock_reserved' => true
             ]);
 
-            $total = 0;
-            foreach ($data['items'] as $item) {
-                $product = \App\Models\Product::findOrFail($item['product_id']);
-                $lineTotal = $product->price * $item['quantity'];
-
+            // Criar itens da ordem
+            foreach ($cart as $productId => $item) {
                 OrderItem::create([
-                    'order_id'     => $order->id,
-                    'product_id'   => $product->id,
-                    'product_name' => $product->name,
-                    'unit_price'   => $product->price,
-                    'quantity'     => $item['quantity'],
-                    'total_price'  => $lineTotal,
+                    'order_id' => $order->id,
+                    'product_id' => $productId,
+                    'product_name' => $item['product_name'],
+                    'unit_price' => $item['unit_price'],
+                    'quantity' => $item['quantity'],
+                    'total_price' => $item['total_price']
                 ]);
-
-                $total += $lineTotal;
             }
 
-            $order->update(['total_amount' => $total]);
+            // Limpar carrinho (mas manter reservas até pagamento)
+            Redis::del($cartKey);
 
-            $payment = Payment::create([
+            // ✅ AGENDAR JOB PARA EXPIRAR CHECKOUT
+            ExpireCheckoutJob::dispatch($order->id)
+                ->delay(now()->addMinutes(10));
+
+            Log::info('🛒 Checkout criado e job agendado', [
                 'order_id' => $order->id,
-                'status'   => 'pending',
-                'amount'   => $total,
-                'provider' => 'pix_provider',
-                'pix_payload' => json_encode([
-                    'qr_code' => 'FAKE_QR_CODE_STRING',
-                    'copy_paste' => 'FAKE_PIX_CODE'
-                ]),
+                'customer' => $data['customer_name'],
+                'total' => $totalAmount,
+                'expires_at' => $order->checkout_expires_at
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Pedido criado com sucesso',
+                'order' => $order->load('items'),
+                'checkout_expires_in_minutes' => 10
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            Log::error('❌ Erro ao criar checkout', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
             ]);
 
             return response()->json([
-                'order' => $order->load('items'),
-                'payment' => $payment,
-            ], 201);
-        });
+                'message' => 'Erro interno do servidor',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    public function getPedidos(Request $request)
+    /**
+     * ✅ Obter clientes únicos (para admin)
+     */
+    public function getUniqueCustomers()
     {
-        $request->validate([
-            'customer_email' => 'nullable|email',
-            'customer_phone' => 'nullable|string|max:20',
-        ]);
+        $customers = Order::select('customer_name', 'customer_phone')
+            ->distinct()
+            ->orderBy('customer_name')
+            ->get();
 
-        $query = Order::query();
+        return response()->json($customers);
+    }
 
-        if ($request->filled('customer_email')) {
-            $query->where('customer_email', $request->customer_email);
-        }
-        if ($request->filled('customer_phone')) {
-            $query->where('customer_phone', $request->customer_phone);
-        }
-
-        $orders = $query->with('items')->get();
+    /**
+     * ✅ Obter pedidos (para listagem pública)
+     */
+    public function getPedidos()
+    {
+        $orders = Order::with('items')
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
 
         return response()->json($orders);
     }
 
+    /**
+     * ✅ Obter status do pedido
+     */
+    public function getOrderStatus($id)
+    {
+        $order = Order::findOrFail($id);
+        
+        return response()->json([
+            'id' => $order->id,
+            'status' => $order->status,
+            'total_amount' => $order->total_amount,
+            'created_at' => $order->created_at,
+            'checkout_expires_at' => $order->checkout_expires_at
+        ]);
+    }
+
+    /**
+     * ✅ Rastrear pedido
+     */
+    public function trackOrder($id)
+    {
+        $order = Order::with(['items', 'payment'])->findOrFail($id);
+        
+        return response()->json($order);
+    }
+
+    /**
+     * ✅ Obter último pedido do cliente
+     */
     public function getLastOrderCustomer(Request $request)
     {
-        $request->validate([
-            'customer_phone' => 'required|string|max:20',
-        ]);
-
-        $customer = Order::select([
-            'customer_name',
-            'customer_email',
-            'customer_phone',
-            'address_street',
-            'address_number',
-            'address_neighborhood'
-        ])
-        ->where('customer_phone', $request->customer_phone)
-        ->orderBy('created_at', 'desc')
-        ->first();
-
-        if (!$customer) {
-            return response()->json([
-                'message' => 'Cliente não encontrado'
-            ], 404);
+        $phone = $request->input('phone');
+        
+        if (!$phone) {
+            return response()->json(['message' => 'Telefone é obrigatório'], 400);
         }
-
-        return response()->json($customer);
+        
+        $lastOrder = Order::where('customer_phone', $phone)
+            ->with('items')
+            ->orderBy('created_at', 'desc')
+            ->first();
+            
+        if (!$lastOrder) {
+            return response()->json(['message' => 'Nenhum pedido encontrado'], 404);
+        }
+        
+        return response()->json($lastOrder);
     }
 }

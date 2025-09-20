@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../App';
+import { adminApi } from '../../api_admin';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -12,14 +13,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Checkbox } from '../ui/checkbox';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash2, Search, Package, Calendar, Star, Percent, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Search, Package, Calendar, Star, Percent, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export function ProductsManagement() {
-  const { products, addProduct, updateProduct, toggleProduct } = useApp();
+  const { products, refreshProducts } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [editingStock, setEditingStock] = useState<{ productId: string; value: string } | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -35,7 +37,7 @@ export function ProductsManagement() {
     isNew: false,
   });
 
-  const categories = [...new Set(products.map(p => p.category))];
+  const categories = [...new Set(products.map(p => p.category).filter(cat => cat && cat.trim() !== ''))];
 
   // Função para formatar valor monetário brasileiro
   const formatCurrency = (value: string) => {
@@ -83,92 +85,176 @@ export function ProductsManagement() {
   const handleEdit = (product: any) => {
     setEditingProduct(product);
     setFormData({
-      name: product.name,
-      description: product.description,
-      price: product.price.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-        minimumFractionDigits: 2
-      }),
-      promotionPrice: product.promotionPrice ? product.promotionPrice.toLocaleString('pt-BR', {
+      name: product.name || '',
+      description: product.description || '',
+      price: product.price ? product.price.toLocaleString('pt-BR', {
         style: 'currency',
         currency: 'BRL',
         minimumFractionDigits: 2
       }) : '',
-      category: product.category,
+      promotionPrice: (product.promotionPrice || product.promotion_price) ? (product.promotionPrice || product.promotion_price).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2
+      }) : '',
+      category: product.category || '',
       file: null,
-      available: product.available || product.is_active,
-      stock: product.stock.toString(),
-      expiryDate: product.expiryDate ? new Date(product.expiryDate).toISOString().split('T')[0] : '',
-      isPromotion: product.isPromotion || product.is_promo,
-      isNew: product.isNew || product.is_new,
+      available: product.available || product.is_active || false,
+      stock: (product.stock || product.quantity || 0).toString(),
+      expiryDate: (product.expiryDate || product.expires_at) ? new Date(product.expiryDate || product.expires_at).toISOString().split('T')[0] : '',
+      isPromotion: product.isPromotion || product.is_promo || false,
+      isNew: product.isNew || product.is_new || false,
     });
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: any) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.description || !formData.price || !formData.category || !formData.stock) {
-      toast.error('Preencha todos os campos obrigatórios');
+    // Validação mais específica
+    if (!formData.name?.trim()) {
+      toast.error('Nome do produto é obrigatório');
+      return;
+    }
+    
+    if (!formData.description?.trim()) {
+      toast.error('Descrição do produto é obrigatória');
+      return;
+    }
+    
+    if (!formData.price?.trim()) {
+      toast.error('Preço do produto é obrigatório');
+      return;
+    }
+    
+    if (!formData.category?.trim()) {
+      toast.error('Categoria do produto é obrigatória');
+      return;
+    }
+    
+    if (!formData.stock?.trim()) {
+      toast.error('Quantidade em estoque é obrigatória');
       return;
     }
 
-    // Converter valores formatados para números
-    const priceValue = parseFloat(formData.price.replace(/[^\d,]/g, '').replace(',', '.'));
-    const promotionPriceValue = formData.promotionPrice ? parseFloat(formData.promotionPrice.replace(/[^\d,]/g, '').replace(',', '.')) : undefined;
+    try {
+      // Converter valores formatados para números
+      const priceValue = parseFloat(formData.price.replace(/[^\d,]/g, '').replace(',', '.'));
+      const promotionPriceValue = formData.promotionPrice ? parseFloat(formData.promotionPrice.replace(/[^\d,]/g, '').replace(',', '.')) : null;
+      const stockValue = parseInt(formData.stock);
 
-    if (formData.isPromotion && (!promotionPriceValue || promotionPriceValue >= priceValue)) {
-      toast.error('Preço promocional deve ser menor que o preço normal');
-      return;
+      // Validações numéricas
+      if (isNaN(priceValue) || priceValue <= 0) {
+        toast.error('Preço deve ser um número válido maior que zero');
+        return;
+      }
+
+      if (isNaN(stockValue) || stockValue < 0) {
+        toast.error('Estoque deve ser um número válido maior ou igual a zero');
+        return;
+      }
+
+      if (formData.isPromotion && (!promotionPriceValue || promotionPriceValue >= priceValue)) {
+        toast.error('Preço promocional deve ser menor que o preço normal');
+        return;
+      }
+
+      // Preparar dados para envio (apenas campos que o backend espera)
+      const productData: any = {
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        price: priceValue,
+        category: formData.category.trim(),
+        quantity: stockValue,
+        is_promo: formData.isPromotion,
+        is_new: formData.isNew,
+        is_active: formData.available,
+      };
+
+      // Adicionar campos opcionais apenas se tiverem valor
+      if (promotionPriceValue) {
+        productData.promotion_price = promotionPriceValue;
+      }
+
+      if (formData.expiryDate) {
+        productData.expires_at = formData.expiryDate;
+      }
+
+      if (formData.file) {
+        productData.file = formData.file;
+      }
+
+      console.log('📤 Enviando dados do produto:', productData);
+
+      if (editingProduct) {
+        // Atualizar produto existente
+        console.log(`🔄 Atualizando produto ${editingProduct.id}`);
+        await adminApi.updateProduct(editingProduct.id, productData);
+        toast.success('Produto atualizado com sucesso!');
+      } else {
+        // Criar novo produto
+        console.log('➕ Criando novo produto');
+        await adminApi.createProduct(productData);
+        toast.success('Produto criado com sucesso!');
+      }
+
+      // Recarregar produtos usando refreshProducts
+      await refreshProducts();
+
+      setIsDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('❌ Erro ao salvar produto:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      toast.error(`Erro ao salvar produto: ${errorMessage}`);
     }
-
-    // Gerar slug simples baseado no nome
-    const generateSlug = (name: string) => {
-      return name
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-        .replace(/[^a-z0-9\s-]/g, '') // Remove caracteres especiais
-        .replace(/\s+/g, '-') // Substitui espaços por hífens
-        .replace(/-+/g, '-') // Remove hífens duplicados
-        .trim();
-    };
-
-    const productData = {
-      name: formData.name,
-      slug: generateSlug(formData.name),
-      description: formData.description,
-      price: priceValue,
-      promotion_price: promotionPriceValue,
-      category: formData.category,
-      quantity: parseInt(formData.stock),
-      expires_at: formData.expiryDate || undefined,
-      is_promo: formData.isPromotion,
-      is_new: formData.isNew,
-      is_active: formData.available,
-      file: formData.file, // Para upload de imagem
-    };
-
-    if (editingProduct) {
-      updateProduct(editingProduct.id, productData);
-    } else {
-      addProduct(productData);
-    }
-
-    setIsDialogOpen(false);
-    resetForm();
   };
 
-  const handleDelete = (productId: string, productName: string) => {
-    if (confirm(`Tem certeza que deseja desativar "${productName}"?`)) {
-      toggleProduct(productId);
+  const handleToggleAvailability = async (productId: string, currentStatus: boolean) => {
+    try {
+      console.log(`🔄 Toggling produto ${productId} - status atual: ${currentStatus} -> novo: ${!currentStatus}`);
+      
+      // Tentar primeiro o endpoint específico de toggle
+      try {
+        await adminApi.toggleProduct(productId);
+        console.log('✅ Toggle realizado via endpoint específico');
+      } catch (toggleError) {
+        console.warn('⚠️ Endpoint de toggle falhou, tentando update:', toggleError);
+        // Fallback para update manual
+        await adminApi.updateProduct(productId, { is_active: !currentStatus });
+        console.log('✅ Toggle realizado via update manual');
+      }
+      
+      await refreshProducts();
+      toast.success(`Produto ${!currentStatus ? 'ativado' : 'desativado'} com sucesso!`);
+    } catch (error) {
+      console.error('❌ Erro ao atualizar disponibilidade:', error);
+      toast.error(`Erro ao ${!currentStatus ? 'ativar' : 'desativar'} produto: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
   };
 
-  const handleToggleAvailability = (productId: string, currentStatus: boolean) => {
-    toggleProduct(productId);
-    toast.success(`Produto ${!currentStatus ? 'ativado' : 'desativado'} com sucesso!`);
+  const handleSyncStock = async () => {
+    try {
+      await adminApi.syncStock();
+      await refreshProducts();
+      toast.success('Estoque sincronizado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao sincronizar estoque:', error);
+      toast.error('Erro ao sincronizar estoque');
+    }
+  };
+
+  const handleQuickStockUpdate = async (productId: string, newStock: number) => {
+    try {
+      console.log(`📦 Atualizando estoque do produto ${productId} para ${newStock}`);
+      await adminApi.updateProductStock(productId, newStock);
+      await refreshProducts();
+      toast.success('Estoque atualizado com sucesso!');
+    } catch (error) {
+      console.error('❌ Erro ao atualizar estoque:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      toast.error(`Erro ao atualizar estoque: ${errorMessage}`);
+    }
   };
 
   const formatPrice = (price: number) => {
@@ -200,14 +286,25 @@ export function ProductsManagement() {
           <p className="text-muted-foreground">Controle total do seu estoque de doces</p>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Doce
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleSyncStock}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Sincronizar Estoque
+          </Button>
+          
+          <Button variant="outline" onClick={refreshProducts}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Atualizar Lista
+          </Button>
+          
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={resetForm}>
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Doce
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingProduct ? 'Editar Doce' : 'Novo Doce'}
@@ -230,7 +327,7 @@ export function ProductsManagement() {
                   <Label htmlFor="category">Categoria *</Label>
                   <Select 
                     value={formData.category} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                    onValueChange={(value: string) => setFormData(prev => ({ ...prev, category: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione uma categoria" />
@@ -336,7 +433,7 @@ export function ProductsManagement() {
                   accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    setFormData(prev => ({ ...prev, file }));
+                    setFormData(prev => ({ ...prev, file: file || null }));
                   }}
                   className="cursor-pointer"
                 />
@@ -351,7 +448,7 @@ export function ProductsManagement() {
                   <Checkbox
                     id="available"
                     checked={formData.available}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, available: !!checked }))}
+                    onCheckedChange={(checked: boolean) => setFormData(prev => ({ ...prev, available: !!checked }))}
                   />
                   <Label htmlFor="available">Produto Disponível</Label>
                 </div>
@@ -359,7 +456,7 @@ export function ProductsManagement() {
                   <Checkbox
                     id="isPromotion"
                     checked={formData.isPromotion}
-                    onCheckedChange={(checked) => setFormData(prev => ({ 
+                    onCheckedChange={(checked: boolean) => setFormData(prev => ({ 
                       ...prev, 
                       isPromotion: !!checked,
                       promotionPrice: !checked ? '' : prev.promotionPrice
@@ -371,7 +468,7 @@ export function ProductsManagement() {
                   <Checkbox
                     id="isNew"
                     checked={formData.isNew}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isNew: !!checked }))}
+                    onCheckedChange={(checked: boolean) => setFormData(prev => ({ ...prev, isNew: !!checked }))}
                   />
                   <Label htmlFor="isNew">Novidade</Label>
                 </div>
@@ -392,6 +489,7 @@ export function ProductsManagement() {
             </form>
           </DialogContent>
         </Dialog>
+      </div>
       </div>
 
       {/* Stock Alerts */}
@@ -506,7 +604,7 @@ export function ProductsManagement() {
                       {(product.isPromotion || product.is_promo) && (product.promotionPrice || product.promotion_price) ? (
                         <div>
                           <div className="font-semibold text-green-600">
-                            {formatPrice(product.promotionPrice || product.promotion_price)}
+                            {formatPrice((product.promotionPrice || product.promotion_price) ?? 0)}
                           </div>
                           <div className="text-sm text-muted-foreground line-through">
                             {formatPrice(product.price)}
@@ -522,26 +620,74 @@ export function ProductsManagement() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{product.stock}</span>
-                      {getStockBadge(product.stock)}
+                      {editingStock?.productId === product.id ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={editingStock.value}
+                            onChange={(e) => setEditingStock({ 
+                              productId: product.id, 
+                              value: e.target.value 
+                            })}
+                            className="w-16 h-6 text-xs"
+                            min="0"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
+                                setEditingStock(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingStock(null);
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
+                              setEditingStock(null);
+                            }}
+                            className="h-6 w-6 p-0"
+                          >
+                            ✓
+                          </Button>
+                        </div>
+                      ) : (
+                        <span 
+                          className="font-medium cursor-pointer hover:bg-muted px-1 rounded"
+                          onClick={() => setEditingStock({ 
+                            productId: product.id, 
+                            value: (product.stock || product.quantity || 0).toString() 
+                          })}
+                          title="Clique para editar"
+                        >
+                          {product.stock || product.quantity || 0}
+                        </span>
+                      )}
+                      {getStockBadge(product.stock || product.quantity || 0)}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleToggleAvailability(product.id, product.available || product.is_active)}
-                    >
-                      <Badge className={(product.available || product.is_active) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                        {(product.available || product.is_active) ? 'Disponível' : 'Indisponível'}
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={product.available || product.is_active || false}
+                        onCheckedChange={() => handleToggleAvailability(product.id, (product.available || product.is_active) ?? false)}
+                        aria-label={`${(product.available || product.is_active) ? 'Desativar' : 'Ativar'} produto`}
+                      />
+                      <Badge 
+                        variant={(product.available || product.is_active) ? 'default' : 'secondary'}
+                        className={(product.available || product.is_active) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
+                      >
+                        {(product.available || product.is_active) ? 'Ativo' : 'Inativo'}
                       </Badge>
-                    </Button>
+                    </div>
                   </TableCell>
                   <TableCell>
-                    {product.expiryDate ? (
+                    {(product.expiryDate || product.expires_at) ? (
                       <div className="flex items-center gap-1 text-sm">
                         <Calendar className="h-3 w-3" />
-                        {new Date(product.expiryDate).toLocaleDateString('pt-BR')}
+                        {new Date(product.expiryDate || product.expires_at || '').toLocaleDateString('pt-BR')}
                       </div>
                     ) : (
                       <span className="text-muted-foreground text-sm">-</span>
@@ -553,16 +699,9 @@ export function ProductsManagement() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEdit(product)}
+                        title="Editar produto"
                       >
                         <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(product.id, product.name)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>

@@ -7,19 +7,141 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Separator } from '../ui/separator';
-import { Search, Eye, CheckCircle, Clock, Package, XCircle, MessageCircle } from 'lucide-react';
+import { Search, Eye, CheckCircle, Clock, Package, XCircle, MessageCircle, DollarSign, Ban, Flag } from 'lucide-react';
 import { useApp } from '../../App';
+import { adminApi } from '../../api_admin';
+
+// Tipo para o pedido baseado na estrutura real dos dados do backend
+interface Order {
+  id: string;
+  clientName: string; // client_name do backend
+  email: string;
+  whatsapp: string;
+  address?: string;
+  neighborhood?: string;
+  additionalInfo?: string;
+  observations?: string; // Campo do backend
+  status: string;
+  total: number;
+  created_at?: string;
+  createdAt?: string;
+  items?: Array<{
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    product?: any;
+  }>;
+  paymentMethod?: string;
+  payment_method?: string;
+  scheduledDate?: string;
+  scheduled_date?: string;
+}
 
 export const OrdersManagement = () => {
-  const { orders, updateOrderStatus, updatePaymentStatus } = useApp();
+  const { orders, updateOrder, admin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // Estado de autenticação
+  const isAdminAuthenticated = admin?.role === 'staff';
+
+  // Debug: verificar se os dados estão chegando
+  console.log('📊 Total de pedidos carregados:', orders.length);
+  console.log('👤 Admin atual:', admin);
+  console.log('🔐 Admin autenticado:', isAdminAuthenticated);
+  console.log('🔑 Token no localStorage:', localStorage.getItem('admin_token') ? 'PRESENTE' : 'AUSENTE');
+
+  // Debug: log dos pedidos para verificar estrutura dos dados
+  console.log('� Total de pedidos carregados:', orders.length);
+
+  // Debug: log dos pedidos para verificar estrutura dos dados
+  console.log('🔍 Orders recebidos:', orders);
+
+  // Funções auxiliares para atualizar pedidos
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      console.log(`🔄 Confirmando pedido ${orderId}`);
+      
+      // Usar o endpoint confirm-many que já existe
+      await adminApi.confirmManyOrders([orderId]);
+      
+      // Atualiza o estado local após sucesso
+      updateOrder(orderId, { status: newStatus as any });
+      
+      console.log(`✅ Pedido ${orderId} confirmado com sucesso`);
+      
+    } catch (error) {
+      console.error(`❌ Erro ao confirmar pedido ${orderId}:`, error);
+      // Aqui você pode adicionar um toast de erro se quiser
+    }
+  };
+
+  const updatePaymentStatus = (orderId: string, paymentStatus: string) => {
+    // Implementar lógica de pagamento se necessário
+    console.log(`Atualizar pagamento do pedido ${orderId} para ${paymentStatus}`);
+  };
+
+  // Confirmar pedido (para pedidos já pagos)
+  const handleConfirmOrder = async (orderId: string) => {
+    try {
+      console.log(`🔄 Confirmando pedido ${orderId}`);
+      console.log(`🔑 Token no localStorage:`, localStorage.getItem('admin_token') ? 'PRESENTE' : 'AUSENTE');
+      console.log(`👤 Admin autenticado:`, isAdminAuthenticated);
+      
+      await adminApi.confirmManyOrders([orderId]);
+      
+      // Atualiza o status local
+      updateOrder(orderId, { status: 'confirmed' as any });
+      
+      console.log(`✅ Pedido ${orderId} confirmado com sucesso`);
+      
+    } catch (error) {
+      console.error(`❌ Erro ao confirmar pedido ${orderId}:`, error);
+    }
+  };
+
+  // Cancelar pedido
+  const handleCancelPayment = async (orderId: string) => {
+    try {
+      console.log(`🔄 Cancelando pedido ${orderId}`);
+      console.log(`📋 Modelo de request: PATCH /api/admin/orders/cancel-payment`);
+      console.log(`📋 Body: { "order_ids": [${orderId}] }`);
+      
+      await adminApi.cancelPayments([orderId]);
+      
+      // Atualiza o status local - usar "canceled" (8 chars) ao invés de "cancelled" (9 chars)
+      updateOrder(orderId, { status: 'canceled' as any });
+      
+      console.log(`✅ Pedido ${orderId} cancelado com sucesso`);
+      
+    } catch (error) {
+      console.error(`❌ Erro ao cancelar pedido ${orderId}:`, error);
+    }
+  };
+
+  // Finalizar pedido (mark as completed)
+  const handleFinishOrder = async (orderId: string) => {
+    try {
+      console.log(`🔄 Finalizando pedido ${orderId}`);
+      
+      await adminApi.markAsCompleted([orderId]);
+      
+      // Atualiza o status local
+      updateOrder(orderId, { status: 'completed' as any });
+      
+      console.log(`✅ Pedido ${orderId} finalizado com sucesso`);
+      
+    } catch (error) {
+      console.error(`❌ Erro ao finalizar pedido ${orderId}:`, error);
+    }
+  };
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customer.email.toLowerCase().includes(searchTerm.toLowerCase());
+                         order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
@@ -36,7 +158,9 @@ export const OrdersManagement = () => {
       case 'ready':
       case 'completed':
         return <CheckCircle className="w-4 h-4" />;
-      case 'cancelled':
+      case 'canceled':
+        return <XCircle className="w-4 h-4" />;
+      case 'cancelled': // Compatibilidade com dados antigos
         return <XCircle className="w-4 h-4" />;
       default:
         return <Clock className="w-4 h-4" />;
@@ -47,6 +171,10 @@ export const OrdersManagement = () => {
     switch (status) {
       case 'pending':
         return 'Pendente';
+      case 'pending_payment':
+        return 'Aguardando Pagamento';
+      case 'awaiting_seller_confirmation':
+        return 'Aguardando Confirmação';
       case 'confirmed':
         return 'Confirmado';
       case 'preparing':
@@ -55,10 +183,37 @@ export const OrdersManagement = () => {
         return 'Pronto';
       case 'completed':
         return 'Concluído';
-      case 'cancelled':
+      case 'canceled':
+        return 'Cancelado';
+      case 'cancelled': // Compatibilidade com dados antigos
         return 'Cancelado';
       default:
         return status;
+    }
+  };
+
+  // Função para verificar se o pagamento foi aprovado (status que vem da API)
+  const isPaymentApproved = (status: string) => {
+    // Se o status não é 'pending_payment', significa que o pagamento foi processado
+    return status !== 'pending_payment';
+  };
+
+  // Função para mostrar indicador de pagamento
+  const getPaymentIndicator = (status: string) => {
+    if (status === 'pending_payment') {
+      return (
+        <Badge variant="outline" className="text-orange-600 border-orange-600 ml-2">
+          <Clock className="w-3 h-3 mr-1" />
+          Aguardando Pagamento
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" className="text-green-600 border-green-600 ml-2">
+          <CheckCircle className="w-3 h-3 mr-1" />
+          Pago
+        </Badge>
+      );
     }
   };
 
@@ -66,6 +221,10 @@ export const OrdersManagement = () => {
     switch (status) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
+      case 'pending_payment':
+        return 'bg-orange-100 text-orange-800';
+      case 'awaiting_seller_confirmation':
+        return 'bg-purple-100 text-purple-800';
       case 'confirmed':
       case 'preparing':
         return 'bg-blue-100 text-blue-800';
@@ -73,25 +232,33 @@ export const OrdersManagement = () => {
         return 'bg-green-100 text-green-800';
       case 'completed':
         return 'bg-primary/10 text-primary';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
+      case 'canceled':
+        return 'text-red-600 bg-red-50 border-red-200';
+      case 'cancelled': // Compatibilidade com dados antigos
+        return 'text-red-600 bg-red-50 border-red-200';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
   const handleStatusChange = (orderId: string, newStatus: string) => {
-    updateOrderStatus(orderId, newStatus as any);
+    updateOrderStatus(orderId, newStatus);
   };
 
   const handleCompleteOrder = (orderId: string) => {
-    updateOrderStatus(orderId, 'completed');
+    updateOrderStatus(orderId, 'confirmed');
   };
 
-  const generateWhatsAppLink = (order: any) => {
-    const phoneNumber = order.customer.phone.replace(/\D/g, '');
+  const generateWhatsAppLink = (order: Order) => {
+    // Verificar se o whatsapp existe e não é undefined
+    if (!order.whatsapp) {
+      console.warn('WhatsApp não informado para o pedido:', order.id);
+      return '#'; // Retorna link vazio se não houver whatsapp
+    }
+    
+    const phoneNumber = order.whatsapp.replace(/\D/g, '');
     let message = `🎂 *Bruno Cakes - Atualização do Pedido* 🎂\\n\\n`;
-    message += `Olá ${order.customer.name}!\\n\\n`;
+    message += `Olá ${order.clientName || 'Cliente'}!\\n\\n`;
     message += `Seu pedido #${order.id} foi atualizado:\\n`;
     message += `*Status:* ${getStatusText(order.status)}\\n\\n`;
     
@@ -133,11 +300,14 @@ export const OrdersManagement = () => {
           <SelectContent>
             <SelectItem value="all">Todos os Status</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
+            <SelectItem value="pending_payment">Aguardando Pagamento</SelectItem>
+            <SelectItem value="awaiting_seller_confirmation">Aguardando Confirmação</SelectItem>
             <SelectItem value="confirmed">Confirmado</SelectItem>
             <SelectItem value="preparing">Preparando</SelectItem>
             <SelectItem value="ready">Pronto</SelectItem>
             <SelectItem value="completed">Concluído</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
+            <SelectItem value="canceled">Cancelado</SelectItem>
+            <SelectItem value="cancelled">Cancelado (Legacy)</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -172,24 +342,46 @@ export const OrdersManagement = () => {
                       <TableCell className="font-mono">#{order.id}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{order.customer.name}</p>
-                          <p className="text-sm text-muted-foreground">{order.customer.email}</p>
+                          <p className="font-medium">
+                            {(() => {
+                              const orderAny = order as any;
+                              const name = order.clientName || orderAny.client_name || 'Cliente não informado';
+                              return name.length > 15 ? `${name.substring(0, 15)}...` : name;
+                            })()}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {(() => {
+                              const orderAny = order as any;
+                              return order.email || order.whatsapp || orderAny.phone || 'Contato não informado';
+                            })()}
+                          </p>
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium">R$ {order.total.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(order.status)}>
-                          {getStatusIcon(order.status)}
-                          <span className="ml-1">{getStatusText(order.status)}</span>
-                        </Badge>
+                      <TableCell className="font-medium">
+                        R$ {(() => {
+                          const orderAny = order as any;
+                          const total = order.total || orderAny.value || orderAny.amount || 0;
+                          return !isNaN(Number(total)) ? Number(total).toFixed(2) : '0,00';
+                        })()}
                       </TableCell>
                       <TableCell>
-                        {new Date(order.createdAt).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        <div className="flex flex-col gap-1">
+                          <Badge className={getStatusColor(order.status)}>
+                            {getStatusIcon(order.status)}
+                            <span className="ml-1">{getStatusText(order.status)}</span>
+                          </Badge>
+                          {getPaymentIndicator(order.status)}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {order.createdAt ? 
+                          new Date(order.createdAt).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }) : 'Data não informada'
+                        }
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -198,11 +390,57 @@ export const OrdersManagement = () => {
                               <Button 
                                 variant="outline" 
                                 size="sm"
-                                onClick={() => setSelectedOrder(order)}
+                                onClick={() => {
+                                  console.log('🎯 Pedido selecionado:', order);
+                                  console.log('📋 Items do pedido:', order.items);
+                                  setSelectedOrder(order);
+                                }}
+                                className="gap-1"
                               >
                                 <Eye className="w-4 h-4" />
+                                Detalhes
                               </Button>
                             </DialogTrigger>
+                            
+                            {/* Botão de confirmar pedido - apenas para pedidos já pagos */}
+                            {isPaymentApproved(order.status) && 
+                             order.status !== 'confirmed' && 
+                             order.status !== 'completed' && 
+                             order.status !== 'canceled' && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleConfirmOrder(order.id)}
+                                className="gap-1"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                Confirmar
+                              </Button>
+                            )}
+
+                            {/* Botões para pedidos confirmados */}
+                            {order.status === 'confirmed' && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handleFinishOrder(order.id)}
+                                  className="gap-1 bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Flag className="w-4 h-4" />
+                                  Finalizar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleCancelPayment(order.id)}
+                                  className="gap-1"
+                                >
+                                  <Ban className="w-4 h-4" />
+                                  Cancelar
+                                </Button>
+                              </>
+                            )}
                             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                               <DialogHeader>
                                 <DialogTitle>Detalhes do Pedido #{order.id}</DialogTitle>
@@ -212,35 +450,66 @@ export const OrdersManagement = () => {
                                 <div className="space-y-4">
                                   {/* Status e Ações */}
                                   <div className="flex items-center justify-between">
-                                    <Badge className={getStatusColor(selectedOrder.status)}>
-                                      {getStatusIcon(selectedOrder.status)}
-                                      <span className="ml-1">{getStatusText(selectedOrder.status)}</span>
-                                    </Badge>
+                                    <div className="flex flex-col gap-2">
+                                      <Badge className={getStatusColor(selectedOrder.status)}>
+                                        {getStatusIcon(selectedOrder.status)}
+                                        <span className="ml-1">{getStatusText(selectedOrder.status)}</span>
+                                      </Badge>
+                                      {getPaymentIndicator(selectedOrder.status)}
+                                    </div>
                                     <div className="flex gap-2">
-                                      {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && (
+                                      {/* Botão de confirmar pedido - apenas para pedidos já pagos */}
+                                      {isPaymentApproved(selectedOrder.status) && 
+                                       selectedOrder.status !== 'confirmed' && 
+                                       selectedOrder.status !== 'completed' && 
+                                       selectedOrder.status !== 'canceled' && (
                                         <Button
-                                          onClick={() => handleCompleteOrder(selectedOrder.id)}
+                                          onClick={() => handleConfirmOrder(selectedOrder.id)}
                                           size="sm"
                                           className="bruno-gradient text-white"
                                         >
                                           <CheckCircle className="w-4 h-4 mr-1" />
-                                          Marcar como Concluído
+                                          Confirmar Pedido
                                         </Button>
                                       )}
-                                      <Button
-                                        asChild
-                                        variant="outline"
-                                        size="sm"
-                                      >
-                                        <a 
-                                          href={generateWhatsAppLink(selectedOrder)}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
+
+                                      {/* Botões para pedidos confirmados */}
+                                      {selectedOrder.status === 'confirmed' && (
+                                        <>
+                                          <Button
+                                            onClick={() => handleFinishOrder(selectedOrder.id)}
+                                            size="sm"
+                                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                                          >
+                                            <Flag className="w-4 h-4 mr-1" />
+                                            Finalizar
+                                          </Button>
+                                          <Button
+                                            onClick={() => handleCancelPayment(selectedOrder.id)}
+                                            size="sm"
+                                            variant="destructive"
+                                          >
+                                            <Ban className="w-4 h-4 mr-1" />
+                                            Cancelar
+                                          </Button>
+                                        </>
+                                      )}
+                                      {selectedOrder.whatsapp && (
+                                        <Button
+                                          asChild
+                                          variant="outline"
+                                          size="sm"
                                         >
-                                          <MessageCircle className="w-4 h-4 mr-1" />
-                                          WhatsApp
-                                        </a>
-                                      </Button>
+                                          <a 
+                                            href={generateWhatsAppLink(selectedOrder)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                          >
+                                            <MessageCircle className="w-4 h-4 mr-1" />
+                                            WhatsApp
+                                          </a>
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
 
@@ -251,23 +520,33 @@ export const OrdersManagement = () => {
                                     <h4 className="font-semibold mb-2">Dados do Cliente</h4>
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                       <div>
-                                        <strong>Nome:</strong> {selectedOrder.customer.name}
+                                        <strong>Nome:</strong> {(() => {
+                                          const orderAny = selectedOrder as any;
+                                          return selectedOrder.clientName || orderAny.client_name || 'Cliente não informado';
+                                        })()}
                                       </div>
                                       <div>
-                                        <strong>Email:</strong> {selectedOrder.customer.email}
+                                        <strong>Email:</strong> {selectedOrder.email || 'Não informado'}
                                       </div>
                                       <div>
-                                        <strong>Telefone:</strong> {selectedOrder.customer.phone}
+                                        <strong>Telefone:</strong> {(() => {
+                                          const orderAny = selectedOrder as any;
+                                          return selectedOrder.whatsapp || orderAny.phone || 'Não informado';
+                                        })()}
                                       </div>
-                                      <div>
-                                        <strong>Bairro:</strong> {selectedOrder.customer.neighborhood}
-                                      </div>
-                                      <div className="col-span-2">
-                                        <strong>Endereço:</strong> {selectedOrder.customer.address}
-                                      </div>
-                                      {selectedOrder.customer.additionalInfo && (
+                                      {selectedOrder.neighborhood && (
+                                        <div>
+                                          <strong>Bairro:</strong> {selectedOrder.neighborhood}
+                                        </div>
+                                      )}
+                                      {selectedOrder.address && (
                                         <div className="col-span-2">
-                                          <strong>Observações:</strong> {selectedOrder.customer.additionalInfo}
+                                          <strong>Endereço:</strong> {selectedOrder.address}
+                                        </div>
+                                      )}
+                                      {(selectedOrder.additionalInfo || selectedOrder.observations) && (
+                                        <div className="col-span-2">
+                                          <strong>Observações:</strong> {selectedOrder.additionalInfo || selectedOrder.observations}
                                         </div>
                                       )}
                                     </div>
@@ -279,26 +558,48 @@ export const OrdersManagement = () => {
                                   <div>
                                     <h4 className="font-semibold mb-2">Itens do Pedido</h4>
                                     <div className="space-y-2">
-                                      {selectedOrder.items.map((item: any, index: number) => {
-                                        const price = item.product.isPromotion ? item.product.promotionPrice : item.product.price;
-                                        return (
-                                          <div key={index} className="flex justify-between items-center p-2 bg-muted/50 rounded">
-                                            <div>
-                                              <p className="font-medium">{item.product.name}</p>
-                                              <p className="text-sm text-muted-foreground">
-                                                {item.quantity}x R$ {price.toFixed(2)}
-                                              </p>
+                                      {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                                        selectedOrder.items.map((item: any, index: number) => {
+                                          // Debug: log do item individual
+                                          console.log(`🔍 Item ${index}:`, item);
+                                          
+                                          // Usar o preço diretamente do item (unit_price do backend)
+                                          const price = Number(item.price || item.unit_price || 0);
+                                          const quantity = Number(item.quantity || 1);
+                                          const itemName = item.name || item.product_name || item.product?.name || 'Produto não informado';
+                                          
+                                          // Debug: valores processados
+                                          console.log(`💰 Item processado - Nome: ${itemName}, Preço: ${price}, Quantidade: ${quantity}`);
+                                          
+                                          return (
+                                            <div key={index} className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                                              <div>
+                                                <p className="font-medium">{itemName}</p>
+                                                <p className="text-sm text-muted-foreground">
+                                                  {quantity}x R$ {price.toFixed(2)}
+                                                </p>
+                                              </div>
+                                              <span className="font-medium">
+                                                R$ {(price * quantity).toFixed(2)}
+                                              </span>
                                             </div>
-                                            <span className="font-medium">
-                                              R$ {(price * item.quantity).toFixed(2)}
-                                            </span>
-                                          </div>
-                                        );
-                                      })}
+                                          );
+                                        })
+                                      ) : (
+                                        <p className="text-muted-foreground text-center py-4">
+                                          Nenhum item encontrado neste pedido
+                                        </p>
+                                      )}
                                     </div>
                                     <div className="flex justify-between items-center pt-2 border-t font-semibold">
                                       <span>Total</span>
-                                      <span className="text-primary">R$ {selectedOrder.total.toFixed(2)}</span>
+                                      <span className="text-primary">
+                                        R$ {(() => {
+                                          const orderAny = selectedOrder as any;
+                                          const total = selectedOrder.total || orderAny.value || orderAny.amount || 0;
+                                          return !isNaN(Number(total)) ? Number(total).toFixed(2) : '0,00';
+                                        })()}
+                                      </span>
                                     </div>
                                   </div>
 
@@ -307,18 +608,21 @@ export const OrdersManagement = () => {
                                     <h4 className="font-semibold mb-2">Alterar Status</h4>
                                     <Select 
                                       value={selectedOrder.status} 
-                                      onValueChange={(value) => handleStatusChange(selectedOrder.id, value)}
+                                      onValueChange={(value: string) => handleStatusChange(selectedOrder.id, value)}
                                     >
                                       <SelectTrigger>
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="pending">Pendente</SelectItem>
+                                        <SelectItem value="pending_payment">Aguardando Pagamento</SelectItem>
+                                        <SelectItem value="awaiting_seller_confirmation">Aguardando Confirmação</SelectItem>
                                         <SelectItem value="confirmed">Confirmado</SelectItem>
                                         <SelectItem value="preparing">Preparando</SelectItem>
                                         <SelectItem value="ready">Pronto para Retirada</SelectItem>
                                         <SelectItem value="completed">Concluído</SelectItem>
-                                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                                        <SelectItem value="canceled">Cancelado</SelectItem>
+                                        <SelectItem value="cancelled">Cancelado (Legacy)</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>

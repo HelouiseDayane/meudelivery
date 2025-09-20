@@ -6,17 +6,32 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Separator } from '../ui/separator';
-import { Plus, Search, Star, Clock, Percent, Sparkles, ShoppingCart } from 'lucide-react';
+import { Plus, Minus, Search, Star, Clock, Percent, Sparkles, ShoppingCart, RefreshCw } from 'lucide-react';
 import { useApp } from '../../App';
 import { usePWA } from '../../hooks/usePWA';
 
 export const PublicMenu = () => {
-  const { products, addToCart } = useApp();
+  const { products, addToCart, getAvailableStock, hasStock, refreshProducts } = useApp();
   const { isMobile } = usePWA();
+  
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(false);
+  const [quantities, setQuantities] = useState<{[key: string]: number}>({});
+
+  // Função para obter quantidade local para um produto
+  const getLocalQuantity = (productId: string) => {
+    return quantities[productId] || 1;
+  };
+
+  // Função para definir quantidade local para um produto
+  const setLocalQuantity = (productId: string, quantity: number) => {
+    setQuantities(prev => ({
+      ...prev,
+      [productId]: Math.max(1, quantity)
+    }));
+  };
 
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
 
@@ -24,61 +39,87 @@ export const PublicMenu = () => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    return matchesSearch && matchesCategory && product.available;
+    const hasStockAvailable = hasStock(product.id);
+    
+    return matchesSearch && matchesCategory && product.available && hasStockAvailable;
   });
 
-  const handleAddToCart = (product: any, quantity: number = 1) => {
+  const handleAddToCart = async (product: any, quantity: number = 1) => {
+    const availableStock = getAvailableStock(product.id);
+    
+    if (availableStock < quantity) {
+      alert(`Estoque insuficiente! Disponível: ${availableStock} unidades`);
+      return;
+    }
+    
     setIsLoading(true);
-    setTimeout(() => {
-      addToCart(product, quantity);
+    try {
+      await addToCart(product, quantity);
+      // Atualiza produtos após adicionar ao carrinho
+      await refreshProducts();
+    } catch (error) {
+      console.error('Erro ao adicionar ao carrinho:', error);
+    } finally {
       setIsLoading(false);
-    }, 300);
+    }
   };
 
   const formatPrice = (price: number | undefined | null) => {
-    if (price == null || isNaN(price)) {
-      return 'R$ 0,00';
-    }
+    if (price === undefined || price === null) return 'R$ 0,00';
     return `R$ ${price.toFixed(2).replace('.', ',')}`;
   };
 
+  // Se não há produtos, mostra loading
+  if (products.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando produtos...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="container mx-auto px-4 py-6">
-      {/* Hero Section */}
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
       <div className="text-center mb-8">
-        <h1 className={`bruno-text-gradient mb-2 ${isMobile ? 'text-2xl' : 'text-4xl'}`}>
-          Cardápio Bruno Cakes
-        </h1>
-        <p className="text-muted-foreground mb-4">
-          🍰 Aqui não é fatia nem pedaço, aqui é tora! 🍰
-        </p>
-        <div className="bg-primary/10 rounded-lg p-4 mb-6">
-          <p className="text-primary font-medium">
-            ✨ Todas as nossas tortas são feitas artesanalmente com ingredientes premium
-          </p>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Bruno Cakes</h1>
+        <p className="text-xl text-gray-600">Deliciosos bolos artesanais feitos com amor</p>
+        
+        {/* Botão de atualizar estoque */}
+        <div className="mt-4">
+          <Button
+            onClick={refreshProducts}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            Atualizar Produtos
+          </Button>
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className={`mb-6 ${isMobile ? 'space-y-4' : 'flex gap-4'}`}>
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar tortas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            placeholder="Buscar produtos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className={isMobile ? 'w-full' : 'w-[200px]'}>
-            <SelectValue placeholder="Categoria" />
+          <SelectTrigger>
+            <SelectValue placeholder="Todas as categorias" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas as Categorias</SelectItem>
-            {categories.filter(cat => cat !== 'all').map(category => (
+            <SelectItem value="all">Todas as categorias</SelectItem>
+            {categories.filter(cat => cat !== 'all' && cat && cat.trim() !== '').map(category => (
               <SelectItem key={category} value={category}>
                 {category}
               </SelectItem>
@@ -87,177 +128,184 @@ export const PublicMenu = () => {
         </Select>
       </div>
 
-      {/* Grid de Produtos */}
-      <div className={`grid gap-6 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
-        {filteredProducts.filter(product => product && product.id).map((product) => {
-          const displayPrice = product.isPromotion ? product.promotionPrice : product.price;
+      {/* Products Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredProducts.map(product => {
+          const availableStock = getAvailableStock(product.id);
+          const isLowStock = availableStock <= 5 && availableStock > 0;
           
           return (
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
               <div className="relative">
-                <img
-                  src={product.imageUrl || product.image}
-                  alt={product.name}
-                  className="w-full h-48 object-cover"
-                  onError={(e) => {
-                    // Fallback para imagem padrão se houver erro
-                    const target = e.target as HTMLImageElement;
-                    target.src = 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400';
-                  }}
-                />
+                {product.imageUrl && (
+                  <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    className="w-full h-48 object-cover"
+                  />
+                )}
                 
                 {/* Badges */}
-                <div className="absolute top-2 left-2 flex flex-col gap-1">
+                <div className="absolute top-2 left-2 flex gap-2">
                   {product.isNew && (
-                    <Badge className="bg-primary text-white">
+                    <Badge className="bg-blue-500 text-white">
                       <Sparkles className="w-3 h-3 mr-1" />
-                      Novidade
+                      Novo
                     </Badge>
                   )}
                   {product.isPromotion && (
-                    <Badge variant="destructive">
+                    <Badge className="bg-red-500 text-white">
                       <Percent className="w-3 h-3 mr-1" />
                       Promoção
                     </Badge>
                   )}
                 </div>
 
-                {/* Stock badge */}
+                {/* Stock Badge */}
                 <div className="absolute top-2 right-2">
-                  {product.stock <= 3 && (
-                    <Badge variant="outline" className="bg-white/90">
-                      <Clock className="w-3 h-3 mr-1" />
-                      Últimas {product.stock}
-                    </Badge>
-                  )}
+                  <Badge 
+                    variant={isLowStock ? "destructive" : "secondary"}
+                    className={isLowStock ? "bg-yellow-500 text-black" : ""}
+                  >
+                    Estoque: {availableStock}
+                  </Badge>
                 </div>
               </div>
 
-              <CardHeader className="pb-2">
-                <CardTitle className={`${isMobile ? 'text-lg' : 'text-xl'}`}>
-                  {product.name}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {product.description}
-                </p>
+              <CardHeader>
+                <CardTitle className="text-lg">{product.name}</CardTitle>
+                <p className="text-sm text-gray-600 line-clamp-2">{product.description}</p>
               </CardHeader>
 
-              <CardContent className="space-y-4">
-                {/* Preço */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {product.isPromotion ? (
+              <CardContent>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col">
+                    {product.promotionPrice ? (
                       <>
-                        <span className="text-lg font-bold text-primary">
-                          {formatPrice(product.promotionPrice!)}
-                        </span>
-                        <span className="text-sm text-muted-foreground line-through">
+                        <span className="text-sm text-gray-500 line-through">
                           {formatPrice(product.price)}
+                        </span>
+                        <span className="text-xl font-bold text-red-600">
+                          {formatPrice(product.promotionPrice)}
                         </span>
                       </>
                     ) : (
-                      <span className="text-lg font-bold text-primary">
+                      <span className="text-xl font-bold text-gray-900">
                         {formatPrice(product.price)}
                       </span>
                     )}
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {product.weight}g
-                  </Badge>
-                </div>
-
-                {/* Botões */}
-                <div className={`${isMobile ? 'space-y-2' : 'flex gap-2'}`}>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className={isMobile ? 'w-full' : 'flex-1'}
-                        onClick={() => setSelectedProduct(product)}
-                      >
-                        Ver Detalhes
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>{product.name}</DialogTitle>
-                      </DialogHeader>
+                  
+                  <div className="flex flex-col gap-2">
+                    {/* Quantity Selector */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Quantidade:</span>
+                      <div className="flex items-center border rounded">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
+                          disabled={getLocalQuantity(product.id) <= 1}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="px-3 py-1 min-w-[40px] text-center">{getLocalQuantity(product.id)}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
+                          disabled={getLocalQuantity(product.id) >= availableStock}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <button className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                            Ver detalhes
+                          </button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>{product.name}</DialogTitle>
+                          </DialogHeader>
+                          <div className="grid gap-4">
+                            {product.imageUrl && (
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name}
+                                className="w-full h-64 object-cover rounded-lg"
+                              />
+                            )}
+                            <p className="text-gray-700">{product.description}</p>
+                            <div className="flex justify-between items-center">
+                              <div>
+                                {product.promotionPrice ? (
+                                  <div className="flex gap-2 items-center">
+                                    <span className="text-lg text-gray-500 line-through">
+                                      {formatPrice(product.price)}
+                                    </span>
+                                    <span className="text-2xl font-bold text-red-600">
+                                      {formatPrice(product.promotionPrice)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-2xl font-bold text-gray-900">
+                                    {formatPrice(product.price)}
+                                  </span>
+                                )}
+                              </div>
+                              <Badge>Estoque: {availableStock}</Badge>
+                            </div>
+                            
+                            {/* Quantity Selector */}
+                            <div className="flex items-center gap-2 mb-4">
+                              <span className="text-sm font-medium">Quantidade:</span>
+                              <div className="flex items-center border rounded">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
+                                  disabled={getLocalQuantity(product.id) <= 1}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="px-3 py-1 min-w-[40px] text-center">{getLocalQuantity(product.id)}</span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
+                                  disabled={getLocalQuantity(product.id) >= availableStock}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            <Button
+                              onClick={() => handleAddToCart(product, getLocalQuantity(product.id))}
+                              disabled={availableStock === 0 || isLoading}
+                              className="w-full"
+                            >
+                              <ShoppingCart className="w-4 h-4 mr-2" />
+                              {availableStock === 0 ? 'Fora de Estoque' : 'Adicionar ao Carrinho'}
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                       
-                      {selectedProduct && (
-                        <div className="space-y-4">
-                          <img
-                            src={selectedProduct.image}
-                            alt={selectedProduct.name}
-                            className="w-full h-64 object-cover rounded-lg"
-                          />
-                          
-                          <div className="space-y-2">
-                            <h3 className="font-semibold">Descrição</h3>
-                            <p className="text-muted-foreground">{selectedProduct.description}</p>
-                          </div>
-
-                          {selectedProduct.ingredients && (
-                            <div className="space-y-2">
-                              <h3 className="font-semibold">Ingredientes</h3>
-                              <div className="flex flex-wrap gap-1">
-                                {selectedProduct.ingredients.map((ingredient: string, index: number) => (
-                                  <Badge key={index} variant="secondary" className="text-xs">
-                                    {ingredient}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {selectedProduct.allergens && (
-                            <div className="space-y-2">
-                              <h3 className="font-semibold">Alérgenos</h3>
-                              <div className="flex flex-wrap gap-1">
-                                {selectedProduct.allergens.map((allergen: string, index: number) => (
-                                  <Badge key={index} variant="destructive" className="text-xs">
-                                    {allergen}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <Separator />
-
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm text-muted-foreground">Preço</p>
-                              <p className="text-2xl font-bold text-primary">
-                                {formatPrice(selectedProduct.isPromotion ? selectedProduct.promotionPrice : selectedProduct.price)}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm text-muted-foreground">Peso</p>
-                              <p className="font-semibold">{selectedProduct.weight}g</p>
-                            </div>
-                          </div>
-
-                          <Button 
-                            onClick={() => handleAddToCart(selectedProduct)}
-                            disabled={isLoading || selectedProduct.stock === 0}
-                            className="w-full bruno-gradient text-white hover:opacity-90"
-                          >
-                            <ShoppingCart className="w-4 h-4 mr-2" />
-                            {isLoading ? 'Adicionando...' : 'Adicionar ao Carrinho'}
-                          </Button>
-                        </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
-
-                  <Button 
-                    onClick={() => handleAddToCart(product)}
-                    disabled={isLoading || product.stock === 0}
-                    className={`bruno-gradient text-white hover:opacity-90 ${isMobile ? 'w-full' : 'flex-1'}`}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    {isLoading ? 'Adicionando...' : 'Adicionar'}
-                  </Button>
+                      <Button
+                        onClick={() => handleAddToCart(product, getLocalQuantity(product.id))}
+                        disabled={availableStock === 0 || isLoading}
+                        size="sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -265,43 +313,18 @@ export const PublicMenu = () => {
         })}
       </div>
 
+      {/* Empty State */}
       {filteredProducts.length === 0 && (
         <div className="text-center py-12">
-          <Search className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-          <h3 className="font-semibold text-lg mb-2">Nenhuma torta encontrada</h3>
-          <p className="text-muted-foreground">
-            Tente alterar os filtros ou buscar por outro termo.
+          <div className="text-6xl mb-4">🍰</div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Nenhum produto encontrado
+          </h3>
+          <p className="text-gray-600">
+            Tente ajustar os filtros ou buscar por outros termos.
           </p>
         </div>
       )}
-
-      {/* Informações importantes */}
-      <div className="mt-12 bg-muted/50 rounded-lg p-6">
-        <h3 className="font-semibold mb-4 text-center">ℹ️ Informações Importantes</h3>
-        <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'}`}>
-          <div className="text-center">
-            <h4 className="font-medium text-primary mb-2">📞 Contato</h4>
-            <p className="text-sm text-muted-foreground">
-              (11) 99999-9999<br />
-              contato@brunocakes.com.br
-            </p>
-          </div>
-          <div className="text-center">
-            <h4 className="font-medium text-primary mb-2">🕒 Funcionamento</h4>
-            <p className="text-sm text-muted-foreground">
-              Seg-Sex: 8h às 18h<br />
-              Sáb: 8h às 16h
-            </p>
-          </div>
-          <div className="text-center">
-            <h4 className="font-medium text-primary mb-2">📍 Endereço</h4>
-            <p className="text-sm text-muted-foreground">
-              Rua das Tortas, 123<br />
-              Centro - São Paulo
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

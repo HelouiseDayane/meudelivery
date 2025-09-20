@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
             $table->string('provider')->nullable(); // ex: 'pix_provider'
             $table->string('provider_payment_id')->nullable();
-            $table->enum('status', ['pending','paid','failed','cancelled'])->default('pending');
+            $table->enum('status', ['pending','paid','failed',''])->default('pending');
             $table->decimal('amount', 10, 2);
             $table->text('pix_payload')->nullable(); // pode armazenar JSON com dados para gerar QR
             $table->timestamps();

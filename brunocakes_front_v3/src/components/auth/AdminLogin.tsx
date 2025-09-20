@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../App';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,10 +10,11 @@ import { Shield, BarChart3, Package, Users, Settings } from 'lucide-react';
 import { STORE_CONFIG } from '../../api';
 
 export function AdminLogin() {
-  const [email, setEmail] = useState('admin@docesedelicias.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('admin@admin.com');
+  const [password, setPassword] = useState('123456');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useApp();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +22,9 @@ export function AdminLogin() {
 
     try {
       const success = await login(email, password, 'admin');
-      if (!success) {
+      if (success) {
+        navigate('/admin');
+      } else {
         toast.error('Credenciais inválidas. Verifique seu email e senha.');
       }
     } catch (error) {
@@ -115,7 +118,7 @@ export function AdminLogin() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@docesedelicias.com"
+                  placeholder="admin@admin.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -155,8 +158,8 @@ export function AdminLogin() {
             <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
               <p className="text-sm text-slate-700 mb-2 font-medium">🔐 Credenciais de demonstração:</p>
               <div className="space-y-1">
-                <p className="text-xs text-slate-600">📧 Email: admin@docesedelicias.com</p>
-                <p className="text-xs text-slate-600">🔒 Senha: admin123</p>
+                <p className="text-xs text-slate-600">📧 Email: admin@admin.com</p>
+                <p className="text-xs text-slate-600">🔒 Senha: 123456</p>
               </div>
             </div>
           </CardContent>

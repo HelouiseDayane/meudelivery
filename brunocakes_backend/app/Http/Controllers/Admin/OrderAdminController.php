@@ -73,59 +73,80 @@ class OrderAdminController extends Controller
 
         return response()->json(['updated_count' => $updatedCount]);
     }
-        public function cancelPayment(Request $request)
-        {
-            $request->validate([
-                'order_ids' => 'required|array|min:1',
-                'order_ids.*' => 'exists:orders,id',
-            ]);
+    
+    public function cancelPayment(Request $request)
+    {
+        $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'exists:orders,id',
+        ]);
 
-            $updatedCount = 0;
+        $updatedCount = 0;
 
-            foreach ($request->order_ids as $orderId) {
-                $order = Order::with('payment')->findOrFail($orderId);
+        foreach ($request->order_ids as $orderId) {
+            $order = Order::with('payment')->findOrFail($orderId);
 
-                // Atualiza o status do pagamento, se existir
-                if ($order->payment) {
-                    $order->payment->update(['status' => 'cancelled']);
-                }
-
-                // Atualiza o status do pedido
-                $order->update(['status' => 'cancelled']);
-
-                // Reverte o estoque usando o Job
-                $processOrderJob = new ProcessOrderJob($orderId);
-                $processOrderJob->revertStock();
-
-                $updatedCount++;
+            // ✅ Atualizar payment status primeiro
+            if ($order->payment) {
+                $order->payment->update(['status' => 'failed']);
             }
 
-            return response()->json(['updated_count' => $updatedCount]);
-        }
+            // ✅ Atualizar order status antes de reverter estoque
+            $order->update(['status' => 'canceled']);
 
-        public function markAsCompleted(Request $request)
-        {
-            $request->validate([
-                'order_ids' => 'required|array|min:1',
-                'order_ids.*' => 'exists:orders,id',
+            // ✅ Reverter estoque (sem duplicar update do status)
+            $processOrderJob = new ProcessOrderJob($orderId);
+            $processOrderJob->revertStock();
+
+            $updatedCount++;
+            
+            Log::info('Pedido cancelado', [
+                'order_id' => $orderId,
+                'customer' => $order->customer_name,
+                'payment_status' => $order->payment ? 'failed' : 'no_payment'
             ]);
-
-            $updatedCount = 0;
-
-            foreach ($request->order_ids as $orderId) {
-                Log::info("Marcando pedido como concluído. Pedido ID: {$orderId}"); // Log para rastrear o ID do pedido
-                $order = Order::findOrFail($orderId);
-
-                // Atualiza o status do pedido para 'completed' (como string explícita)
-                $order->update(['status' => (string) 'completed']);
-                $updatedCount++;
-            }
-
-            Log::info('Pedidos concluídos:', ['updated_count' => $updatedCount]);
-
-            return response()->json(['updated_count' => $updatedCount]);
         }
 
+        return response()->json(['updated_count' => $updatedCount]);
+    }
+
+public function markAsCompleted(Request $request)
+{
+    $request->validate([
+        'order_ids' => 'required|array|min:1',
+        'order_ids.*' => 'exists:orders,id',
+    ]);
+
+    // ✅ FILTRAR apenas pedidos que podem ser marcados como completos
+    $orders = Order::whereIn('id', $request->order_ids)
+        ->whereIn('status', ['confirmed', 'awaiting_seller_confirmation']) // ✅ Só estes podem ser completados
+        ->get();
+
+    $updatedCount = 0;
+
+    foreach ($orders as $order) {
+        // ✅ USAR STRING com aspas
+        $order->update(['status' => 'completed']); // ✅ COM ASPAS!
+        $updatedCount++;
+        
+        Log::info('Pedido marcado como completo', [
+            'order_id' => $order->id,
+            'customer' => $order->customer_name,
+            'total' => $order->total_amount
+        ]);
+    }
+
+    Log::info('Pedidos marcados como completos', [
+        'requested_count' => count($request->order_ids),
+        'updated_count' => $updatedCount
+    ]);
+
+    return response()->json([
+        'message' => 'Pedidos marcados como completos',
+        'requested_count' => count($request->order_ids),
+        'updated_count' => $updatedCount
+    ]);
+}
             
     
 public function getUniqueCustomers()

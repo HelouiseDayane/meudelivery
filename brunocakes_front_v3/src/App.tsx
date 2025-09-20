@@ -1,29 +1,24 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, createContext, useContext, useEffect, ReactNode } from 'react';
 import { Toaster } from './components/ui/sonner';
-import { api, apiRequest, API_BASE_URL, getAuthHeaders } from './api';
+import { api } from './api';
+import { adminApi } from './api_admin';
 import { getProductImageUrl } from './api';
 import { toast } from 'sonner';
+import { RealTimeProvider } from './hooks/useRealTime';
 
-// Auth Components
+// Components
+import { AdminLayout } from './components/layouts/AdminLayout';
+import { PublicLayout } from './components/layouts/PublicLayout';
 import { AdminLogin } from './components/auth/AdminLogin';
-
-// Admin Components
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ProductsManagement } from './components/admin/ProductsManagement';
 import { OrdersManagement } from './components/admin/OrdersManagement';
 import { ClientsManagement } from './components/admin/ClientsManagement';
-
-// Public Components
 import { PublicMenu } from './components/public/PublicMenu';
 import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
-import { PixPayment } from './components/client/PixPayment';
 import { OrderTracking } from './components/public/OrderTracking';
-
-// Layouts
-import { AdminLayout } from './components/layouts/AdminLayout';
-import { PublicLayout } from './components/layouts/PublicLayout';
 
 // Types
 interface Admin {
@@ -45,345 +40,545 @@ interface Product {
   category: string;
   available: boolean;
   stock: number;
+  quantity?: number; // Campo alternativo do backend
   expiryDate?: string;
-  isPromotion: boolean;
+  expires_at?: string; // Campo do backend
   promotionPrice?: number;
-  isNew: boolean;
+  promotion_price?: number; // Campo do backend
+  isPromotion?: boolean;
+  is_promo?: boolean; // Campo do backend
+  isNew?: boolean;
+  is_new?: boolean; // Campo do backend
   is_active?: boolean;
-  quantity?: number;
 }
 
 interface CartItem {
-  product: Product;
-  quantity: number;
-}
-
-interface CustomerData {
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  neighborhood: string;
-  additionalInfo?: string;
-}
-
-export interface Order {
   id: string;
-  customer: CustomerData;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string;
+  product: Product; // Referência completa ao produto
+}
+
+interface Client {
+  id: string;
+  name: string;
+  whatsapp: string;
+  email?: string;
+}
+
+interface Order {
+  id: string;
+  clientName: string;
+  whatsapp: string;
+  email: string;
   items: CartItem[];
   total: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled' | 'awaiting_seller_confirmation' | 'approved';
-  paymentStatus: 'pending' | 'paid' | 'cancelled' | 'approved';
+  status: 'pending' | 'pending_payment' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'canceled' | 'awaiting_seller_confirmation';
+  paymentMethod: 'pix' | 'card' | 'cash';
+  address?: string;
+  neighborhood?: string;
+  observations?: string;
+  scheduledDate?: string;
   createdAt: string;
-  pixPaymentId?: string;
+  pixCode?: string;
+  pixExpiresAt?: string;
 }
 
-interface AnalyticsData {
-  salesByDay: { date: string; amount: number }[];
-  salesByMonth: { month: string; amount: number }[];
-  salesByYear: { year: string; amount: number }[];
-  topProductsWeek: { product: string; quantity: number; revenue: number }[];
-  topProductsMonth: { product: string; quantity: number; revenue: number }[];
-  neighborhoodsSales: { neighborhood: string; orders: number; revenue: number }[];
+interface Analytics {
   totalRevenue: number;
+  salesByDay: Array<{ date: string; amount: number }>;
+  salesByMonth: Array<{ month: string; amount: number }>;
+  salesByYear: Array<{ year: string; amount: number }>;
+  topProductsMonth: Array<{ name: string; quantity: number; revenue: number }>;
+  neighborhoodsSales: Array<{ neighborhood: string; sales: number; revenue: number }>;
+  statistics?: {
+    totalOrders?: number;
+    totalProducts?: number;
+    averageOrderValue?: number;
+    pendingOrders?: number;
+    todaySales?: number;
+    conversionRate?: number;
+    monthSales?: number;
+    yearSales?: number;
+  };
+  period?: {
+    generated_at: string;
+    last_30_days_revenue: number;
+    current_month_revenue: number;
+  };
 }
 
-// Context
-interface AppContextProps {
-  admin: Admin | null;
-  isAdminAuthenticated: boolean;
-  adminLogin: (email: string, password: string) => Promise<boolean>;
-  adminLogout: () => void;
-  cart: CartItem[];
-  addToCart: (product: Product, quantity?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
-  clearCart: () => void;
+interface AppContextType {
+  // Admin
+  admin: Admin | null | undefined;
+  setAdmin: (admin: Admin | null) => void;
+  user: Admin | null | undefined; // Alias para compatibilidade
+  login: (email: string, password: string, userType?: 'admin' | 'client') => Promise<boolean>;
+  logout: () => void; // Função de logout
+  
+  // Products
   products: Product[];
-  orders: Order[];
-  setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
-  analytics: AnalyticsData | null;
-  addProduct: (product: Omit<Product, 'id'>) => void;
+  setProducts: (products: Product[]) => void;
+  addProduct: (product: Product) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
-  toggleProduct: (id: string) => void;
-  createOrder: (customer: CustomerData, items: CartItem[], total: number) => Promise<string>;
-  updateOrderStatus: (orderId: string, status: Order['status']) => Promise<void>;
-  updatePaymentStatus: (orderId: string, status: Order['paymentStatus']) => void;
-  loadAnalytics: () => void;
-  getOrderById: (orderId: string) => Order | undefined;
+  deleteProduct: (id: string) => void;
+  
+  // Cart
+  cart: CartItem[];
+  addToCart: (product: Product, quantity: number) => void;
+  removeFromCart: (productId: string) => void;
+  updateCartItemQuantity: (productId: string, quantity: number) => void;
+  updateCartQuantity: (productId: string, quantity: number) => void; // Alias
+  clearCart: () => void;
+  
+  // Orders
+  orders: Order[];
+  setOrders: (orders: Order[]) => void;
+  addOrder: (order: Order) => void;
+  updateOrder: (id: string, updates: Partial<Order>) => void;
+  
+  // Clients
+  clients: Client[];
+  setClients: (clients: Client[]) => void;
+  addClient: (client: Client) => void;
+  updateClient: (id: string, client: Partial<Client>) => void;
+  deleteClient: (id: string) => void;
+  
+  // Utils
+  loading: boolean;
+  getAvailableStock: (productId: string) => number;
+  hasStock: (productId: string) => boolean;
+  refreshProducts: () => Promise<void>;
+  
+  // Analytics
+  analytics: Analytics | null;
+  loadAnalytics: () => Promise<void>;
 }
 
-const AppContext = createContext<AppContextProps>({} as AppContextProps);
-export const useApp = () => useContext(AppContext);
+const AppContext = createContext<AppContextType | null>(null);
 
-// App Wrapper Component
-function AppWrapper() {
-  return (
-    <Router>
-      <App />
-    </Router>
-  );
-}
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};
 
-// App
-function App() {
-  const [admin, setAdmin] = useState<Admin | null>(null);
-  
-  // Inicializar carrinho direto do localStorage
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const savedCart = localStorage.getItem('bruno_cart');
-      if (savedCart) {
-        const parsedCart = JSON.parse(savedCart);
-        console.log('Carrinho inicializado do localStorage:', parsedCart);
-        return Array.isArray(parsedCart) ? parsedCart : [];
-      }
-    } catch (error) {
-      console.error('Erro ao carregar carrinho do localStorage na inicialização:', error);
-      localStorage.removeItem('bruno_cart');
-    }
-    return [];
-  });
-  
+function AppProvider({ children }: { children: ReactNode }) {
+  // States
   const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const isAdminAuthenticated = !!admin;
-
-  // --- Admin Functions ---
-  const adminLogin = async (email: string, password: string): Promise<boolean> => {
-    try {
-      const response: any = await api.adminLogin(email, password);
-      if (response?.token) {
-        localStorage.setItem('admin_token', response.token);
-        const adminData: Admin = {
-          id: response.id,
-          name: response.name,
-          email: response.email,
-          role: 'staff'
-        };
-        setAdmin(adminData);
-        localStorage.setItem('bruno_admin', JSON.stringify(adminData));
-        toast.success(`Bem-vindo ao painel administrativo, ${adminData.name}!`);
-        return true;
-      }
-      toast.error('Email ou senha incorretos');
-      return false;
-    } catch (err: any) {
-      toast.error(err.message || 'Erro no login');
-      return false;
+  const [admin, setAdmin] = useState<Admin | null | undefined>(undefined);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  
+  // Session ID para o carrinho no backend
+  const [sessionId] = useState<string>(() => {
+    let savedSessionId = localStorage.getItem('bruno_session_id');
+    if (!savedSessionId) {
+      savedSessionId = api.generateSessionId();
+      localStorage.setItem('bruno_session_id', savedSessionId);
     }
-  };
+    return savedSessionId;
+  });
 
-  const adminLogout = () => {
-    setAdmin(null);
-    localStorage.removeItem('bruno_admin');
-    localStorage.removeItem('admin_token');
-    toast.info('Logout realizado com sucesso');
-  };
+  const isAdminAuthenticated = admin?.role === 'staff';
 
-  // --- Cart Functions ---
-  const addToCart = (product: Product, quantity: number = 1) => {
-    if (product.stock < quantity) return toast.error('Estoque insuficiente');
-
-    setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        const newQty = existing.quantity + quantity;
-        if (newQty > product.stock) return prev;
-        return prev.map(item => item.product.id === product.id ? { ...item, quantity: newQty } : item);
+  // Load cart from localStorage
+  useEffect(() => {
+    const savedCart = localStorage.getItem('bruno_cart');
+    if (savedCart) {
+      try {
+        setCart(JSON.parse(savedCart));
+      } catch (e) {
+        console.error('Error loading cart from localStorage:', e);
       }
-      return [...prev, { product, quantity }];
-    });
-    toast.success(`${product.name} adicionada ao carrinho`);
-  };
+    }
+  }, []);
 
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
-    toast.info('Item removido do carrinho');
-  };
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('bruno_cart', JSON.stringify(cart));
+  }, [cart]);
 
-  const updateCartQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) return removeFromCart(productId);
+  // Utility functions for stock
+  const getAvailableStock = (productId: string): number => {
     const product = products.find(p => p.id === productId);
-    if (product && quantity > product.stock) return toast.error('Quantidade solicitada excede o estoque');
-    setCart(prev => prev.map(item => item.product.id === productId ? { ...item, quantity } : item));
+    return product?.stock || 0;
   };
 
-  const clearCart = () => {
+  const hasStock = (productId: string): boolean => {
+    return getAvailableStock(productId) > 0;
+  };
+
+    // Cart functions
+  const addToCart = async (product: Product, quantity: number = 1) => {
+    const availableStock = getAvailableStock(product.id);
+    
+    // Check stock availability
+    if (availableStock < quantity) {
+      toast.error(`Estoque insuficiente. Disponível: ${availableStock}`);
+      return;
+    }
+
+    setCart(prevCart => {
+      const existingItem = prevCart.find(item => item.id === product.id);
+      
+      if (existingItem) {
+        const newQuantity = existingItem.quantity + quantity;
+        
+        // Check if new quantity exceeds stock
+        if (newQuantity > availableStock) {
+          toast.error(`Estoque insuficiente. Disponível: ${availableStock}`);
+          return prevCart;
+        }
+        
+        return prevCart.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: newQuantity }
+            : item
+        );
+      } else {
+        return [...prevCart, {
+          id: product.id,
+          name: product.name,
+          price: product.promotionPrice || product.price,
+          quantity,
+          image: product.image,
+          product: product
+        }];
+      }
+    });
+
+    // Sincronizar com backend (carrinho com expiração de 10 minutos)
+    try {
+      await api.addToCart(sessionId, product.id, quantity);
+      toast.success(`${product.name} adicionado ao carrinho`);
+    } catch (error) {
+      console.error('Erro ao sincronizar carrinho com backend:', error);
+      // Continua funcionando localmente mesmo se o backend falhar
+      toast.success(`${product.name} adicionado ao carrinho (modo offline)`);
+    }
+  };
+
+  const removeFromCart = async (productId: string) => {
+    // Remover do carrinho local
+    setCart(prevCart => prevCart.filter(item => item.id !== productId));
+    
+    // Sincronizar com backend
+    try {
+      await api.removeFromCart(sessionId, productId);
+      toast.success('Item removido do carrinho');
+    } catch (error) {
+      console.error('Erro ao remover item do carrinho no backend:', error);
+      toast.success('Item removido do carrinho (modo offline)');
+    }
+  };
+
+  const updateCartItemQuantity = async (productId: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeFromCart(productId);
+      return;
+    }
+
+    const availableStock = getAvailableStock(productId);
+    
+    if (quantity > availableStock) {
+      toast.error(`Estoque insuficiente. Disponível: ${availableStock}`);
+      return;
+    }
+
+    // Atualizar carrinho local
+    setCart(prevCart =>
+      prevCart.map(item =>
+        item.id === productId
+          ? { ...item, quantity }
+          : item
+      )
+    );
+
+    // Sincronizar com backend
+    try {
+      await api.updateCartQuantity(sessionId, productId, quantity);
+    } catch (error) {
+      console.error('Erro ao atualizar quantidade no backend:', error);
+      // Continua funcionando localmente
+    }
+  };
+
+  const clearCart = async () => {
+    // Limpar carrinho local
     setCart([]);
-    toast.info('Carrinho limpo');
-  };
-
-  const addProduct = async (product: Omit<Product, 'id'>) => {
+    
+    // Sincronizar com backend
     try {
-      const newProduct = await api.createAdminProduct(product);
-      setProducts(prev => [...prev, newProduct]);
-      toast.success('Produto adicionado com sucesso');
-    } catch {
-      toast.error('Erro ao adicionar produto');
+      await api.clearCart(sessionId);
+      toast.success('Carrinho limpo');
+    } catch (error) {
+      console.error('Erro ao limpar carrinho no backend:', error);
+      toast.success('Carrinho limpo (modo offline)');
     }
   };
 
-  const updateProduct = async (id: string, productData: Partial<Product>) => {
+  // Product functions
+  const addProduct = (product: Product) => {
+    setProducts(prev => [...prev, product]);
+  };
+
+  const updateProduct = (id: string, productUpdates: Partial<Product>) => {
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, ...productUpdates } : p));
+  };
+
+  const deleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  // Refresh products with stock from API
+  const refreshProducts = async () => {
     try {
-      const updated = await api.updateAdminProduct(id, productData);
-      setProducts(prev => prev.map(p => p.id === id ? updated : p));
-      toast.success('Produto atualizado com sucesso');
-    } catch {
-      toast.error('Erro ao atualizar produto');
+      // Se for admin, usa API de admin; senão usa API pública
+      if (isAdminAuthenticated) {
+        const adminProducts = await adminApi.getProducts();
+        
+        const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+        setProducts(mappedProducts);
+        
+        toast.success('Lista de produtos atualizada!');
+      } else {
+        try {
+          const productsWithStock = await api.getProductsWithStock();
+          
+          const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+          setProducts(mappedProducts);
+          
+          toast.success('Lista de produtos atualizada!');
+        } catch (publicApiError) {
+          console.warn('⚠️ API pública falhou, tentando API básica:', publicApiError);
+          // Fallback para API básica se with-stock falhar
+          const basicProducts = await api.getPublicProducts();
+          const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+          setProducts(mappedProducts);
+          toast.success('Lista de produtos atualizada!');
+        }
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao atualizar produtos:', error);
+      toast.error('Erro ao atualizar produtos');
     }
   };
 
-  const toggleProduct = async (id: string) => {
-    try {
-      const updated = await api.toggleAdminProduct(id);
-      setProducts(prev => prev.map(p => p.id === id ? updated : p));
-      toast.success(`Produto ${updated.available ? 'ativado' : 'desativado'} com sucesso`);
-    } catch {
-      toast.error('Erro ao alterar status do produto');
-    }
-  };
-
-  // --- Order Functions ---
-  const createOrder = async (customer: CustomerData, items: CartItem[], total: number): Promise<string> => {
-    try {
-      const backendOrder = await api.createOrder({ customer, items, total });
-      const orderData = backendOrder.order ?? backendOrder;
-      const order: Order = {
-        id: String(orderData.id),
-        customer: {
-          name: orderData.customer_name ?? customer.name,
-          email: orderData.customer_email ?? customer.email,
-          phone: orderData.customer_phone ?? customer.phone,
-          address: orderData.address_street ?? customer.address,
-          neighborhood: orderData.address_neighborhood ?? customer.neighborhood,
-          additionalInfo: customer.additionalInfo ?? ''
-        },
-        items,
-        total: Number(orderData.total_amount ?? total),
-        status: orderData.status ?? 'pending',
-        paymentStatus: backendOrder.payment?.status ?? 'pending',
-        createdAt: orderData.created_at ?? new Date().toISOString(),
-        pixPaymentId: backendOrder.payment?.id ?? undefined
-      };
-      setOrders(prev => {
-        const updated = [...prev, order];
-        localStorage.setItem('bruno_orders', JSON.stringify(updated));
-        return updated;
-      });
-      items.forEach(item => updateProduct(item.product.id, { stock: item.product.stock - item.quantity }));
-      toast.success('Pedido criado com sucesso!');
-      return order.id;
-    } catch {
-      toast.error('Erro ao criar pedido');
-      return '';
-    }
-  };
-
-  const updateOrderStatus = async (orderId: string, status: Order['status']) => {
-    try {
-      await api.confirmManyOrders([orderId]);
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-      toast.success('Status do pedido atualizado');
-    } catch {
-      toast.error('Erro ao atualizar status');
-    }
-  };
-
-  const updatePaymentStatus = async (orderId: string, status: Order['paymentStatus']) => {
-    try {
-      const updated = await api.updateOrder(orderId, { paymentStatus: status });
-      setOrders(prev => prev.map(o => o.id === orderId ? updated : o));
-    } catch {}
-  };
-
-  const getOrderById = (orderId: string): Order | undefined => orders.find(o => o.id === orderId);
-
+  // Load analytics data
   const loadAnalytics = async () => {
     try {
-      const data = await api.getAnalytics();
-      setAnalytics(data);
+      console.log('🔄 Carregando analytics...');
+      
+      // Usar o endpoint geral de analytics que não requer autenticação especial
+      const analyticsData = await adminApi.getGeneralAnalytics();
+      console.log('📊 Dados recebidos do backend:', analyticsData);
+      
+      // Verificar se os dados são válidos
+      if (!analyticsData || typeof analyticsData !== 'object') {
+        console.error('❌ Dados de analytics inválidos:', analyticsData);
+        return;
+      }
+      
+      // Os dados já vêm na estrutura correta do /analytics endpoint
+      const mappedAnalytics = {
+        totalRevenue: parseFloat(analyticsData.totalRevenue || 0),
+        salesByDay: analyticsData.salesByDay || [],
+        salesByMonth: analyticsData.salesByMonth || [],
+        salesByYear: analyticsData.salesByYear || [],
+        topProductsMonth: analyticsData.topProductsMonth || [],
+        neighborhoodsSales: analyticsData.neighborhoodsSales || [],
+        statistics: {
+          totalRevenue: parseFloat(analyticsData.totalRevenue || 0),
+          totalOrders: parseInt(analyticsData.statistics?.totalOrders || 0),
+          totalProducts: parseInt(analyticsData.statistics?.totalProducts || 0),
+          averageOrderValue: parseFloat(analyticsData.statistics?.averageOrderValue || 0),
+          pendingOrders: parseInt(analyticsData.statistics?.pendingOrders || 0),
+          todaySales: parseFloat(analyticsData.statistics?.todaySales || 0),
+          monthSales: parseFloat(analyticsData.statistics?.monthSales || 0),
+          yearSales: parseFloat(analyticsData.statistics?.yearSales || 0),
+          conversionRate: parseFloat(analyticsData.statistics?.conversionRate || 0),
+        }
+      };
+      
+      console.log('✅ Analytics mapeados:', mappedAnalytics);
+      setAnalytics(mappedAnalytics);
     } catch (error) {
-      console.error('Erro ao carregar analytics:', error);
-      // Definir dados padrão quando a API falha
+      console.error('❌ Erro ao carregar analytics:', error);
+      
+      // Se for erro de autenticação, mostrar mensagem específica
+      if (error instanceof Error && (error.message?.includes('401') || error.message?.includes('Unauthorized'))) {
+        console.error('🔒 Erro de autenticação - token pode ter expirado');
+      }
+      
+      // Definir analytics básico para não quebrar a interface
       setAnalytics({
+        totalRevenue: 0,
         salesByDay: [],
         salesByMonth: [],
         salesByYear: [],
-        topProductsWeek: [],
         topProductsMonth: [],
         neighborhoodsSales: [],
-        totalRevenue: 0
+        statistics: {
+          totalOrders: 0,
+          totalProducts: 0,
+          averageOrderValue: 0,
+          pendingOrders: 0,
+          todaySales: 0,
+          monthSales: 0,
+          yearSales: 0,
+          conversionRate: 0,
+        }
       });
-      toast.error('Erro ao carregar analytics');
     }
   };
 
-  // --- Load localStorage & products ---
+  // Load general analytics data  
+  const loadGeneralAnalytics = async () => {
+    try {
+      const generalAnalyticsData = await adminApi.getGeneralAnalytics();
+      console.log('📊 Analytics gerais carregados:', generalAnalyticsData);
+      return generalAnalyticsData;
+    } catch (error) {
+      console.error('Erro ao carregar analytics gerais:', error);
+      return null;
+    }
+  };
+
+  // Order functions
+  const addOrder = (order: Order) => {
+    setOrders(prev => [...prev, order]);
+  };
+
+  const updateOrder = (id: string, updates: Partial<Order>) => {
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
+  };
+
+  // Client functions
+  const addClient = (client: Client) => {
+    setClients(prev => [...prev, client]);
+  };
+
+  const updateClient = (id: string, clientUpdates: Partial<Client>) => {
+    setClients(prev => prev.map(c => c.id === id ? { ...c, ...clientUpdates } : c));
+  };
+
+  const deleteClient = (id: string) => {
+    setClients(prev => prev.filter(c => c.id !== id));
+  };
+
+  // Função para mapear os dados do backend para camelCase
+  function mapProductFromBackend(p: any): Product {
+    return {
+      id: String(p.id),
+      name: p.name || '',
+      description: p.description || '',
+      price: Number(p.price || 0),
+      promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
+      promotion_price: p.promotion_price ? Number(p.promotion_price) : undefined,
+      category: p.category || '',
+      image: p.image || '',
+      imageUrl: getProductImageUrl(p.image_url || p.image),
+      available: Boolean(p.is_active), // Simplificar - produto disponível se ativo
+      is_active: Boolean(p.is_active),
+      stock: Number(p.quantity || p.available_stock || 0), // Usar quantity (admin) ou available_stock (público)
+      quantity: Number(p.quantity || 0), // Campo direto do backend
+      expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
+      expires_at: p.expires_at || null, // Manter campo original também
+      isPromotion: Boolean(p.is_promo),
+      is_promo: Boolean(p.is_promo),
+      isNew: Boolean(p.is_new),
+      is_new: Boolean(p.is_new),
+    };
+  }
+
+  // --- Validate admin session on startup ---
   useEffect(() => {
-    const savedAdmin = localStorage.getItem('bruno_admin');
-    const savedToken = localStorage.getItem('admin_token');
+    const validateAdminSession = async () => {
+      const savedAdmin = localStorage.getItem('bruno_admin');
+      const savedToken = localStorage.getItem('admin_token');
 
-    // Limpar dados mock antigos se existirem
-    const oldMockData = localStorage.getItem('bruno_orders');
-    if (oldMockData) {
-      try {
-        const parsedData = JSON.parse(oldMockData);
-        // Se os dados parecem ser mock (IDs pequenos como '1001'), limpar
-        if (Array.isArray(parsedData) && parsedData.some(order => ['1001', '1002', '1003'].includes(order.id))) {
-          localStorage.removeItem('bruno_orders');
-          console.log('Dados mock antigos removidos do localStorage');
+      if (savedAdmin && savedToken) {
+        try {
+          // Ao invés de verificar /admin/me, vamos usar uma rota que sabemos que existe
+          // Por exemplo, tentar carregar produtos (que é uma operação comum)
+          await adminApi.getProducts();
+          // Se chegou até aqui, o token é válido
+          setAdmin(JSON.parse(savedAdmin));
+          console.log('✅ Token validado - sessão restaurada');
+        } catch (error) {
+          console.warn('🔓 Sessão admin expirada, removendo dados:', error);
+          // Token inválido, limpar dados
+          localStorage.removeItem('bruno_admin');
+          localStorage.removeItem('admin_token');
+          setAdmin(null);
         }
-      } catch (e) {
-        localStorage.removeItem('bruno_orders');
+      } else {
+        // Não há dados salvos, definir como null para continuar
+        setAdmin(null);
       }
-    }
-
-    if (savedAdmin && savedToken) setAdmin(JSON.parse(savedAdmin));
-
-    // Função para mapear os dados do backend para camelCase
-    function mapProductFromBackend(p: any): Product {
-      return {
-        id: String(p.id),
-        name: p.name,
-        description: p.description,
-        price: Number(p.price),
-        promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
-        category: p.category,
-        image: p.image,
-        imageUrl: getProductImageUrl(p.image_url || p.image),
-        available: Boolean(p.is_active),
-        is_active: Boolean(p.is_active),
-        stock: Number(p.quantity || p.stock || 0),
-        expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
-        isPromotion: Boolean(p.is_promo),
-        isNew: Boolean(p.is_new),
-      };
-    }
-
-    const handleSetProducts = (data: any[]) => {
-      setProducts(Array.isArray(data) ? data.map(mapProductFromBackend) : []);
     };
 
-    // Load products from API
-    if (isAdminAuthenticated) {
-      api.getAdminProducts()
-        .then(handleSetProducts)
-        .catch(() => toast.error('Erro ao carregar produtos admin'));
-    } else {
-      api.getPublicProducts()
-        .then(handleSetProducts)
-        .catch(() => {
-          console.log('Usando produtos offline - verifique se o backend está rodando');
-          // Não mostrar erro no público se não conseguir carregar produtos
-        });
-    }
+    validateAdminSession();
+  }, []);
 
-    setLoading(false);
-  }, [isAdminAuthenticated]);
+  // --- Load products based on authentication status ---
+  useEffect(() => {
+    const loadProductsWithStock = async () => {
+      try {
+        // Se for admin, usar API de admin; senão usar API pública
+        if (isAdminAuthenticated) {
+          const adminProducts = await adminApi.getProducts();
+          
+          const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+          setProducts(mappedProducts);
+        } else {
+          try {
+            const productsWithStock = await api.getProductsWithStock();
+            
+            const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+            setProducts(mappedProducts);
+          } catch (publicApiError) {
+            console.warn('⚠️ API pública falhou, tentando API de produtos básica:', publicApiError);
+            // Fallback para API básica se with-stock falhar
+            const basicProducts = await api.getPublicProducts();
+            const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+            setProducts(mappedProducts);
+          }
+        }
+        
+      } catch (error) {
+        console.error('❌ Erro ao carregar produtos:', error);
+        
+        // Tentar adminApi como último recurso se disponível
+        if (localStorage.getItem('admin_token')) {
+          try {
+            const adminProducts = await adminApi.getProducts();
+            const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+            setProducts(mappedProducts);
+          } catch (adminError) {
+            console.error('❌ Fallback adminApi também falhou:', adminError);
+            toast.error('Erro ao carregar produtos - verifique se o backend está rodando');
+          }
+        }
+      }
+    };
+
+    // Só carregar produtos se admin foi definido (pode ser null ou objeto)
+    // Isso evita carregar produtos antes da validação terminar
+    if (admin !== undefined) {
+      loadProductsWithStock();
+      setLoading(false);
+    }
+  }, [isAdminAuthenticated, admin]);
 
   // Load orders from backend for admin
   useEffect(() => {
@@ -391,104 +586,228 @@ function App() {
 
     const fetchOrders = async () => {
       try {
-        const backendOrders = await api.getAdminOrders();
-        console.log('Pedidos do backend:', backendOrders);
+        console.log('🔄 Carregando pedidos do backend...');
+        const backendOrders = await adminApi.getOrders();
+        console.log('📦 Dados brutos do backend:', backendOrders);
 
         // Transform backend data to expected format
         const transformedOrders = backendOrders.map((order: any) => ({
           id: String(order.id),
-          customer: {
-            name: order.customer_name,
-            email: order.customer_email,
-            phone: order.customer_phone,
-            address: order.address_street,
-            neighborhood: order.address_neighborhood,
-          },
-          items: order.items?.map((item: any) => ({
+          clientName: order.customer_name || 'Cliente não informado',
+          whatsapp: order.customer_phone || '',
+          email: order.customer_email || '',
+          items: (order.items || []).map((item: any) => ({
+            id: String(item.id || item.product_id),
+            name: item.product_name || item.name || 'Produto',
+            price: Number(item.unit_price || item.price || 0),
+            quantity: Number(item.quantity || 1),
+            image: item.image || '',
             product: {
-              id: String(item.product_id),
-              name: item.product_name || item.product?.name || 'Produto',
-              price: Number(item.unit_price || item.price || 0),
-            },
-            quantity: item.quantity,
-          })) || [],
-          total: Number(order.total_amount),
+              id: String(item.product_id || item.id),
+              name: item.product_name || item.name || 'Produto',
+              price: Number(item.unit_price || item.price || 0)
+            }
+          })),
+          total: Number(order.total_amount || 0),
           status: order.status,
-          paymentStatus: order.payment?.status || 'pending',
+          paymentMethod: order.payment_method,
+          address: order.address_street || '',
+          neighborhood: order.address_neighborhood || '',
+          observations: order.observations || '',
+          scheduledDate: order.scheduled_date,
           createdAt: order.created_at,
+          pixCode: order.payment?.pix_payload ? JSON.parse(order.payment.pix_payload || '{}').copy_paste : null,
+          pixExpiresAt: order.checkout_expires_at,
         }));
 
+        console.log('✅ Pedidos transformados:', transformedOrders);
         setOrders(transformedOrders);
       } catch (error) {
-        console.error('Erro ao carregar pedidos do backend:', error);
+        console.error('Erro ao carregar pedidos:', error);
+        toast.error('Erro ao carregar pedidos');
       }
     };
 
     fetchOrders();
   }, [isAdminAuthenticated]);
 
-  // Save cart to localStorage whenever it changes
+    // Load clients from backend for admin
   useEffect(() => {
-    console.log('useEffect de salvamento executado. Carrinho atual:', cart);
-    console.log('Tamanho do carrinho:', cart.length);
-    localStorage.setItem('bruno_cart', JSON.stringify(cart));
-    console.log('Carrinho salvo no localStorage:', JSON.stringify(cart));
-  }, [cart]);
+    if (!isAdminAuthenticated) return;
 
-  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center">Carregando...</div>;
+    const fetchClients = async () => {
+      try {
+        const backendClients = await adminApi.getUniqueClients();
 
-  const appValue: AppContextProps = {
+        // O backend retorna um array direto, não um objeto com propriedade customers
+        let clientsData = [];
+        
+        if (Array.isArray(backendClients)) {
+          clientsData = backendClients;
+        } else if (backendClients?.customers) {
+          // Fallback para formato antigo
+          clientsData = backendClients.customers;
+        } else {
+          clientsData = [];
+        }
+        
+        const transformedClients = clientsData.map((client: any) => ({
+          id: String(client.email || client.customer_email || client.phone || client.customer_phone || Math.random()),
+          name: client.name || client.customer_name || 'Nome não informado',
+          whatsapp: client.phone || client.customer_phone || '',
+          email: client.email || client.customer_email || '',
+        }));
+
+        setClients(transformedClients);
+      } catch (error) {
+        console.error('Erro ao carregar clientes:', error);
+        // toast.error('Erro ao carregar clientes'); // Comentado para não mostrar erro sempre
+      }
+    };
+
+    fetchClients();
+  }, [isAdminAuthenticated]);
+
+  // Auth functions
+  const login = async (email: string, password: string, userType: 'admin' | 'client' = 'admin'): Promise<boolean> => {
+    try {
+      setLoading(true);
+      
+      if (userType === 'admin') {
+        const response = await adminApi.login(email, password);
+        
+        if (response && response.token) {
+          // Criar dados do admin com informações do backend ou padrão
+          const adminUser: Admin = {
+            id: response.user?.id || '1',
+            name: response.user?.name || 'Admin',
+            email: response.user?.email || email,
+            role: 'staff'
+          };
+          
+          console.log('🔐 Login - Admin criado:', adminUser);
+          setAdmin(adminUser);
+          // O token já foi salvo pelo adminApi.login
+          toast.success('Login realizado com sucesso!');
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      toast.error('Erro ao fazer login. Verifique suas credenciais.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Logout function
+  const logout = async () => {
+    try {
+      await adminApi.logout();
+    } catch (error) {
+      console.warn('Erro ao fazer logout:', error);
+    } finally {
+      setAdmin(null);
+      toast.success('Logout realizado com sucesso');
+    }
+  };
+
+  const contextValue: AppContextType = {
+    // Admin
     admin,
-    isAdminAuthenticated,
-    adminLogin,
-    adminLogout,
+    setAdmin,
+    user: admin, // Alias para compatibilidade
+    login,
+    logout,
+    
+    // Products
+    products,
+    setProducts,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    
+    // Cart
     cart,
     addToCart,
     removeFromCart,
-    updateCartQuantity,
+    updateCartItemQuantity,
+    updateCartQuantity: updateCartItemQuantity, // Alias
     clearCart,
-    products,
+    
+    // Orders
     orders,
     setOrders,
+    addOrder,
+    updateOrder,
+    
+    // Clients
+    clients,
+    setClients,
+    addClient,
+    updateClient,
+    deleteClient,
+    
+    // Utils
+    loading,
+    getAvailableStock,
+    hasStock,
+    refreshProducts,
+    
+    // Analytics
     analytics,
-    addProduct,
-    updateProduct,
-    toggleProduct,
-    createOrder,
-    updateOrderStatus,
-    updatePaymentStatus,
     loadAnalytics,
-    getOrderById
   };
 
   return (
-    <AppContext.Provider value={appValue}>
-      <div className="min-h-screen bg-background">
-        <Routes>
-          <Route path="/admin/login" element={!isAdminAuthenticated ? <AdminLogin /> : <Navigate to="/admin" />} />
-          <Route path="/admin" element={isAdminAuthenticated ? <AdminLayout /> : <Navigate to="/admin/login" />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="products" element={<ProductsManagement />} />
-            <Route path="orders" element={<OrdersManagement />} />
-            <Route path="clients" element={<ClientsManagement />} />
-          </Route>
-
-          <Route path="/" element={<PublicLayout />}>
-            <Route index element={<PublicMenu />} />
-            <Route path="menu" element={<Navigate to="/" />} />
-            <Route path="cart" element={<Cart />} />
-            <Route path="checkout" element={<Checkout />} />
-            <Route path="payment/:orderId" element={<PixPayment />} />
-            <Route path="tracking" element={<OrderTracking />} />
-            <Route path="order/:orderId" element={<OrderTracking />} />
-          </Route>
-
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-        <Toaster />
-      </div>
+    <AppContext.Provider value={contextValue}>
+      {children}
     </AppContext.Provider>
   );
 }
 
-export default AppWrapper;
+function App() {
+  return (
+    <Router>
+      <RealTimeProvider>
+        <AppProvider>
+          <div className="min-h-screen bg-gray-50">
+            <Routes>
+              {/* Admin Routes */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminDashboard />} />
+                <Route path="dashboard" element={<AdminDashboard />} />
+                <Route path="products" element={<ProductsManagement />} />
+                <Route path="orders" element={<OrdersManagement />} />
+                <Route path="clients" element={<ClientsManagement />} />
+              </Route>
+
+              {/* Public Routes */}
+              <Route path="/" element={<PublicLayout />}>
+                <Route index element={<PublicMenu />} />
+                <Route path="menu" element={<PublicMenu />} />
+                <Route path="cart" element={<Cart />} />
+                <Route path="checkout" element={<Checkout />} />
+                <Route path="order/:id" element={<OrderTracking />} />
+              </Route>
+
+              {/* Redirect unknown routes to home */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+            
+            <Toaster 
+              position="top-right"
+              richColors
+              closeButton
+            />
+          </div>
+        </AppProvider>
+      </RealTimeProvider>
+    </Router>
+  );
+}
+
+export default App;

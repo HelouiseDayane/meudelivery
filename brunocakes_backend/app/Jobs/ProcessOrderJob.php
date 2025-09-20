@@ -10,6 +10,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ProcessOrderJob implements ShouldQueue
 {
@@ -55,19 +56,30 @@ class ProcessOrderJob implements ShouldQueue
     }
 
     // Método para reverter o estoque se o pagamento não for confirmado
+
     public function revertStock()
     {
-        $order = Order::with('items.product')->findOrFail($this->orderId);
+        $order = Order::with('items.product')->find($this->orderId);
+
+        if (!$order) {
+            Log::warning("Pedido {$this->orderId} não encontrado para reverter estoque");
+            return;
+        }
 
         foreach ($order->items as $item) {
-            $product = Product::where('id', $item->product_id)->first();
-            if ($product) {
-                $product->increment('quantity', $item->quantity);
+            if ($item->product) {
+                // ✅ CORRIGIR: usar 'quantity' em vez de 'stock'
+                $item->product->increment('quantity', $item->quantity);
+                
+                Log::info("Estoque revertido", [
+                    'product_id' => $item->product->id,
+                    'quantity_reverted' => $item->quantity,
+                    'new_quantity' => $item->product->quantity // ✅ 'quantity' não 'stock'
+                ]);
             }
         }
 
-        // Atualiza o status do pedido
-        $order->status = 'payment_failed'; // ou outro status apropriado
-        $order->save();
+        // ✅ NÃO atualizar status aqui (Controller já faz)
+        Log::info("Estoque revertido para pedido {$this->orderId}");
     }
 }

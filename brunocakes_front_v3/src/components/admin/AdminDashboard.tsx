@@ -16,13 +16,14 @@ export function AdminDashboard() {
     loadAnalytics();
   }, []);
 
-  if (!analytics || 
-      !analytics.salesByDay || 
-      !analytics.salesByMonth || 
-      !analytics.salesByYear ||
-      !analytics.topProductsMonth ||
-      !analytics.neighborhoodsSales ||
-      analytics.totalRevenue === undefined) {
+  // Debug logs
+  useEffect(() => {
+    if (analytics) {
+      console.log('🎯 AdminDashboard - Analytics recebidos:', analytics);
+    }
+  }, [analytics]);
+
+  if (!analytics) {
     return (
       <div className="space-y-6">
         <div>
@@ -33,16 +34,17 @@ export function AdminDashboard() {
     );
   }
 
-  const todaySales = analytics.salesByDay?.length > 0 ? analytics.salesByDay[analytics.salesByDay.length - 1]?.amount || 0 : 0;
-  const thisMonthSales = analytics.salesByMonth?.length > 0 ? analytics.salesByMonth[analytics.salesByMonth.length - 1]?.amount || 0 : 0;
-  const thisYearSales = analytics.salesByYear?.length > 0 ? analytics.salesByYear[analytics.salesByYear.length - 1]?.amount || 0 : 0;
+  const todaySales = analytics.statistics?.todaySales || 0;
+  const thisMonthSales = analytics.statistics?.monthSales || 0;
+  const thisYearSales = analytics.statistics?.yearSales || 0;
   
-  const totalProducts = products?.length || 0;
+  // Usar dados do backend quando disponíveis, senão usar dados locais
+  const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
   const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length || 0;
   const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length || 0;
   const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
   
-  const pendingOrders = orders?.filter(o => o.status === 'pending')?.length || 0;
+  const pendingOrders = analytics.statistics?.pendingOrders || orders?.filter(o => o.status === 'pending')?.length || 0;
   const todayOrders = orders?.filter(o => 
     new Date(o.createdAt).toDateString() === new Date().toDateString()
   )?.length || 0;
@@ -113,51 +115,67 @@ export function AdminDashboard() {
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Sales Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Vendas por Dia (Últimos 5 dias)</CardTitle>
-            <CardDescription>Evolução das vendas diárias</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={analytics.salesByDay || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="date" 
-                  tickFormatter={(value) => new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                />
-                <YAxis tickFormatter={(value) => `R$ ${value}`} />
-                <Tooltip 
-                  formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Vendas']}
-                  labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
-                />
-                <Line type="monotone" dataKey="amount" stroke="#8884d8" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {analytics.salesByDay && analytics.salesByDay.length > 0 ? (
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Sales Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Vendas por Dia (Últimos 5 dias)</CardTitle>
+              <CardDescription>Evolução das vendas diárias</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={analytics.salesByDay || []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="date" 
+                    tickFormatter={(value) => new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  />
+                  <YAxis tickFormatter={(value) => `R$ ${value}`} />
+                  <Tooltip 
+                    formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Vendas']}
+                    labelFormatter={(label) => new Date(label).toLocaleDateString('pt-BR')}
+                  />
+                  <Line type="monotone" dataKey="amount" stroke="#8884d8" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-        {/* Monthly Sales */}
+          {/* Monthly Sales */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Vendas por Mês</CardTitle>
+              <CardDescription>Comparativo mensal</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.salesByMonth || []}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis tickFormatter={(value) => `R$ ${value}`} />
+                  <Tooltip formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Vendas']} />
+                  <Bar dataKey="amount" fill="#82ca9d" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Vendas por Mês</CardTitle>
-            <CardDescription>Comparativo mensal</CardDescription>
+            <CardTitle>Gráficos de Vendas</CardTitle>
+            <CardDescription>Dados históricos não disponíveis no momento</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.salesByMonth || []}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis tickFormatter={(value) => `R$ ${value}`} />
-                <Tooltip formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Vendas']} />
-                <Bar dataKey="amount" fill="#82ca9d" />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="text-center py-6">
+              <p className="text-muted-foreground">
+                Os gráficos de vendas por dia e mês serão exibidos quando houver dados históricos disponíveis.
+              </p>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
 
       {/* Charts Row 2 */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -169,20 +187,28 @@ export function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {(analytics.topProductsMonth || []).map((item, index) => (
-                <div key={item.product} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Badge variant="outline">{index + 1}º</Badge>
-                    <div>
-                      <p className="font-medium">{item.product}</p>
-                      <p className="text-sm text-muted-foreground">{item.quantity} unidades</p>
+              {analytics.topProductsMonth && analytics.topProductsMonth.length > 0 ? (
+                analytics.topProductsMonth.map((item, index) => (
+                  <div key={item.name} className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Badge variant="outline">{index + 1}º</Badge>
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-sm text-muted-foreground">{item.quantity} unidades</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">R$ {(item.revenue || 0).toFixed(2)}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">R$ {item.revenue.toFixed(2)}</p>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-muted-foreground">
+                    Nenhum produto vendido este mês ainda.
+                  </p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
@@ -194,25 +220,33 @@ export function AdminDashboard() {
             <CardDescription>Distribuição de vendas por região</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={analytics.neighborhoodsSales || []}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ neighborhood, orders }) => `${neighborhood} (${orders})`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="revenue"
-                >
-                  {analytics.neighborhoodsSales?.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  )) || []}
-                </Pie>
-                <Tooltip formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Receita']} />
-              </PieChart>
-            </ResponsiveContainer>
+            {analytics.neighborhoodsSales && analytics.neighborhoodsSales.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.neighborhoodsSales}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ neighborhood, sales }) => `${neighborhood} (${sales || 0})`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="revenue"
+                  >
+                    {analytics.neighborhoodsSales.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [`R$ ${Number(value).toFixed(2)}`, 'Receita']} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">
+                  Nenhum dado de vendas por bairro disponível ainda.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -246,36 +280,38 @@ export function AdminDashboard() {
       </Card>
 
       {/* Neighborhood Sales Detail */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Detalhes por Bairro</CardTitle>
-          <CardDescription>Performance de vendas por localização</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {(analytics.neighborhoodsSales || []).map((item, index) => (
-              <div key={item.neighborhood}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">{item.neighborhood}</p>
-                      <p className="text-sm text-muted-foreground">{item.orders} pedidos</p>
+      {analytics.neighborhoodsSales && analytics.neighborhoodsSales.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Detalhes por Bairro</CardTitle>
+            <CardDescription>Performance de vendas por localização</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {analytics.neighborhoodsSales.map((item, index) => (
+                <div key={item.neighborhood}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">{item.neighborhood}</p>
+                        <p className="text-sm text-muted-foreground">{item.sales || 0} pedidos</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium">R$ {(item.revenue || 0).toFixed(2)}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Ticket médio: R$ {((item.revenue || 0) / (item.sales || 1)).toFixed(2)}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">R$ {item.revenue.toFixed(2)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Ticket médio: R$ {(item.revenue / item.orders).toFixed(2)}
-                    </p>
-                  </div>
+                  {index < analytics.neighborhoodsSales.length - 1 && <Separator className="mt-4" />}
                 </div>
-                {index < (analytics.neighborhoodsSales?.length || 0) - 1 && <Separator className="mt-4" />}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../App';
-import { api } from '../../api';
+import { adminApi } from '../../api_admin';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -17,6 +17,9 @@ interface UniqueClient {
   totalOrders: number;
   totalSpent: number;
   lastOrderDate: string;
+  customerTier?: string;
+  averageOrderValue?: number;
+  customerSince?: string;
 }
 
 export function ClientsManagement() {
@@ -24,17 +27,70 @@ export function ClientsManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState<UniqueClient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [clientDetails, setClientDetails] = useState<any>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Carregar clientes únicos da API
   useEffect(() => {
     const loadUniqueClients = async () => {
       try {
         setLoading(true);
-        const uniqueClients = await api.getUniqueClients();
-        setClients(uniqueClients || []);
+        
+        const response = await adminApi.getUniqueClients();
+        
+        // O backend retorna um array direto, não um objeto com propriedade customers
+        let uniqueClients = [];
+        
+        if (Array.isArray(response)) {
+          // A resposta É o array de clientes diretamente
+          uniqueClients = response;
+        } else if (response?.customers && Array.isArray(response.customers)) {
+          // Fallback para formato antigo se existir
+          uniqueClients = response.customers;
+        } else if (response?.data && Array.isArray(response.data)) {
+          // Fallback para formato com data
+          uniqueClients = response.data;
+        } else {
+          uniqueClients = [];
+        }
+        
+        console.log('👥 Clientes únicos extraídos:', uniqueClients);
+        console.log('📊 Quantidade de clientes:', uniqueClients.length);
+        
+        // Mapear dados do backend para o formato esperado pelo frontend
+        if (Array.isArray(uniqueClients) && uniqueClients.length > 0) {
+          const mappedClients = uniqueClients.map((client: any) => {
+            // Debug: log do cliente recebido
+            console.log('Cliente raw do backend:', client);
+            
+            return {
+              // Usar os nomes dos campos que realmente vêm do backend
+              name: client.name || client.customer_name || 'Nome não informado',
+              email: client.email || client.customer_email || '',
+              phone: client.phone || client.customer_phone || '',
+              address: client.address || client.address_street || '',
+              neighborhood: client.neighborhood || client.address_neighborhood || '',
+              totalOrders: client.totalOrders || parseInt(client.total_orders) || 0,
+              totalSpent: client.totalSpent || parseFloat(client.total_spent) || 0,
+              lastOrderDate: client.lastOrderDate || client.last_order_date || '',
+              customerTier: '',
+              averageOrderValue: (client.totalOrders || client.total_orders) > 0 
+                ? (client.totalSpent || client.total_spent) / (client.totalOrders || client.total_orders) 
+                : 0,
+              customerSince: client.lastOrderDate || client.last_order_date || ''
+            };
+          });
+          
+          setClients(mappedClients);
+        } else {
+          setClients([]);
+          // Fallback: extrair clientes dos pedidos locais
+          extractClientsFromOrders();
+        }
       } catch (error) {
         console.error('Erro ao carregar clientes únicos:', error);
-        toast.error('Erro ao carregar clientes');
+        toast.error('Erro ao carregar clientes da API');
         // Fallback: extrair clientes dos pedidos locais
         extractClientsFromOrders();
       } finally {
@@ -43,14 +99,30 @@ export function ClientsManagement() {
     };
 
     loadUniqueClients();
-  }, []);
+  }, [orders]); // Adicionar orders como dependência para fallback
+
+  // Função para carregar detalhes específicos do cliente
+  const loadClientDetails = async (clientEmail: string) => {
+    try {
+      setLoadingDetails(true);
+      // Como não temos um ID específico, vamos usar o email como identificador
+      // Se o backend suportar busca por email, senão usar os dados que já temos
+      const clientData = clients.find(c => c.email === clientEmail);
+      setClientDetails(clientData);
+    } catch (error) {
+      console.error('Erro ao carregar detalhes do cliente:', error);
+      toast.error('Erro ao carregar detalhes do cliente');
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   // Função de fallback para extrair clientes dos pedidos locais
   const extractClientsFromOrders = () => {
     const clientsMap = new Map<string, UniqueClient>();
 
     orders.forEach(order => {
-      const key = order.customer.phone || order.customer.email;
+      const key = order.whatsapp || order.email;
       if (!key) return;
 
       if (clientsMap.has(key)) {
@@ -62,11 +134,11 @@ export function ClientsManagement() {
           : existing.lastOrderDate;
       } else {
         clientsMap.set(key, {
-          name: order.customer.name || 'Nome não informado',
-          email: order.customer.email || '',
-          phone: order.customer.phone || '',
-          address: order.customer.address || '',
-          neighborhood: order.customer.neighborhood || '',
+          name: order.clientName || 'Nome não informado',
+          email: order.email || '',
+          phone: order.whatsapp || '',
+          address: order.address || '',
+          neighborhood: '',
           totalOrders: 1,
           totalSpent: order.total,
           lastOrderDate: order.createdAt,
@@ -74,10 +146,11 @@ export function ClientsManagement() {
       }
     });
 
-    setClients(Array.from(clientsMap.values()));
+    const extractedClients = Array.from(clientsMap.values());
+    setClients(extractedClients);
   };
 
-  const filteredClients = clients.filter(client => {
+  const filteredClients = Array.isArray(clients) ? clients.filter(client => {
     const name = (client.name || '').toLowerCase();
     const phone = (client.phone || '');
     const email = (client.email || '').toLowerCase();
@@ -86,7 +159,7 @@ export function ClientsManagement() {
     return name.includes(searchLower) || 
            phone.includes(searchTerm) ||
            email.includes(searchLower);
-  });
+  }) : [];
 
   const getClientStatus = (lastOrderDate: string) => {
     const daysSinceLastOrder = Math.floor(
@@ -216,6 +289,7 @@ export function ClientsManagement() {
                   <TableHead>Total de Pedidos</TableHead>
                   <TableHead>Total Gasto</TableHead>
                   <TableHead>Último Pedido</TableHead>
+                  <TableHead>Categoria</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -246,6 +320,20 @@ export function ClientsManagement() {
                       </TableCell>
                       <TableCell className="text-sm">
                         {new Date(client.lastOrderDate).toLocaleDateString('pt-BR')}
+                      </TableCell>
+                      <TableCell>
+                        {client.customerTier && (
+                          <Badge 
+                            className={
+                              client.customerTier === 'VIP' ? 'bg-purple-100 text-purple-800' :
+                              client.customerTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
+                              client.customerTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
+                              'bg-orange-100 text-orange-800'
+                            }
+                          >
+                            {client.customerTier}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={status.color}>
