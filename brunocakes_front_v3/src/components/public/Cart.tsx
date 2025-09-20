@@ -105,6 +105,15 @@ export function Cart() {
         </div>
       </div>
 
+      {/* Alerta de Tempo Limite do Carrinho */}
+      <Alert className="border-2 border-blue-500 bg-blue-50">
+        <Clock className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="font-medium text-blue-800">
+          ⏰ <strong>Importante:</strong> Você tem apenas <strong>10 minutos</strong> para finalizar sua compra após adicionar itens ao carrinho. 
+          Depois desse tempo, o carrinho será limpo automaticamente e você precisará selecionar os produtos novamente.
+        </AlertDescription>
+      </Alert>
+
       {/* Cart Expiration Timer */}
       {currentStatus && cart.length > 0 && (
         <Alert className={`border-2 ${

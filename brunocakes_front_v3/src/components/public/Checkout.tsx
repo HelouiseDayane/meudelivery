@@ -26,7 +26,7 @@ interface CustomerData {
 
 export const Checkout = () => {
   const navigate = useNavigate();
-  const { cart, clearCart, refreshProducts } = useApp();
+  const { cart, clearCart } = useApp();
   const { currentStatus, startCheckoutExpiration, clearAllExpirationItems, CHECKOUT_EXPIRATION_MINUTES } = useCartExpiration();
   const [isLoading, setIsLoading] = useState(false);
   const [isExistingCustomerModalOpen, setIsExistingCustomerModalOpen] = useState(false);
@@ -35,7 +35,6 @@ export const Checkout = () => {
   const [searchByPhone, setSearchByPhone] = useState(false); // true = telefone, false = email
   const [foundCustomerData, setFoundCustomerData] = useState<any>(null);
   const [isConfirmCustomerModalOpen, setIsConfirmCustomerModalOpen] = useState(false);
-  const [isRefreshingStock, setIsRefreshingStock] = useState(false);
   
   const [customerData, setCustomerData] = useState<CustomerData>({
     name: '',
@@ -52,6 +51,16 @@ export const Checkout = () => {
       // Obter session ID do localStorage
       const sessionId = localStorage.getItem('bruno_session_id') || '';
       
+      // Validar estrutura do carrinho
+      const validatedItems = cart.filter(item => item?.product?.id).map(item => ({
+        product_id: item.product.id,
+        quantity: item.quantity
+      }));
+
+      if (validatedItems.length === 0) {
+        throw new Error('Carrinho vazio ou itens inválidos');
+      }
+      
       const orderData = {
         session_id: sessionId,
         customer_name: customerData.name,
@@ -61,10 +70,7 @@ export const Checkout = () => {
         address_street: customerData.address,
         address_neighborhood: customerData.neighborhood,
         observations: customerData.additionalInfo || '',
-        items: cart.map(item => ({
-          product_id: item.product.id,
-          quantity: item.quantity
-        }))
+        items: validatedItems
       };
 
       const response = await api.createOrder(orderData);
@@ -77,6 +83,25 @@ export const Checkout = () => {
       return response?.id || Date.now().toString();
     } catch (error) {
       console.error('Erro ao criar pedido:', error);
+      
+      // Verificar se é erro de carrinho expirado
+      if (error instanceof Error && error.message.includes('Carrinho vazio ou expirado')) {
+        // Limpar carrinho local
+        clearCart();
+        
+        // Mostrar alerta específico
+        toast.error('⏰ Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.', {
+          duration: 6000,
+        });
+        
+        // Redirecionar para o cardápio após 2 segundos
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
+        
+        throw new Error('Carrinho expirado - redirecionando para o cardápio');
+      }
+      
       throw error;
     }
   };
@@ -102,14 +127,6 @@ export const Checkout = () => {
       }
     };
   }, [cart.length, clearAllExpirationItems]);
-
-  // Debug - mostra se o botão deve estar habilitado
-  useEffect(() => {
-    console.log('isSearchingCustomer:', isSearchingCustomer);
-    console.log('customerContact:', customerContact);
-    console.log('customerContact.trim():', customerContact.trim());
-    console.log('Botão habilitado:', !isSearchingCustomer && customerContact.trim());
-  }, [isSearchingCustomer, customerContact]);
 
   const total = cart.reduce((sum, item) => {
     const price = item.product.isPromotion ? item.product.promotionPrice || item.product.price : item.product.price;
@@ -160,11 +177,7 @@ export const Checkout = () => {
       // Enviar apenas os dígitos do telefone
       const contactToSend = customerContact.replace(/\D/g, '');
       
-      console.log('Enviando para API:', contactToSend);
-      console.log('Tipo de busca: telefone');
-      
       const response = await api.getCustomerLastOrder(contactToSend);
-      console.log('Resposta da API:', response);
       
       if (response && response.customer_name) {
         // Salva os dados encontrados para confirmação
@@ -184,12 +197,7 @@ export const Checkout = () => {
   };
 
   const handleConfirmCustomer = () => {
-    console.log('handleConfirmCustomer chamado');
-    console.log('foundCustomerData:', foundCustomerData);
-    
     if (foundCustomerData) {
-      console.log('Preenchendo dados do formulário...');
-      
       // Formatar telefone com máscara antes de setar
       const phoneNumber = foundCustomerData.customer_phone || '';
       const formattedPhone = formatPhoneInput(phoneNumber);
@@ -207,7 +215,6 @@ export const Checkout = () => {
           neighborhood: foundCustomerData.address_neighborhood || ''
         };
         
-        console.log('Dados que serão setados:', newData);
         return newData;
       });
       
@@ -216,8 +223,6 @@ export const Checkout = () => {
       setFoundCustomerData(null);
       setCustomerContact('');
       // Resetar para telefone sempre, já que só suportamos telefone
-    } else {
-      console.log('foundCustomerData é null ou undefined');
     }
   };
 
@@ -228,7 +233,7 @@ export const Checkout = () => {
   };
 
   const generateWhatsAppMessage = () => {
-    const phoneNumber = '5511999999999'; // Número do WhatsApp da loja
+    const phoneNumber = '5584999999999'; // Número do WhatsApp da loja - ALTERE AQUI PARA O NÚMERO REAL
     
     let message = `🎂 *Novo Pedido - Bruno Cakes* 🎂\n\n`;
     message += `*Cliente:* ${customerData.name}\n`;
@@ -296,7 +301,12 @@ export const Checkout = () => {
       }, 2000);
       
     } catch (error) {
-      toast.error('Erro ao processar pedido');
+      if (error instanceof Error && error.message.includes('Carrinho expirado')) {
+        // Erro já tratado na função createOrder
+        return;
+      }
+      
+      toast.error('Erro ao processar pedido. Verifique seus dados e tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -335,6 +345,15 @@ export const Checkout = () => {
         </p>
       </div>
 
+      {/* Alerta de Tempo Limite do Carrinho */}
+      <Alert className="mb-6 border-2 border-blue-500 bg-blue-50">
+        <Clock className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="font-medium text-blue-800">
+          ⏰ <strong>Atenção:</strong> Você tem apenas <strong>10 minutos</strong> para finalizar sua compra após adicionar itens ao carrinho. 
+          Depois desse tempo, o carrinho será limpo automaticamente e você precisará selecionar os produtos novamente.
+        </AlertDescription>
+      </Alert>
+
       {/* Checkout Expiration Timer */}
       {currentStatus && (
         <Alert className={`mb-6 border-2 ${
@@ -361,16 +380,6 @@ export const Checkout = () => {
                 <>⏰ Tempo restante para finalizar: {currentStatus.formattedTime} (Total: {CHECKOUT_EXPIRATION_MINUTES} min)</>
               )}
             </AlertDescription>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefreshStock}
-              disabled={isRefreshingStock}
-              className="ml-auto"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingStock ? 'animate-spin' : ''}`} />
-              {isRefreshingStock ? 'Atualizando...' : 'Atualizar Estoque'}
-            </Button>
           </div>
         </Alert>
       )}

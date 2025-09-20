@@ -1,14 +1,16 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
-import { Search, Package, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Package, Clock, CheckCircle, XCircle, ArrowLeft, Home } from 'lucide-react';
 import { api } from '../../api';
 import { toast } from 'sonner';
 
 export const OrderTracking = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -42,13 +44,74 @@ export const OrderTracking = () => {
     setIsSearching(true);
     
     try {
-      const results = await api.getOrdersByContact(email, phone);
-      setSearchResults(Array.isArray(results) ? results : []);
+      console.log('Buscando pedidos com:', { email, phone });
       
-      if (results.length === 0) {
+      // Tentar múltiplos formatos de telefone
+      const phoneFormats = [];
+      if (phone) {
+        phoneFormats.push(phone); // Formato original: (84) 98835-1621
+        phoneFormats.push(phone.replace(/\D/g, '')); // Apenas números: 84988351621
+        phoneFormats.push('+55' + phone.replace(/\D/g, '')); // Com +55: +5584988351621
+      }
+      
+      console.log('Formatos de telefone a testar:', phoneFormats);
+      
+      let results = null;
+      let foundWithFormat = null;
+      
+      // Tentar primeiro com o formato original
+      try {
+        results = await api.getOrdersByContact(email, phone);
+        foundWithFormat = phone;
+        console.log('Encontrado com formato original:', phone);
+      } catch (error) {
+        console.log('Erro com formato original:', error);
+      }
+      
+      // Se não encontrou e tem telefone, tentar outros formatos
+      if ((!results || (Array.isArray(results) && results.length === 0)) && phoneFormats.length > 1) {
+        for (const phoneFormat of phoneFormats.slice(1)) {
+          try {
+            console.log('Tentando formato:', phoneFormat);
+            const testResults = await api.getOrdersByContact(email, phoneFormat);
+            if (testResults && ((Array.isArray(testResults) && testResults.length > 0) || 
+                              (testResults.data && testResults.data.length > 0))) {
+              results = testResults;
+              foundWithFormat = phoneFormat;
+              console.log('Encontrado com formato:', phoneFormat);
+              break;
+            }
+          } catch (error) {
+            console.log('Erro com formato', phoneFormat, ':', error);
+          }
+        }
+      }
+      
+      console.log('Resposta final da API:', results);
+      console.log('Formato que funcionou:', foundWithFormat);
+      
+      // Tratar diferentes formatos de resposta da API
+      let orders = [];
+      if (Array.isArray(results)) {
+        orders = results;
+      } else if (results && Array.isArray(results.data)) {
+        orders = results.data;
+      } else if (results && results.orders && Array.isArray(results.orders)) {
+        orders = results.orders;
+      } else {
+        console.warn('Formato inesperado da resposta:', results);
+        orders = [];
+      }
+      
+      setSearchResults(orders);
+      
+      if (orders.length === 0) {
         toast.info('Nenhum pedido encontrado com esses dados');
       } else {
-        toast.success(`${results.length} pedido(s) encontrado(s)`);
+        toast.success(`${orders.length} pedido(s) encontrado(s)`);
+        if (foundWithFormat && foundWithFormat !== phone) {
+          console.log(`💡 Dica: Pedidos encontrados com formato ${foundWithFormat} em vez de ${phone}`);
+        }
       }
     } catch (error) {
       console.error('Erro ao buscar pedidos:', error);
@@ -62,6 +125,7 @@ export const OrderTracking = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
+      case 'pending_payment':
       case 'awaiting_seller_confirmation':
         return <Clock className="w-4 h-4" />;
       case 'confirmed':
@@ -81,6 +145,8 @@ export const OrderTracking = () => {
     switch (status) {
       case 'pending':
         return 'Aguardando confirmação';
+      case 'pending_payment':
+        return 'Pagamento pendente';
       case 'awaiting_seller_confirmation':
         return 'Aguardando confirmação do vendedor';
       case 'confirmed':
@@ -101,6 +167,7 @@ export const OrderTracking = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending':
+      case 'pending_payment':
       case 'awaiting_seller_confirmation':
         return 'bg-yellow-100 text-yellow-800';
       case 'confirmed':
@@ -119,6 +186,27 @@ export const OrderTracking = () => {
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-4xl">
+      {/* Header com navegação */}
+      <div className="mb-6 flex items-center justify-between">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar ao Menu
+        </Button>
+        
+        <Button 
+          variant="default" 
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2"
+        >
+          <Home className="w-4 h-4" />
+          Menu Principal
+        </Button>
+      </div>
+
       <div className="mb-8 text-center">
         <h1 className="bruno-text-gradient mb-2">Acompanhe seu Pedido</h1>
         <p className="text-muted-foreground">
@@ -254,6 +342,22 @@ export const OrderTracking = () => {
           </p>
         </div>
       )}
+
+      {/* Footer com botão para voltar ao menu */}
+      <div className="mt-8 text-center">
+        <Button 
+          variant="outline" 
+          size="lg"
+          onClick={() => navigate('/')}
+          className="flex items-center gap-2 mx-auto"
+        >
+          <Home className="w-4 h-4" />
+          Voltar ao Menu Principal
+        </Button>
+        <p className="text-muted-foreground text-sm mt-2">
+          Continue navegando pelos nossos deliciosos produtos
+        </p>
+      </div>
     </div>
   );
 };

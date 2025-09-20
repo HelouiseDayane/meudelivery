@@ -206,6 +206,49 @@ function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('bruno_cart', JSON.stringify(cart));
   }, [cart]);
 
+  // Verificar se o carrinho backend expirou periodicamente
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    const checkCartExpiration = async () => {
+      if (cart.length > 0) {
+        try {
+          // Tentar buscar o carrinho do backend
+          await api.getCart(sessionId);
+        } catch (error: any) {
+          // Verificar especificamente erros de carrinho expirado (não erros de rede/servidor)
+          if (error?.message?.includes('expirado') || 
+              error?.message?.includes('não encontrado') ||
+              error?.message?.includes('Carrinho não encontrado') ||
+              (error?.message?.includes('404') && error?.message?.toLowerCase().includes('cart'))) {
+            
+            // LIMPAR APENAS O CARRINHO - NUNCA OS PRODUTOS
+            setCart([]);
+            localStorage.removeItem('bruno_cart');
+            
+            // Disparar evento de carrinho expirado apenas se não estiver na página inicial
+            if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+              window.dispatchEvent(new CustomEvent('cart-expired', {
+                detail: { message: 'Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.' }
+              }));
+            }
+          }
+        }
+      }
+    };
+
+    // Verificar a cada 30 segundos se há itens no carrinho
+    if (cart.length > 0) {
+      intervalId = setInterval(checkCartExpiration, 30000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [cart.length, sessionId]);
+
   // Utility functions for stock
   const getAvailableStock = (productId: string): number => {
     const product = products.find(p => p.id === productId);
@@ -346,24 +389,43 @@ function AppProvider({ children }: { children: ReactNode }) {
         const adminProducts = await adminApi.getProducts();
         
         const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-        setProducts(mappedProducts);
         
-        toast.success('Lista de produtos atualizada!');
+        // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
+        if (mappedProducts.length > 0) {
+          setProducts(mappedProducts);
+          toast.success('Lista de produtos atualizada!');
+        }
+        
       } else {
         try {
           const productsWithStock = await api.getProductsWithStock();
           
           const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-          setProducts(mappedProducts);
           
-          toast.success('Lista de produtos atualizada!');
+          // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
+          if (mappedProducts.length > 0) {
+            setProducts(mappedProducts);
+            toast.success('Lista de produtos atualizada!');
+          } else {
+            // Fallback para API básica se with-stock retornar vazio
+            const basicProducts = await api.getPublicProducts();
+            const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+            
+            if (basicMappedProducts.length > 0) {
+              setProducts(basicMappedProducts);
+              toast.success('Lista de produtos atualizada!');
+            }
+          }
+          
         } catch (publicApiError) {
-          console.warn('⚠️ API pública falhou, tentando API básica:', publicApiError);
           // Fallback para API básica se with-stock falhar
           const basicProducts = await api.getPublicProducts();
           const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-          setProducts(mappedProducts);
-          toast.success('Lista de produtos atualizada!');
+          
+          if (mappedProducts.length > 0) {
+            setProducts(mappedProducts);
+            toast.success('Lista de produtos atualizada!');
+          }
         }
       }
       
@@ -539,19 +601,37 @@ function AppProvider({ children }: { children: ReactNode }) {
           const adminProducts = await adminApi.getProducts();
           
           const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-          setProducts(mappedProducts);
+          
+          if (mappedProducts.length > 0) {
+            setProducts(mappedProducts);
+          }
+          
         } else {
           try {
             const productsWithStock = await api.getProductsWithStock();
             
             const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-            setProducts(mappedProducts);
+            
+            if (mappedProducts.length > 0) {
+              setProducts(mappedProducts);
+            } else {
+              // Fallback para API básica
+              const basicProducts = await api.getPublicProducts();
+              const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+              
+              if (basicMappedProducts.length > 0) {
+                setProducts(basicMappedProducts);
+              }
+            }
+            
           } catch (publicApiError) {
-            console.warn('⚠️ API pública falhou, tentando API de produtos básica:', publicApiError);
             // Fallback para API básica se with-stock falhar
             const basicProducts = await api.getPublicProducts();
             const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-            setProducts(mappedProducts);
+            
+            if (mappedProducts.length > 0) {
+              setProducts(mappedProducts);
+            }
           }
         }
         
@@ -563,7 +643,10 @@ function AppProvider({ children }: { children: ReactNode }) {
           try {
             const adminProducts = await adminApi.getProducts();
             const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-            setProducts(mappedProducts);
+            
+            if (mappedProducts.length > 0) {
+              setProducts(mappedProducts);
+            }
           } catch (adminError) {
             console.error('❌ Fallback adminApi também falhou:', adminError);
             toast.error('Erro ao carregar produtos - verifique se o backend está rodando');
@@ -791,6 +874,7 @@ function App() {
                 <Route path="menu" element={<PublicMenu />} />
                 <Route path="cart" element={<Cart />} />
                 <Route path="checkout" element={<Checkout />} />
+                <Route path="tracking" element={<OrderTracking />} />
                 <Route path="order/:id" element={<OrderTracking />} />
               </Route>
 

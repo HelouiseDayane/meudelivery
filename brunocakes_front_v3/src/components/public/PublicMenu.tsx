@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -6,9 +6,11 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Separator } from '../ui/separator';
+import { Alert, AlertDescription } from '../ui/alert';
 import { Plus, Minus, Search, Star, Clock, Percent, Sparkles, ShoppingCart, RefreshCw } from 'lucide-react';
 import { useApp } from '../../App';
 import { usePWA } from '../../hooks/usePWA';
+import { toast } from 'sonner';
 
 export const PublicMenu = () => {
   const { products, addToCart, getAvailableStock, hasStock, refreshProducts } = useApp();
@@ -19,6 +21,21 @@ export const PublicMenu = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [quantities, setQuantities] = useState<{[key: string]: number}>({});
+
+  // Listener para eventos de carrinho expirado
+  useEffect(() => {
+    const handleCartExpired = (event: CustomEvent) => {
+      toast.error(event.detail.message, {
+        duration: 6000,
+      });
+    };
+
+    window.addEventListener('cart-expired', handleCartExpired as EventListener);
+
+    return () => {
+      window.removeEventListener('cart-expired', handleCartExpired as EventListener);
+    };
+  }, []);
 
   // Função para obter quantidade local para um produto
   const getLocalQuantity = (productId: string) => {
@@ -55,8 +72,8 @@ export const PublicMenu = () => {
     setIsLoading(true);
     try {
       await addToCart(product, quantity);
-      // Atualiza produtos após adicionar ao carrinho
-      await refreshProducts();
+      // Reset local quantity after successful add
+      setLocalQuantity(product.id, 1);
     } catch (error) {
       console.error('Erro ao adicionar ao carrinho:', error);
     } finally {
@@ -87,20 +104,16 @@ export const PublicMenu = () => {
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Bruno Cakes</h1>
         <p className="text-xl text-gray-600">Deliciosos bolos artesanais feitos com amor</p>
-        
-        {/* Botão de atualizar estoque */}
-        <div className="mt-4">
-          <Button
-            onClick={refreshProducts}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Atualizar Produtos
-          </Button>
-        </div>
       </div>
+
+      {/* Alerta sobre tempo limite do carrinho */}
+      <Alert className="mb-6 border-2 border-orange-500 bg-orange-50">
+        <Clock className="h-4 w-4 text-orange-600" />
+        <AlertDescription className="font-medium text-orange-800">
+          ⏰ <strong>Lembre-se:</strong> Após adicionar produtos ao carrinho, você tem apenas <strong>10 minutos</strong> para finalizar sua compra. 
+          Depois desse tempo, o carrinho será limpo automaticamente.
+        </AlertDescription>
+      </Alert>
 
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">

@@ -103,14 +103,15 @@ export const api = {
   createOrder: (data: any) => {
     // Monta payload conforme backend espera
     const payload = {
-      customer_name: data.customer?.name || data.clientName || '',
-      customer_email: data.customer?.email || data.clientEmail || '',
-      customer_phone: data.customer?.phone || data.clientPhone || '',
-      address_street: data.customer?.address || data.clientAddress || '',
-      address_neighborhood: data.customer?.neighborhood || data.clientNeighborhood || '',
+      customer_name: data.customer_name || data.customer?.name || data.clientName || '',
+      customer_email: data.customer_email || data.customer?.email || data.clientEmail || '',
+      customer_phone: data.customer_phone || data.customer?.phone || data.clientPhone || '',
+      address_street: data.address_street || data.customer?.address || data.clientAddress || '',
+      address_neighborhood: data.address_neighborhood || data.customer?.neighborhood || data.clientNeighborhood || '',
+      observations: data.observations || data.additionalInfo || '',
       items: Array.isArray(data.items)
         ? data.items.map((item: any) => ({
-            product_id: item.product.id,
+            product_id: item.product_id || item.product?.id,
             quantity: item.quantity
           }))
         : [],
@@ -133,12 +134,18 @@ export const api = {
     if (email) params.append('email', email);
     if (phone) params.append('phone', phone);
     const url = `${API_ENDPOINTS.orders.byContact}?${params.toString()}`;
-    return apiRequest(url, {
+    
+    console.log('🔍 Buscando pedidos:', { email, phone, url });
+    
+    const response = await apiRequest(url, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
       },
     });
+    
+    console.log('📋 Resposta da busca de pedidos:', response);
+    return response;
   },
 
   getCustomerLastOrder: async (contact: string) => {
