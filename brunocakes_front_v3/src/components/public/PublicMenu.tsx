@@ -56,9 +56,9 @@ export const PublicMenu = () => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    const hasStockAvailable = hasStock(product.id);
     
-    return matchesSearch && matchesCategory && product.available && hasStockAvailable;
+    // SEMPRE MOSTRAR PRODUTOS - apenas filtrar por busca e categoria
+    return matchesSearch && matchesCategory;
   });
 
   const handleAddToCart = async (product: any, quantity: number = 1) => {
@@ -177,10 +177,10 @@ export const PublicMenu = () => {
                 {/* Stock Badge */}
                 <div className="absolute top-2 right-2">
                   <Badge 
-                    variant={isLowStock ? "destructive" : "secondary"}
-                    className={isLowStock ? "bg-yellow-500 text-black" : ""}
+                    variant={availableStock === 0 ? "destructive" : isLowStock ? "destructive" : "secondary"}
+                    className={availableStock === 0 ? "bg-red-500 text-white" : isLowStock ? "bg-yellow-500 text-black" : ""}
                   >
-                    Estoque: {availableStock}
+                    {availableStock === 0 ? "Indisponível" : `Estoque: ${availableStock}`}
                   </Badge>
                 </div>
               </div>
@@ -218,7 +218,7 @@ export const PublicMenu = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
-                          disabled={getLocalQuantity(product.id) <= 1}
+                          disabled={getLocalQuantity(product.id) <= 1 || availableStock === 0}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -227,7 +227,7 @@ export const PublicMenu = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
-                          disabled={getLocalQuantity(product.id) >= availableStock}
+                          disabled={getLocalQuantity(product.id) >= availableStock || availableStock === 0}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -271,7 +271,9 @@ export const PublicMenu = () => {
                                   </span>
                                 )}
                               </div>
-                              <Badge>Estoque: {availableStock}</Badge>
+                              <Badge className={availableStock === 0 ? "bg-red-500 text-white" : ""}>
+                                {availableStock === 0 ? "Indisponível" : `Estoque: ${availableStock}`}
+                              </Badge>
                             </div>
                             
                             {/* Quantity Selector */}
@@ -282,7 +284,7 @@ export const PublicMenu = () => {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
-                                  disabled={getLocalQuantity(product.id) <= 1}
+                                  disabled={getLocalQuantity(product.id) <= 1 || availableStock === 0}
                                 >
                                   <Minus className="h-3 w-3" />
                                 </Button>
@@ -291,7 +293,7 @@ export const PublicMenu = () => {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
-                                  disabled={getLocalQuantity(product.id) >= availableStock}
+                                  disabled={getLocalQuantity(product.id) >= availableStock || availableStock === 0}
                                 >
                                   <Plus className="h-3 w-3" />
                                 </Button>
@@ -301,10 +303,10 @@ export const PublicMenu = () => {
                             <Button
                               onClick={() => handleAddToCart(product, getLocalQuantity(product.id))}
                               disabled={availableStock === 0 || isLoading}
-                              className="w-full"
+                              className={`w-full ${availableStock === 0 ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed' : ''}`}
                             >
                               <ShoppingCart className="w-4 h-4 mr-2" />
-                              {availableStock === 0 ? 'Fora de Estoque' : 'Adicionar ao Carrinho'}
+                              {availableStock === 0 ? 'Indisponível' : 'Adicionar ao Carrinho'}
                             </Button>
                           </div>
                         </DialogContent>
@@ -314,8 +316,17 @@ export const PublicMenu = () => {
                         onClick={() => handleAddToCart(product, getLocalQuantity(product.id))}
                         disabled={availableStock === 0 || isLoading}
                         size="sm"
+                        variant={availableStock === 0 ? "secondary" : "default"}
+                        className={availableStock === 0 ? "opacity-50 cursor-not-allowed" : ""}
                       >
-                        <Plus className="w-4 h-4" />
+                        {availableStock === 0 ? (
+                          <>
+                            <span className="w-4 h-4 mr-1">❌</span>
+                            Indisponível
+                          </>
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
