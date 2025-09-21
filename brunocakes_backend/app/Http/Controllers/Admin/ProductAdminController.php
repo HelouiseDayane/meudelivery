@@ -27,6 +27,18 @@ class ProductAdminController extends Controller
             }
         }
 
+        // Gerar slug automaticamente se não fornecido
+        if (!isset($input['slug']) && isset($input['name'])) {
+            $input['slug'] = \Str::slug($input['name']);
+            // Garantir que seja único
+            $baseSlug = $input['slug'];
+            $counter = 1;
+            while (Product::where('slug', $input['slug'])->exists()) {
+                $input['slug'] = $baseSlug . '-' . $counter;
+                $counter++;
+            }
+        }
+
         $data = $request->merge($input)->validate([
             'name'            => 'required|string',
             'slug'            => 'required|string|unique:products,slug',

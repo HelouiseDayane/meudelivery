@@ -7,14 +7,14 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../ui
 import { toast } from 'sonner';
 import { Shield, BarChart3, Package, Users, Settings } from 'lucide-react';
 import { STORE_CONFIG } from '../../api';
-
+import { useApp } from '../../App'; // <-- Corrija o import, se necessário
 
 export function AdminLogin() {
-  const [email, setEmail] = useState('admin@admin.com');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAdmin(); // 👈 pegar login do contexto
+  const { login } = useApp(); // <-- CORRETO!
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {

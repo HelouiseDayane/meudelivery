@@ -1,5 +1,5 @@
 // Configuração da API pública para Bruno Cakes
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://localhost:8191/api';
 
 // Configuração da loja Bruno Cakes
 export const STORE_CONFIG = {
@@ -22,11 +22,11 @@ export const getProductImageUrl = (image: string | undefined | null) => {
   // Se já começa com http, retorna direto
   if (cleanPath.startsWith('http')) return cleanPath;
   // Se já começa com storage, retorna com domínio
-  if (cleanPath.startsWith('storage/')) return `http://localhost:8000/${cleanPath}`;
+  if (cleanPath.startsWith('storage/')) return `http://localhost:8191/${cleanPath}`;
   // Se começa com products/, retorna storage/products
-  if (cleanPath.startsWith('products/')) return `http://localhost:8000/storage/products/${cleanPath.replace('products/', '')}`;
+  if (cleanPath.startsWith('products/')) return `http://localhost:8191/storage/products/${cleanPath.replace('products/', '')}`;
   // Caso contrário, assume storage/products
-  return `http://localhost:8000/storage/products/${cleanPath}`;
+  return `http://localhost:8191/storage/products/${cleanPath}`;
 };
 
 export const API_ENDPOINTS = {

@@ -1,5 +1,5 @@
 // API Administrativa para Bruno Cakes
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://localhost:8191/api';
 
 // Headers com token de admin
 const getAdminAuthHeaders = () => {
@@ -30,6 +30,7 @@ export const adminApiRequest = async (url: string, options: RequestInit = {}) =>
   try {
     const defaultOptions: RequestInit = { 
       headers: { ...getAdminAuthHeaders(), ...options.headers }, 
+      mode: 'cors', // Adicionar modo CORS
       ...options 
     };
 
@@ -181,6 +182,12 @@ export const adminApi = {
     Object.entries(data).forEach(([key, value]) => {
       if (key === 'file' && value instanceof File) {
         formData.append('image', value);
+      } else if (key === 'stock') {
+        // Mapear 'stock' do frontend para 'quantity' do backend
+        formData.append('quantity', String(value));
+      } else if (key === 'available') {
+        // Mapear 'available' do frontend para 'is_active' do backend
+        formData.append('is_active', String(value));
       } else if (value !== undefined && value !== null) {
         if (typeof value === 'boolean' || typeof value === 'number') {
           formData.append(key, String(value));
@@ -209,6 +216,14 @@ export const adminApi = {
       if (key === 'file' && value instanceof File) {
         formData.append('image', value);
         console.log(`📎 Adicionando arquivo: ${value.name}`);
+      } else if (key === 'stock') {
+        // Mapear 'stock' do frontend para 'quantity' do backend
+        formData.append('quantity', String(value));
+        console.log(`📝 Mapeando campo: ${key} -> quantity = ${value}`);
+      } else if (key === 'available') {
+        // Mapear 'available' do frontend para 'is_active' do backend
+        formData.append('is_active', String(value));
+        console.log(`📝 Mapeando campo: ${key} -> is_active = ${value}`);
       } else if (value !== undefined && value !== null && value !== '') {
         const stringValue = typeof value === 'boolean' || typeof value === 'number' 
           ? String(value) 
@@ -316,8 +331,7 @@ export const adminApi = {
       body: JSON.stringify({ order_ids: orderIds }),
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
-    ...getAdminAuthHeaders(),
+        ...getAdminAuthHeaders(),
       },
     });
   },
@@ -342,7 +356,6 @@ export const adminApi = {
       body: JSON.stringify({ order_ids: orderIds }),
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
         ...getAdminAuthHeaders(), // garante que o Authorization vá
       },
     });

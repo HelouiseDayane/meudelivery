@@ -169,10 +169,10 @@ export const useApp = () => {
   return context;
 };
 
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const { admin, loading } = useAdmin();
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { admin, loading } = useApp();
 
-  if (loading) return <div>Carregando...</div>; // Pode colocar um spinner
+  if (loading) return <div>Carregando...</div>;
   if (!admin) return <Navigate to="/admin/login" />;
 
   return children;
@@ -772,22 +772,22 @@ function AppProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       
       if (userType === 'admin') {
-        const res = await axios.post('http://localhost:8000/api/admin/login', { email, password });
-          const token = res.data.token;
-
-          if (token) {
-            localStorage.setItem('admin_token', token);
-            const adminUser: Admin = {
-              id: res.data.user?.id || '1',
-              name: res.data.user?.name || 'Admin',
-              email: res.data.user?.email || email,
-              role: 'staff'
-            };
-            localStorage.setItem('bruno_admin', JSON.stringify(adminUser));
-            setAdmin(adminUser);
-          }
-
+        // Usar a API administrativa em vez de axios direto
+        const response = await adminApi.login(email, password);
+        
+        if (response && response.token) {
+          const adminUser: Admin = {
+            id: response.user?.id || '1',
+            name: response.user?.name || 'Admin',
+            email: response.user?.email || email,
+            role: 'staff'
+          };
+          setAdmin(adminUser);
+          return true;
+        }
       }
+      
+      return false;
       
       return false;
     } catch (error) {

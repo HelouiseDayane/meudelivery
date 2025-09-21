@@ -38,7 +38,7 @@ const todaySales = analytics.statistics?.todaySales || 0;
 const todayOrders = analytics.statistics?.totalOrders || 0; // total de pedidos no dia não vem separado, usa totalOrders ou calcula do salesByDay
 const thisMonthSales = analytics.statistics?.monthSales || 0;
 const thisYearSales = analytics.statistics?.yearSales || 0;
-const totalRevenue = analytics.statistics?.totalRevenue || analytics.totalRevenue || 0;
+const totalRevenue = analytics.statistics?.todaySales || analytics.statistics?.monthSales || 0;
 const pendingOrders = analytics.statistics?.pendingOrders || 0;
   // Usar dados do backend quando disponíveis, senão usar dados locais
   const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
