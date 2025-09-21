@@ -1,0 +1,33 @@
+FROM php:8.3-fpm
+
+# Instala dependências do sistema
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    zip \
+    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+
+# Instala Composer
+COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+
+# Copia o código da aplicação
+WORKDIR /var/www/html
+COPY . .
+
+# Instala dependências do Laravel
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# Permissões
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# Copia configuração customizada do PHP
+COPY php.ini /usr/local/etc/php/conf.d/custom.inini
+
+EXPOSE 80
+
+CMD ["php-fpm"]

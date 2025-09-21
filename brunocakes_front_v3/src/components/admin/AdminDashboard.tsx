@@ -34,20 +34,19 @@ export function AdminDashboard() {
     );
   }
 
-  const todaySales = analytics.statistics?.todaySales || 0;
-  const thisMonthSales = analytics.statistics?.monthSales || 0;
-  const thisYearSales = analytics.statistics?.yearSales || 0;
-  
+const todaySales = analytics.statistics?.todaySales || 0;
+const todayOrders = analytics.statistics?.totalOrders || 0; // total de pedidos no dia não vem separado, usa totalOrders ou calcula do salesByDay
+const thisMonthSales = analytics.statistics?.monthSales || 0;
+const thisYearSales = analytics.statistics?.yearSales || 0;
+const totalRevenue = analytics.statistics?.totalRevenue || analytics.totalRevenue || 0;
+const pendingOrders = analytics.statistics?.pendingOrders || 0;
   // Usar dados do backend quando disponíveis, senão usar dados locais
   const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
   const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length || 0;
   const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length || 0;
   const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
   
-  const pendingOrders = analytics.statistics?.pendingOrders || orders?.filter(o => o.status === 'pending')?.length || 0;
-  const todayOrders = orders?.filter(o => 
-    new Date(o.createdAt).toDateString() === new Date().toDateString()
-  )?.length || 0;
+
 
   return (
     <div className="space-y-6">
@@ -93,7 +92,7 @@ export function AdminDashboard() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {(analytics.totalRevenue || 0).toFixed(2)}</div>
+            <div className="text-2xl font-bold">R$ {totalRevenue.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
               Ano atual: R$ {thisYearSales.toFixed(2)}
             </p>

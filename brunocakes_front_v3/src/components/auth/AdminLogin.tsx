@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useApp } from '../../App';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -9,11 +8,13 @@ import { toast } from 'sonner';
 import { Shield, BarChart3, Package, Users, Settings } from 'lucide-react';
 import { STORE_CONFIG } from '../../api';
 
+
 export function AdminLogin() {
   const [email, setEmail] = useState('admin@admin.com');
   const [password, setPassword] = useState('123456');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useApp();
+
+  const { login } = useAdmin(); // 👈 pegar login do contexto
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,9 +22,9 @@ export function AdminLogin() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password, 'admin');
+      const success = await login(email, password); // 👈 só email e senha
       if (success) {
-        navigate('/admin');
+        navigate('/admin'); // vai para rota protegida
       } else {
         toast.error('Credenciais inválidas. Verifique seu email e senha.');
       }
@@ -37,6 +38,7 @@ export function AdminLogin() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 p-4">
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+
         {/* Admin Features */}
         <div className="text-center md:text-left space-y-6">
           <div>
@@ -56,7 +58,7 @@ export function AdminLogin() {
             </p>
           </div>
 
-          {/* Admin Features */}
+          {/* Admin Features Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-white/80 rounded-lg border border-gray-200">
               <BarChart3 className="h-8 w-8 text-blue-600 mb-2" />
@@ -124,7 +126,7 @@ export function AdminLogin() {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
                 <Input
@@ -155,13 +157,7 @@ export function AdminLogin() {
               </p>
             </div>
 
-            <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <p className="text-sm text-slate-700 mb-2 font-medium">🔐 Credenciais de demonstração:</p>
-              <div className="space-y-1">
-                <p className="text-xs text-slate-600">📧 Email: admin@admin.com</p>
-                <p className="text-xs text-slate-600">🔒 Senha: 123456</p>
-              </div>
-            </div>
+         
           </CardContent>
         </Card>
       </div>

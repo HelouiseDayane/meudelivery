@@ -293,9 +293,7 @@ export const adminApi = {
   },
 
   updateOrderStatus: (id: string, status: string) => {
-    console.log(`🔄 updateOrderStatus chamado com:`, { id, status });
-    console.log(`🌐 URL construída: ${ADMIN_API_ENDPOINTS.orders.updateStatus(id)}`);
-    console.log(`🔑 Token atual: ${localStorage.getItem('admin_token') ? 'Presente' : 'Ausente'}`);
+    
     
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.updateStatus(id), {
       method: 'PATCH',
@@ -312,10 +310,6 @@ export const adminApi = {
       throw new Error('Nenhum ID de pedido fornecido para confirmação.');
     }
     
-    console.log(`🔄 confirmManyOrders chamado com IDs:`, orderIds);
-    console.log(`🌐 URL: ${ADMIN_API_ENDPOINTS.orders.confirmMany}`);
-    console.log(`🔑 Token atual: ${localStorage.getItem('admin_token') ? 'Presente' : 'Ausente'}`);
-    console.log(`🔑 Headers que serão enviados:`, getAdminAuthHeaders());
     
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.confirmMany, {
       method: 'PATCH',
@@ -323,6 +317,7 @@ export const adminApi = {
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+    ...getAdminAuthHeaders(),
       },
     });
   },
@@ -341,14 +336,14 @@ export const adminApi = {
   },
 
   cancelPayments: (orderIds: string[] | number[]) => {
-    console.log(`🔄 cancelPayments chamado com IDs:`, orderIds);
-    console.log(`🌐 URL: ${ADMIN_API_ENDPOINTS.orders.cancelPayment}`);
     
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.cancelPayment, {
       method: 'PATCH',
       body: JSON.stringify({ order_ids: orderIds }),
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...getAdminAuthHeaders(), // garante que o Authorization vá
       },
     });
   },
@@ -358,8 +353,7 @@ export const adminApi = {
       throw new Error('A lista de IDs de pedidos está vazia.');
     }
     
-    console.log(`🔄 markAsCompleted chamado com IDs:`, orderIds);
-    console.log(`🌐 URL: ${ADMIN_API_ENDPOINTS.orders.finish}`);
+ 
     
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.finish, {
       method: 'PATCH',

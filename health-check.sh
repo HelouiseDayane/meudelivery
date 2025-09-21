@@ -1,15 +1,13 @@
-#!/bin/bash
+
 
 echo "🏥 Sistema de Health Check - BrunoCakes"
 echo "========================================"
 
-# Cores para output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m' 
 
-# Função para verificar status de serviço
 check_service() {
     local service=$1
     local status=$(docker-compose ps -q $service 2>/dev/null)
@@ -41,7 +39,7 @@ check_redis_jobs() {
     # Verificar filas
     local queues=("high" "default" "background")
     for queue in "${queues[@]}"; do
-        local count=$(docker-compose exec -T redis redis-cli -a redis_secure_pass llen "queues:$queue" 2>/dev/null || echo "0")
+        local count=$(docker-compose exec -T redis redis-cli -a cakes12345671571285415715715785421478214782171285742557 llen "queues:$queue" 2>/dev/null || echo "0")
         if [ "$count" -gt 0 ]; then
             echo -e "📋 Fila $queue: ${YELLOW}$count jobs pendentes${NC}"
         else
@@ -50,7 +48,7 @@ check_redis_jobs() {
     done
     
     # Verificar jobs com falha
-    local failed=$(docker-compose exec -T redis redis-cli -a redis_secure_pass llen "queues:failed" 2>/dev/null || echo "0")
+    local failed=$(docker-compose exec -T redis redis-cli -a cakes12345671571285415715715785421478214782171285742557 llen "queues:failed" 2>/dev/null || echo "0")
     if [ "$failed" -gt 0 ]; then
         echo -e "❌ Jobs com falha: ${RED}$failed${NC}"
     else
@@ -84,7 +82,7 @@ check_resources() {
     echo "------------------"
     
     # Memory usage do Redis
-    local redis_memory=$(docker-compose exec -T redis redis-cli -a redis_secure_pass info memory | grep "used_memory_human" | cut -d: -f2 | tr -d '\r' 2>/dev/null)
+    local redis_memory=$(docker-compose exec -T redis redis-cli -a cakes12345671571285415715715785421478214782171285742557 info memory | grep "used_memory_human" | cut -d: -f2 | tr -d '\r' 2>/dev/null)
     echo -e "🔴 Redis Memory: ${YELLOW}$redis_memory${NC}"
     
     # MySQL connections

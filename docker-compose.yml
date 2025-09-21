@@ -1,292 +1,124 @@
-version: "3.8"
+version: "3.9"
 
 services:
-  # Backend Laravel
-  app:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
-    container_name: brunocakes_app
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
     restart: always
+    environment:
+      MYSQL_DATABASE: brunocakes
+      MYSQL_USER: brunocakes
+      MYSQL_PASSWORD: brunocakes145236521478214821782171285742557
+      MYSQL_ROOT_PASSWORD: root_pass
+    ports:
+      - "3310:3306"
+    volumes:
+      - ./docker/my.cnf:/etc/mysql/my.cnf
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "php", "artisan", "inspire"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-    working_dir: /var/www/html
+
+  redis:
+    image: redis:7.2
+    container_name: redis
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "cakes12345671571285415715715785421478214782171285742557"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./docker/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: always
+
+  backend:
+    build: ./brunocakes_backend
+    container_name: backend
+    restart: always
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: brunocakes
+      DB_USERNAME: brunocakes
+      DB_PASSWORD: brunocakes145236521478214821782171285742557
+      REDIS_HOST: redis
+      REDIS_PASSWORD: cakes12345671571285415715715785421478214782171285742557
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
     volumes:
       - ./brunocakes_backend:/var/www/html
-      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/99-custom.ini
+      - ./docker/php.ini:/usr/local/etc/php/conf.d/custom.ini
     depends_on:
-      - db
-      - redis
-    environment:
-      - APP_ENV=production
-      - APP_DEBUG=false
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=brunocakes
-      - DB_USERNAME=brunocakes
-      - DB_PASSWORD=brunocakes_secure_pass
-      - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_pass
-      - REDIS_PORT=6379
-      - CACHE_DRIVER=redis
-      - SESSION_DRIVER=redis
-      - QUEUE_CONNECTION=redis
-    networks:
-      - brunocakes_network
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8191:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  # Frontend React
+  
+
   frontend:
-    build:
-      context: ./docker/node
-      dockerfile: Dockerfile
-    container_name: brunocakes_frontend
+    build: ./brunocakes_front_v3
+    container_name: frontend
     restart: always
+    ports:
+      - "3210:3000"
+    volumes:
+      - ./brunocakes_front_v3:/app
+      - ./brunocakes_front_v3/dist:/usr/share/nginx/html
+    environment:
+      VITE_API_URL: http://backend:80
+    depends_on:
+      - backend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-    working_dir: /usr/src/app
-    volumes:
-      - ./brunocakes_front_v3:/usr/src/app
-      - /usr/src/app/node_modules
-    ports:
-      - "3000:3000"
-    environment:
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
-      - FAST_REFRESH=true
-    depends_on:
-      - app
-    networks:
-      - brunocakes_network
 
-  # Nginx Web Server
-  webserver:
-    image: nginx:1.25-alpine
-    container_name: brunocakes_nginx
+  nginx:
+    image: nginx:latest
+    container_name: nginx
     restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf
+      - ./brunocakes_front_v3/dist:/usr/share/nginx/html
+      - ./brunocakes_backend/public:/var/www/html
+    depends_on:
+      - backend
+      - frontend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/nginx_status"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./brunocakes_backend:/var/www/html
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./docker/nginx/sites/:/etc/nginx/conf.d/
-      - ./docker/nginx/ssl:/etc/ssl/certs
-    depends_on:
-      - app
-    networks:
-      - brunocakes_network
 
-  # MySQL Database
-  db:
-    image: mysql:8.0
-    container_name: brunocakes_mysql
-    restart: always
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "brunocakes", "-pbrunocakes_secure_pass"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    command: --default-authentication-plugin=mysql_native_password
-    environment:
-      MYSQL_ROOT_PASSWORD: root_secure_pass
-      MYSQL_DATABASE: brunocakes
-      MYSQL_USER: brunocakes
-      MYSQL_PASSWORD: brunocakes_secure_pass
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
-    networks:
-      - brunocakes_network
-
-  # Redis Cache & Sessions - ULTRA OTIMIZADO PARA ALTO TRÁFEGO
-  redis:
-    image: redis:7.2-alpine
-    container_name: brunocakes_redis
-    restart: always
-    # Health check para garantir que Redis responde
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redis_secure_pass", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    # Configuração customizada para máxima performance
-    command: redis-server /usr/local/etc/redis/redis.conf
-    ports:
-      - "6379:6379"
-    volumes:
-      # Persistência de dados para não perder jobs/sessões
-      - redis_data:/data
-      # Configuração otimizada:
-      # - 1GB RAM dedicada
-      # - 8 threads IO para alta concorrência
-      # - 20.000 conexões simultâneas
-      # - AOF + RDB para durabilidade de jobs
-      # - Keyspace notifications para Laravel
-      # - Lazy freeing para performance
-      # - Latency monitoring ativo
-      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
-    # Variáveis de ambiente para monitoramento
-    environment:
-      - REDIS_MAXMEMORY=1024mb
-      - REDIS_POLICY=allkeys-lru
-    networks:
-      - brunocakes_network
-
-  # Queue Worker (para processar jobs em background)
   queue:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
-    container_name: brunocakes_queue
+    build: ./brunocakes_backend
+    container_name: queue
     restart: always
-    working_dir: /var/www/html
-    volumes:
-      - ./brunocakes_backend:/var/www/html
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3"]
     depends_on:
-      - db
-      - redis
+      - backend
     environment:
-      - APP_ENV=production
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=brunocakes
-      - DB_USERNAME=brunocakes
-      - DB_PASSWORD=brunocakes_secure_pass
-      - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_pass
-      - REDIS_PORT=6379
-      - QUEUE_CONNECTION=redis
-    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600 --memory=512 --timeout=300
-    healthcheck:
-      test: ["CMD", "ps", "aux", "|", "grep", "[q]ueue:work"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - brunocakes_network
-
-  # Schedule Worker (para executar comandos agendados)
-  schedule:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
-    container_name: brunocakes_schedule
-    restart: always
-    working_dir: /var/www/html
-    volumes:
-      - ./brunocakes_backend:/var/www/html
-    depends_on:
-      - db
-      - redis
-    environment:
-      - APP_ENV=production
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=brunocakes
-      - DB_USERNAME=brunocakes
-      - DB_PASSWORD=brunocakes_secure_pass
-      - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_pass
-      - REDIS_PORT=6379
-    command: sh -c "while true; do php artisan schedule:run >> /var/log/cron.log 2>&1; sleep 60; done"
-    healthcheck:
-      test: ["CMD", "ps", "aux", "|", "grep", "[s]chedule:run"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-    networks:
-      - brunocakes_network
-
-  # Multiple Queue Workers para alta demanda
-  queue-high:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
-    container_name: brunocakes_queue_high
-    restart: always
-    working_dir: /var/www/html
-    volumes:
-      - ./brunocakes_backend:/var/www/html
-    depends_on:
-      - db
-      - redis
-    environment:
-      - APP_ENV=production
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=brunocakes
-      - DB_USERNAME=brunocakes
-      - DB_PASSWORD=brunocakes_secure_pass
-      - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_pass
-      - REDIS_PORT=6379
-      - QUEUE_CONNECTION=redis
-    command: php artisan queue:work --queue=high --sleep=1 --tries=3 --max-time=1800 --memory=512
-    healthcheck:
-      test: ["CMD", "ps", "aux", "|", "grep", "[q]ueue:work"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - brunocakes_network
-
-  # Background Jobs Worker
-  queue-background:
-    build:
-      context: ./docker/php
-      dockerfile: Dockerfile
-    container_name: brunocakes_queue_background
-    restart: always
-    working_dir: /var/www/html
-    volumes:
-      - ./brunocakes_backend:/var/www/html
-    depends_on:
-      - db
-      - redis
-    environment:
-      - APP_ENV=production
-      - DB_CONNECTION=mysql
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_DATABASE=brunocakes
-      - DB_USERNAME=brunocakes
-      - DB_PASSWORD=brunocakes_secure_pass
-      - REDIS_HOST=redis
-      - REDIS_PASSWORD=redis_secure_pass
-      - REDIS_PORT=6379
-      - QUEUE_CONNECTION=redis
-    command: php artisan queue:work --queue=background --sleep=5 --tries=5 --max-time=7200 --memory=512
-    healthcheck:
-      test: ["CMD", "ps", "aux", "|", "grep", "[q]ueue:work"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - brunocakes_network
+      DB_HOST: mysql
+      REDIS_HOST: redis
+      REDIS_PASSWORD: cakes12345671571285415715715785421478214782171285742557
 
 volumes:
   mysql_data:
-    driver: local
   redis_data:
-    driver: local
-
-networks:
-  brunocakes_network:
-    driver: bridge

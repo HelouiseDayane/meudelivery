@@ -1,3 +1,4 @@
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, createContext, useContext, useEffect, ReactNode } from 'react';
 import { Toaster } from './components/ui/sonner';
@@ -5,6 +6,7 @@ import { api } from './api';
 import { adminApi } from './api_admin';
 import { getProductImageUrl } from './api';
 import { toast } from 'sonner';
+import axios from 'axios';
 import { RealTimeProvider } from './hooks/useRealTime';
 
 // Components
@@ -167,6 +169,15 @@ export const useApp = () => {
   return context;
 };
 
+const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+  const { admin, loading } = useAdmin();
+
+  if (loading) return <div>Carregando...</div>; // Pode colocar um spinner
+  if (!admin) return <Navigate to="/admin/login" />;
+
+  return children;
+};
+
 function AppProvider({ children }: { children: ReactNode }) {
   // States
   const [products, setProducts] = useState<Product[]>([]);
@@ -174,7 +185,11 @@ function AppProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [admin, setAdmin] = useState<Admin | null | undefined>(undefined);
+  const [admin, setAdmin] = useState<Admin | null>(() => {
+  const savedAdmin = localStorage.getItem('bruno_admin');
+  return savedAdmin ? (JSON.parse(savedAdmin) as Admin) : null;
+});
+  
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   
   // Session ID para o carrinho no backend
@@ -574,7 +589,7 @@ function AppProvider({ children }: { children: ReactNode }) {
           // Por exemplo, tentar carregar produtos (que é uma operação comum)
           await adminApi.getProducts();
           // Se chegou até aqui, o token é válido
-          setAdmin(JSON.parse(savedAdmin));
+           setAdmin(JSON.parse(savedAdmin) as Admin);
           console.log('✅ Token validado - sessão restaurada');
         } catch (error) {
           console.warn('🔓 Sessão admin expirada, removendo dados:', error);
@@ -757,23 +772,21 @@ function AppProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       
       if (userType === 'admin') {
-        const response = await adminApi.login(email, password);
-        
-        if (response && response.token) {
-          // Criar dados do admin com informações do backend ou padrão
-          const adminUser: Admin = {
-            id: response.user?.id || '1',
-            name: response.user?.name || 'Admin',
-            email: response.user?.email || email,
-            role: 'staff'
-          };
-          
-          console.log('🔐 Login - Admin criado:', adminUser);
-          setAdmin(adminUser);
-          // O token já foi salvo pelo adminApi.login
-          toast.success('Login realizado com sucesso!');
-          return true;
-        }
+        const res = await axios.post('http://localhost:8000/api/admin/login', { email, password });
+          const token = res.data.token;
+
+          if (token) {
+            localStorage.setItem('admin_token', token);
+            const adminUser: Admin = {
+              id: res.data.user?.id || '1',
+              name: res.data.user?.name || 'Admin',
+              email: res.data.user?.email || email,
+              role: 'staff'
+            };
+            localStorage.setItem('bruno_admin', JSON.stringify(adminUser));
+            setAdmin(adminUser);
+          }
+
       }
       
       return false;
@@ -859,14 +872,24 @@ function App() {
           <div className="min-h-screen bg-gray-50">
             <Routes>
               {/* Admin Routes */}
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminDashboard />} />
-                <Route path="dashboard" element={<AdminDashboard />} />
-                <Route path="products" element={<ProductsManagement />} />
-                <Route path="orders" element={<OrdersManagement />} />
-                <Route path="clients" element={<ClientsManagement />} />
-              </Route>
+                 <Route path="/admin/login" element={<AdminLogin />} />
+  
+                  <Route
+                    path="/admin/*"
+                    element={
+                      <ProtectedRoute>
+                        <AdminLayout /> {/* seu layout com sidebar */}
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="dashboard" element={<AdminDashboard />} />
+                    <Route path="products" element={<ProductsManagement />} />
+                    <Route path="orders" element={<OrdersManagement />} />
+                    <Route path="clients" element={<ClientsManagement />} />
+                  </Route>
+
+                  <Route path="*" element={<Navigate to="/admin/login" />} />
 
               {/* Public Routes */}
               <Route path="/" element={<PublicLayout />}>

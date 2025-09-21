@@ -51,8 +51,8 @@ chmod +x start.sh stop.sh manage.sh
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost
-- **MySQL**: localhost:3306
-- **Redis**: localhost:6379
+- **MySQL**: localhost:3306 (mapeado para 3310)
+- **Redis**: localhost:6380
 
 ## 🛠️ Comandos Úteis
 
