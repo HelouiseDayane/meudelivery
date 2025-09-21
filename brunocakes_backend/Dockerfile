@@ -10,7 +10,12 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libzip-dev \
     zip \
+    netcat-openbsd \
     && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+
+# Instalação do Redis (phpredis via PECL)
+RUN pecl install redis \
+    && docker-php-ext-enable redis
 
 # Instala Composer
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
@@ -26,7 +31,7 @@ RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Copia configuração customizada do PHP
-COPY php.ini /usr/local/etc/php/conf.d/custom.inini
+COPY php.ini /usr/local/etc/php/conf.d/custom.ini
 
 EXPOSE 80
 
