@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../../App';
 import { adminApi } from '../../api_admin';
+import { getProductImageUrl } from '../../api';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -569,7 +570,7 @@ export function ProductsManagement() {
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-md overflow-hidden">
                         <ImageWithFallback
-                          src={product.image}
+                          src={product.imageUrl || getProductImageUrl(product.image)}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />

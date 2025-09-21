@@ -6,12 +6,22 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Storage;
 
 class ProductAdminController extends Controller
 {
     public function index()
     {
-        return response()->json(Product::all());
+        $products = Product::all();
+
+        $products->map(function ($product) {
+            $product->image_url = $product->image 
+                ? Storage::url($product->image) 
+                : null;
+            return $product;
+        });
+
+        return response()->json($products);
     }
 
     public function store(Request $request)
@@ -65,6 +75,11 @@ class ProductAdminController extends Controller
         // ✅ CORRIGIDO: Sincronizar estoque com Redis automaticamente
         $this->syncProductStock($product);
         
+        // Adicionar image_url para response
+        $product->image_url = $product->image 
+            ? Storage::url($product->image) 
+            : null;
+        
         \Log::info('Produto criado com sucesso', ['product_id' => $product->id]);
         
         return response()->json($product, 201);
@@ -73,6 +88,11 @@ class ProductAdminController extends Controller
     public function show($id)
     {
         $product = Product::findOrFail($id);
+        
+        $product->image_url = $product->image 
+            ? Storage::url($product->image) 
+            : null;
+            
         return response()->json($product);
     }
 
@@ -123,7 +143,13 @@ class ProductAdminController extends Controller
         // ✅ CORRIGIDO: Sincronizar estoque com Redis automaticamente após update
         $this->syncProductStock($product->fresh());
 
-        return response()->json($product->fresh());
+        // Adicionar image_url para response
+        $updatedProduct = $product->fresh();
+        $updatedProduct->image_url = $updatedProduct->image 
+            ? Storage::url($updatedProduct->image) 
+            : null;
+
+        return response()->json($updatedProduct);
     }
 
     public function updateStock(Request $request, $id)

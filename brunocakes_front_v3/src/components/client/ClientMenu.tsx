@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../../App';
+import { getProductImageUrl } from '../../api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -157,7 +158,7 @@ export function ClientMenu() {
             <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
               <div className="relative">
                 <ImageWithFallback
-                  src={product.image}
+                  src={product.imageUrl || getProductImageUrl(product.image)}
                   alt={product.name}
                   className="w-full h-48 object-cover"
                 />

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getProductImageUrl } from '../../api';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -199,7 +200,7 @@ export function MyOrdersPage() {
                     {order.items.map((item, index) => (
                       <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
                         <img 
-                          src={item.image} 
+                          src={getProductImageUrl(item.image)} 
                           alt={item.name}
                           className="w-12 h-12 object-cover rounded-lg"
                         />
@@ -276,7 +277,7 @@ export function MyOrdersPage() {
                     {order.items.map((item, index) => (
                       <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
                         <img 
-                          src={item.image} 
+                          src={getProductImageUrl(item.image)} 
                           alt={item.name}
                           className="w-12 h-12 object-cover rounded-lg"
                         />

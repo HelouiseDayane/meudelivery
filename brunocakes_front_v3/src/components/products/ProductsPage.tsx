@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../App';
+import { getProductImageUrl } from '../../api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -85,13 +86,15 @@ const categories = [
 ];
 
 export function ProductsPage() {
-  const { userType, addToCart } = useApp();
+  const { products, addToCart, admin } = useApp();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [favorites, setFavorites] = useState<string[]>(['1', '3']);
 
-  const filteredProducts = mockProducts.filter(product => {
+  const isAdmin = admin !== null;
+
+  const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
@@ -99,7 +102,7 @@ export function ProductsPage() {
   });
 
   const handleAddToCart = (product: any) => {
-    addToCart(product);
+    addToCart(product, 1);
     toast.success(`${product.name} adicionado ao carrinho!`);
   };
 
@@ -118,17 +121,17 @@ export function ProductsPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl">
-            {userType === 'admin' ? 'Gerenciar Produtos' : 'Nossos Doces'}
+            {isAdmin ? 'Gerenciar Produtos' : 'Nossos Doces'}
           </h1>
           <p className="text-muted-foreground">
-            {userType === 'admin' 
+            {isAdmin 
               ? 'Adicione, edite e gerencie seus produtos' 
               : 'Descubra sabores únicos feitos com carinho'
             }
           </p>
         </div>
         
-        {userType === 'admin' && (
+        {isAdmin && (
           <Button 
             onClick={() => navigate('/products/new')}
             className="bg-orange-500 hover:bg-orange-600"
@@ -172,7 +175,7 @@ export function ProductsPage() {
           <Card key={product.id} className="group hover:shadow-lg transition-shadow">
             <div className="relative">
               <ImageWithFallback
-                src={product.image}
+                src={product.imageUrl || getProductImageUrl(product.image)}
                 alt={product.name}
                 className="w-full h-48 object-cover rounded-t-lg"
               />
@@ -185,13 +188,13 @@ export function ProductsPage() {
                 {product.isPromotion && (
                   <Badge className="bg-red-500 text-white">Promoção</Badge>
                 )}
-                {!product.inStock && (
+                {!product.available && (
                   <Badge variant="secondary">Esgotado</Badge>
                 )}
               </div>
 
               {/* Favorite Button (Client only) */}
-              {userType === 'client' && (
+              {!isAdmin && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -209,7 +212,7 @@ export function ProductsPage() {
               )}
 
               {/* Admin Actions */}
-              {userType === 'admin' && (
+              {isAdmin && (
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button
                     variant="ghost"
@@ -234,11 +237,7 @@ export function ProductsPage() {
               <div className="space-y-2">
                 <div className="flex items-start justify-between">
                   <h3 className="text-lg line-clamp-1">{product.name}</h3>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <Star className="h-3 w-3 text-yellow-500 fill-current" />
-                    <span>{product.rating}</span>
-                    <span className="text-xs">({product.reviews})</span>
-                  </div>
+                  {/* Rating temporariamente removido - não temos esses dados */}
                 </div>
                 
                 <p className="text-sm text-muted-foreground line-clamp-2">
@@ -250,18 +249,18 @@ export function ProductsPage() {
                     <span className="text-lg text-orange-600">
                       R$ {product.price.toFixed(2)}
                     </span>
-                    {product.isPromotion && product.originalPrice && (
+                    {product.isPromotion && product.promotionPrice && (
                       <span className="text-sm text-muted-foreground line-through">
-                        R$ {product.originalPrice.toFixed(2)}
+                        R$ {product.promotionPrice.toFixed(2)}
                       </span>
                     )}
                   </div>
                   
-                  {userType === 'client' && (
+                  {!isAdmin && (
                     <Button
                       size="sm"
                       onClick={() => handleAddToCart(product)}
-                      disabled={!product.inStock}
+                      disabled={!product.available}
                       className="bg-orange-500 hover:bg-orange-600"
                     >
                       <ShoppingCart className="h-4 w-4 mr-1" />
