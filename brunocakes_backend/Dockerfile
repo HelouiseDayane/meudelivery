@@ -2,6 +2,7 @@ FROM php:8.3-fpm
 
 # Instala dependências do sistema
 RUN apt-get update && apt-get install -y \
+    nginx \
     git \
     unzip \
     curl \
@@ -33,6 +34,9 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 # Copia configuração customizada do PHP
 COPY php.ini /usr/local/etc/php/conf.d/custom.ini
 
+# Copia a configuração do nginx
+COPY default.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 80
 
-CMD ["php-fpm"]
+CMD service nginx start && php-fpm
