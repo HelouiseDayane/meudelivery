@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { ArrowLeft, Upload, X } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const categories = [
   { value: 'bolos', label: 'Bolos' },
@@ -149,7 +149,7 @@ export function ProductFormPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="category">Categoria *</Label>
-                <Select value={formData.category} onValueChange={(value) => 
+                <Select value={formData.category} onValueChange={(value: string) => 
                   setFormData(prev => ({ ...prev, category: value }))
                 }>
                   <SelectTrigger>

@@ -16,30 +16,6 @@ class OrderAdminController extends Controller
     {
         return response()->json(Order::with('items', 'payment')->latest()->get());
     }
-
-    public function confirmMany(Request $request)
-    {
-        $request->validate([
-            'order_ids' => 'required|array|min:1',
-            'order_ids.*' => 'exists:orders,id',
-        ]);
-
-        // Verifica os pedidos e atualiza apenas os que estão no status correto
-        $orders = Order::whereIn('id', $request->order_ids)
-            ->where('status', 'awaiting_seller_confirmation')
-            ->get();
-
-        $updatedCount = 0;
-
-        foreach ($orders as $order) {
-            $order->update(['status' => 'confirmed']);
-            $updatedCount++;
-        }
-
-        Log::info('Pedidos atualizados:', ['updated_count' => $updatedCount]);
-
-        return response()->json(['updated_count' => $updatedCount]);
-    }
                     
                 
      public function approvePayment(Request $request)
@@ -65,7 +41,7 @@ class OrderAdminController extends Controller
             }
 
             // Atualiza o status do pedido para 'awaiting_seller_confirmation'
-            $order->update(['status' => 'awaiting_seller_confirmation']);
+            $order->update(['status' => 'confirmed']);
             
             // Dispara o Job para processar o pedido
             ProcessOrderJob::dispatch($order->id)->onQueue('orders');
@@ -110,79 +86,80 @@ class OrderAdminController extends Controller
         return response()->json(['updated_count' => $updatedCount]);
     }
 
-public function markAsCompleted(Request $request)
-{
-    $request->validate([
-        'order_ids' => 'required|array|min:1',
-        'order_ids.*' => 'exists:orders,id',
-    ]);
+    public function markAsCompleted(Request $request)
+    {
+        $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'exists:orders,id',
+        ]);
 
-    // ✅ FILTRAR apenas pedidos que podem ser marcados como completos
-    $orders = Order::whereIn('id', $request->order_ids)
-        ->whereIn('status', ['confirmed', 'awaiting_seller_confirmation']) // ✅ Só estes podem ser completados
-        ->get();
+        // ✅ FILTRAR apenas pedidos com status 'confirmed'
+        $orders = Order::whereIn('id', $request->order_ids)
+            ->where('status', 'confirmed') // ✅ Apenas 'confirmed' pode ser completado
+            ->get();
 
-    $updatedCount = 0;
+        $updatedCount = 0;
 
-    foreach ($orders as $order) {
-        // ✅ USAR STRING com aspas
-        $order->update(['status' => 'completed']); // ✅ COM ASPAS!
-        $updatedCount++;
-        
-        Log::info('Pedido marcado como completo', [
-            'order_id' => $order->id,
-            'customer' => $order->customer_name,
-            'total' => $order->total_amount
+        foreach ($orders as $order) {
+            $order->update(['status' => 'completed']);
+            $updatedCount++;
+            
+            Log::info('Pedido marcado como completo', [
+                'order_id' => $order->id,
+                'customer' => $order->customer_name,
+                'total' => $order->total_amount
+            ]);
+        }
+
+        Log::info('Pedidos marcados como completos', [
+            'requested_count' => count($request->order_ids),
+            'updated_count' => $updatedCount
+        ]);
+
+        return response()->json([
+            'message' => 'Pedidos marcados como completos',
+            'requested_count' => count($request->order_ids),
+            'updated_count' => $updatedCount
         ]);
     }
 
-    Log::info('Pedidos marcados como completos', [
-        'requested_count' => count($request->order_ids),
-        'updated_count' => $updatedCount
-    ]);
 
-    return response()->json([
-        'message' => 'Pedidos marcados como completos',
-        'requested_count' => count($request->order_ids),
-        'updated_count' => $updatedCount
-    ]);
-}
             
     
-public function getUniqueCustomers()
-{
-    $customers = Order::select([
-        'customer_name',
-        'customer_email',
-        'customer_phone',
-        \DB::raw('COUNT(*) as total_orders'),
-        \DB::raw('SUM(total_amount) as total_spent'),
-        \DB::raw('MAX(created_at) as last_order_date'),
-        \DB::raw('MAX(address_street) as address_street'),
-        \DB::raw('MAX(address_neighborhood) as address_neighborhood')
-    ])
-    ->whereNotNull('customer_phone')
-    ->where('customer_phone', '!=', '')
-    ->groupBy([
-        'customer_name',
-        'customer_email',
-        'customer_phone'
-    ])
-    ->orderBy('customer_name')
-    ->get()
-    ->map(function ($customer) {
-        return [
-            'name' => $customer->customer_name,
-            'email' => $customer->customer_email,
-            'phone' => $customer->customer_phone,
-            'address' => $customer->address_street,
-            'neighborhood' => $customer->address_neighborhood,
-            'totalOrders' => (int) $customer->total_orders,
-            'totalSpent' => (float) $customer->total_spent,
-            'lastOrderDate' => $customer->last_order_date
-        ];
-    });
+    public function getUniqueCustomers()
+    {
+        $customers = Order::select([
+            'customer_name',
+            'customer_email',
+            'customer_phone',
+            \DB::raw('COUNT(*) as total_orders'),
+            \DB::raw('SUM(total_amount) as total_spent'),
+            \DB::raw('MAX(created_at) as last_order_date'),
+            \DB::raw('MAX(address_street) as address_street'),
+            \DB::raw('MAX(address_neighborhood) as address_neighborhood')
+        ])
+        ->whereNotNull('customer_phone')
+        ->where('customer_phone', '!=', '')
+        ->groupBy([
+            'customer_name',
+            'customer_email',
+            'customer_phone'
+        ])
+        ->orderBy('customer_name')
+        ->get()
+        ->map(function ($customer) {
+            return [
+                'name' => $customer->customer_name,
+                'email' => $customer->customer_email,
+                'phone' => $customer->customer_phone,
+                'address' => $customer->address_street,
+                'neighborhood' => $customer->address_neighborhood,
+                'totalOrders' => (int) $customer->total_orders,
+                'totalSpent' => (float) $customer->total_spent,
+                'lastOrderDate' => $customer->last_order_date
+            ];
+        });
 
-    return response()->json($customers);
-}
-     }
+        return response()->json($customers);
+    }
+    }

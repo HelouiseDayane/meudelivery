@@ -18,7 +18,7 @@ import {
   Filter,
   Heart
 } from 'lucide-react';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 // Mock products data
 const mockProducts = [
@@ -103,7 +103,7 @@ export function ProductsPage() {
 
   const handleAddToCart = (product: any) => {
     addToCart(product, 1);
-    toast.success(`${product.name} adicionado ao carrinho!`);
+    //toast.success(`${product.name} adicionado ao carrinho!`);
   };
 
   const toggleFavorite = (productId: string) => {

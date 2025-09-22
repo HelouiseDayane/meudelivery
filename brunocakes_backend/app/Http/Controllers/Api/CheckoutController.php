@@ -345,6 +345,7 @@ class CheckoutController extends Controller
         DB::beginTransaction();
         
         try {
+            
             // Criar ordem
             $order = Order::create([
                 'customer_name' => $data['customer_name'],
@@ -386,6 +387,7 @@ class CheckoutController extends Controller
 
             return response()->json([
                 'message' => 'Pedido criado com sucesso',
+                'order_id' => $order->id,
                 'order' => $order->load('items'),
                 'checkout_expires_in_minutes' => 10
             ], 201);

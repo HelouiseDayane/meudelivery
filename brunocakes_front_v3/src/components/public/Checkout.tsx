@@ -14,12 +14,15 @@ import { useApp } from '../../App';
 import { toast } from 'sonner';
 import api from '../../api';
 import { useCartExpiration } from '../../hooks/useCartExpiration';
+import refreshProducts from '../../api'; // Adicione esta linha, ajuste o caminho se necessário
 
 interface CustomerData {
+  id: number
   name: string;
   email: string;
   phone: string;
   address: string;
+  order_number: string;
   neighborhood: string;
   additionalInfo?: string;
 }
@@ -35,12 +38,15 @@ export const Checkout = () => {
   const [searchByPhone, setSearchByPhone] = useState(false); // true = telefone, false = email
   const [foundCustomerData, setFoundCustomerData] = useState<any>(null);
   const [isConfirmCustomerModalOpen, setIsConfirmCustomerModalOpen] = useState(false);
-  
+  const [isRefreshingStock, setIsRefreshingStock] = useState(false);
+
   const [customerData, setCustomerData] = useState<CustomerData>({
+    id: 0,  
     name: '',
     email: '',
     phone: '',
     address: '',
+    order_number: '',
     neighborhood: '',
     additionalInfo: ''
   });
@@ -78,6 +84,12 @@ export const Checkout = () => {
       // Iniciar timer de expiração do checkout
       if (response?.id) {
         startCheckoutExpiration(response.id.toString(), sessionId);
+
+         setCustomerData(prev => ({
+        ...prev,
+        id: response.id,
+        order_number: response.order_number
+      }));
       }
       
       return response?.id || Date.now().toString();
@@ -236,6 +248,7 @@ export const Checkout = () => {
     const phoneNumber = '5584999999999'; // Número do WhatsApp da loja - ALTERE AQUI PARA O NÚMERO REAL
     
     let message = `🎂 *Novo Pedido - Bruno Cakes* 🎂\n\n`;
+     message += `*Número do Pedido:* ${orderId || customerData.id}\n`; 
     message += `*Cliente:* ${customerData.name}\n`;
     message += `*Email:* ${customerData.email}\n`;
     message += `*Telefone:* ${customerData.phone}\n`;
@@ -281,11 +294,11 @@ export const Checkout = () => {
     setIsLoading(true);
     
     try {
-      // Criar pedido no sistema
       const orderId = await createOrder(customerData, cart, total);
-      
       // Gerar link do WhatsApp
       const whatsappUrl = generateWhatsAppMessage();
+      window.open(whatsappUrl, '_blank');// Criar pedido no sistema
+    
       
       // Limpar carrinho
       clearCart();

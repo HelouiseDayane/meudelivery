@@ -316,11 +316,11 @@ function AppProvider({ children }: { children: ReactNode }) {
     // Sincronizar com backend (carrinho com expiração de 10 minutos)
     try {
       await api.addToCart(sessionId, product.id, quantity);
-      toast.success(`${product.name} adicionado ao carrinho`);
+     //  toast.success(`${product.name} adicionado ao carrinho`);
     } catch (error) {
       console.error('Erro ao sincronizar carrinho com backend:', error);
       // Continua funcionando localmente mesmo se o backend falhar
-      toast.success(`${product.name} adicionado ao carrinho (modo offline)`);
+      //toast.success(`${product.name} adicionado ao carrinho (modo offline)`);
     }
   };
 
@@ -376,10 +376,9 @@ function AppProvider({ children }: { children: ReactNode }) {
     // Sincronizar com backend
     try {
       await api.clearCart(sessionId);
-      toast.success('Carrinho limpo');
     } catch (error) {
       console.error('Erro ao limpar carrinho no backend:', error);
-      toast.success('Carrinho limpo (modo offline)');
+     
     }
   };
 
