@@ -1,5 +1,6 @@
 // Configuração da API pública para Bruno Cakes
-const API_BASE_URL = 'http://localhost:8191/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL || 'http://localhost:8000';
 
 // Configuração da loja Bruno Cakes
 export const STORE_CONFIG = {

@@ -1,6 +1,6 @@
 // API Administrativa para Bruno Cakes
-const API_BASE_URL = 'http://localhost:8191/api';
-
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL || 'http://localhost:8000';
 // Headers com token de admin
 const getAdminAuthHeaders = () => {
   const token = localStorage.getItem('admin_token');
