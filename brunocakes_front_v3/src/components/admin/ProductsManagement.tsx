@@ -186,15 +186,17 @@ export function ProductsManagement() {
       }
 
       console.log('📤 Enviando dados do produto:', productData);
+    // ...
 
       if (editingProduct) {
         // Atualizar produto existente
         console.log(`🔄 Atualizando produto ${editingProduct.id}`);
+    // ...
         await adminApi.updateProduct(editingProduct.id, productData);
         toast.success('Produto atualizado com sucesso!');
       } else {
         // Criar novo produto
-        console.log('➕ Criando novo produto');
+  // ...
         await adminApi.createProduct(productData);
         toast.success('Produto criado com sucesso!');
       }
@@ -213,14 +215,14 @@ export function ProductsManagement() {
 
   const handleToggleAvailability = async (productId: string, currentStatus: boolean) => {
     try {
-      console.log(`🔄 Toggling produto ${productId} - status atual: ${currentStatus} -> novo: ${!currentStatus}`);
+  // ...
       
       // Tentar primeiro o endpoint específico de toggle
       try {
         await adminApi.toggleProduct(productId);
-        console.log('✅ Toggle realizado via endpoint específico');
+  // ...
       } catch (toggleError) {
-        console.warn('⚠️ Endpoint de toggle falhou, tentando update:', toggleError);
+  // ...
         // Fallback para update manual
         await adminApi.updateProduct(productId, { is_active: !currentStatus });
         console.log('✅ Toggle realizado via update manual');
@@ -247,7 +249,7 @@ export function ProductsManagement() {
 
   const handleQuickStockUpdate = async (productId: string, newStock: number) => {
     try {
-      console.log(`📦 Atualizando estoque do produto ${productId} para ${newStock}`);
+  // ...
       await adminApi.updateProductStock(productId, newStock);
       await refreshProducts();
       toast.success('Estoque atualizado com sucesso!');
@@ -570,7 +572,7 @@ export function ProductsManagement() {
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-md overflow-hidden">
                         <ImageWithFallback
-                          src={product.imageUrl || getProductImageUrl(product.image)}
+                          src={getProductImageUrl(product.image_url || product.image)}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />

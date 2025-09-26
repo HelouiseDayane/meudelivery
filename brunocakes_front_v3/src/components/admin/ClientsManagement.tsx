@@ -55,14 +55,13 @@ export function ClientsManagement() {
           uniqueClients = [];
         }
         
-        console.log('👥 Clientes únicos extraídos:', uniqueClients);
-        console.log('📊 Quantidade de clientes:', uniqueClients.length);
+  // ...
         
         // Mapear dados do backend para o formato esperado pelo frontend
         if (Array.isArray(uniqueClients) && uniqueClients.length > 0) {
           const mappedClients = uniqueClients.map((client: any) => {
             // Debug: log do cliente recebido
-            console.log('Cliente raw do backend:', client);
+            // ...
             
             return {
               // Usar os nomes dos campos que realmente vêm do backend

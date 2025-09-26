@@ -1,6 +1,6 @@
 // Configuração da API pública para Bruno Cakes
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL;
 
 // Configuração da loja Bruno Cakes
 export const STORE_CONFIG = {
@@ -23,11 +23,11 @@ export const getProductImageUrl = (image: string | undefined | null) => {
   // Se já começa com http, retorna direto
   if (cleanPath.startsWith('http')) return cleanPath;
   // Se já começa com storage, retorna com domínio
-  if (cleanPath.startsWith('storage/')) return `http://localhost:8191/${cleanPath}`;
+  if (cleanPath.startsWith('storage/')) return `${DOMAIN_BASE_URL}/${cleanPath}`;
   // Se começa com products/, retorna storage/products
-  if (cleanPath.startsWith('products/')) return `http://localhost:8191/storage/products/${cleanPath.replace('products/', '')}`;
+  if (cleanPath.startsWith('products/')) return `${DOMAIN_BASE_URL}/storage/products/${cleanPath.replace('products/', '')}`;
   // Caso contrário, assume storage/products
-  return `http://localhost:8191/storage/products/${cleanPath}`;
+  return `${DOMAIN_BASE_URL}/storage/products/${cleanPath}`;
 };
 
 export const API_ENDPOINTS = {
@@ -136,7 +136,7 @@ export const api = {
     if (phone) params.append('phone', phone);
     const url = `${API_ENDPOINTS.orders.byContact}?${params.toString()}`;
     
-    console.log('🔍 Buscando pedidos:', { email, phone, url });
+  // ...
     
     const response = await apiRequest(url, {
       method: 'GET',
@@ -145,7 +145,7 @@ export const api = {
       },
     });
     
-    console.log('📋 Resposta da busca de pedidos:', response);
+  // ...
     return response;
   },
 

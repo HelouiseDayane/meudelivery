@@ -1,18 +1,13 @@
 // API Administrativa para Bruno Cakes
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ;
+const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL;
 // Headers com token de admin
 const getAdminAuthHeaders = () => {
   const token = localStorage.getItem('admin_token');
-  console.log(`🔍 getAdminAuthHeaders - Token encontrado: ${token ? 'SIM' : 'NÃO'}`);
-  if (token) {
-    console.log(`🔍 Token: ${token.substring(0, 10)}...`);
-  }
   const headers = {
     'Accept': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  console.log(`🔍 Headers finais:`, headers);
   return headers;
 };
 
@@ -34,18 +29,15 @@ export const adminApiRequest = async (url: string, options: RequestInit = {}) =>
       ...options 
     };
 
-    console.log(`🌐 Fazendo requisição para: ${url}`);
-    console.log(`📋 Método: ${defaultOptions.method || 'GET'}`);
-    console.log(`📋 Headers:`, defaultOptions.headers);
+  // ...
     
     const response = await fetch(url, defaultOptions);
 
-    console.log(`📡 Resposta recebida - Status: ${response.status} ${response.statusText}`);
-    console.log(`📡 Headers de resposta:`, Object.fromEntries(response.headers.entries()));
+  // ...
 
     // 204 é um sucesso para operações que não retornam conteúdo
     if (response.status === 204) {
-      console.log('✅ Operação realizada com sucesso (sem conteúdo de retorno)');
+  // ...
       return { success: true };
     }
     
@@ -56,10 +48,10 @@ export const adminApiRequest = async (url: string, options: RequestInit = {}) =>
     }
     
     const responseData = await response.json();
-    console.log(`✅ Dados recebidos:`, responseData);
+  // ...
     return responseData;
   } catch (error) {
-    console.error(`❌ Erro na requisição para ${url}:`, error);
+  // ...
     throw error;
   }
 };
@@ -207,7 +199,7 @@ export const adminApi = {
     const formData = new FormData();
     
     // Log dos dados recebidos
-    console.log('🔄 api_admin.updateProduct - dados recebidos:', data);
+  // ...
     
     // Adicionar _method=PUT para compatibilidade com alguns backends PHP/Laravel
     formData.append('_method', 'PUT');
@@ -215,28 +207,28 @@ export const adminApi = {
     Object.entries(data).forEach(([key, value]) => {
       if (key === 'file' && value instanceof File) {
         formData.append('image', value);
-        console.log(`📎 Adicionando arquivo: ${value.name}`);
+  // ...
       } else if (key === 'stock') {
         // Mapear 'stock' do frontend para 'quantity' do backend
         formData.append('quantity', String(value));
-        console.log(`📝 Mapeando campo: ${key} -> quantity = ${value}`);
+  // ...
       } else if (key === 'available') {
         // Mapear 'available' do frontend para 'is_active' do backend
         formData.append('is_active', String(value));
-        console.log(`📝 Mapeando campo: ${key} -> is_active = ${value}`);
+  // ...
       } else if (value !== undefined && value !== null && value !== '') {
         const stringValue = typeof value === 'boolean' || typeof value === 'number' 
           ? String(value) 
           : value as string;
         formData.append(key, stringValue);
-        console.log(`📝 Adicionando campo: ${key} = ${stringValue}`);
+  // ...
       }
     });
     
     // Log de debug para ver todos os campos
-    console.log('📤 FormData criado com os seguintes campos:');
+  // ...
     for (let [key, value] of formData.entries()) {
-      console.log(`  ${key}: ${value}`);
+  // ...
     }
     
     // Usar POST com _method=PUT para melhor compatibilidade
@@ -294,8 +286,7 @@ export const adminApi = {
   getOrder: (id: string) => adminApiRequest(ADMIN_API_ENDPOINTS.orders.show(id)),
 
   updateOrder: (id: string, data: any) => {
-    console.log(`🔄 updateOrder chamado com:`, { id, data });
-    console.log(`🌐 URL construída: ${ADMIN_API_ENDPOINTS.orders.update(id)}`);
+  // ...
     
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.update(id), { 
       method: 'PUT', 

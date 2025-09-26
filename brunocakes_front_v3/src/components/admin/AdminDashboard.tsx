@@ -19,7 +19,7 @@ export function AdminDashboard() {
   // Debug logs
   useEffect(() => {
     if (analytics) {
-      console.log('🎯 AdminDashboard - Analytics recebidos:', analytics);
+  // ...
     }
   }, [analytics]);
 

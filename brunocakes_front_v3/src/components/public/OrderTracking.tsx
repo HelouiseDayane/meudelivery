@@ -44,7 +44,7 @@ export const OrderTracking = () => {
     setIsSearching(true);
     
     try {
-      console.log('Buscando pedidos com:', { email, phone });
+  // ...
       
       // Tentar múltiplos formatos de telefone
       const phoneFormats = [];
@@ -99,7 +99,7 @@ export const OrderTracking = () => {
       } else if (results && results.orders && Array.isArray(results.orders)) {
         orders = results.orders;
       } else {
-        console.warn('Formato inesperado da resposta:', results);
+  // ...
         orders = [];
       }
       

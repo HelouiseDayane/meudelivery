@@ -18,13 +18,11 @@ export function AdminLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  console.log('🔍 AdminLayout Debug:');
-  console.log('  - Admin:', admin);
-  console.log('  - Current path:', location.pathname);
+  // ...
 
   // Redirect para login se não estiver logado
   if (!admin) {
-    console.log('🚫 Admin não logado, redirecionando para login');
+  // ...
     return <Navigate to="/admin/login" replace />;
   }
 
