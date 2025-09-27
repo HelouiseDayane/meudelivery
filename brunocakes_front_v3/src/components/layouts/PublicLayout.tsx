@@ -81,15 +81,14 @@ export const PublicLayout = () => {
                 </Link>
               </Button>
 
-              {/* PWA Install Button */}
-              <PWAInstallButton />
             </nav>
           </div>
         </div>
       </header>
 
-      {/* PWA Install Banner */}
+      <div className="container mx-auto px-4 py-2 flex justify-end">
       <PWAInstallButton />
+    </div>
 
       {/* Main Content */}
       <main className="flex-1">
