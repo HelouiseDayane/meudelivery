@@ -456,7 +456,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       
       // Usar o endpoint geral de analytics que não requer autenticação especial
       const analyticsData = await adminApi.getGeneralAnalytics();
-      console.log('📊 Dados recebidos do backend:', analyticsData);
+      
       
       // Verificar se os dados são válidos
       if (!analyticsData || typeof analyticsData !== 'object') {
@@ -683,9 +683,8 @@ function AppProvider({ children }: { children: ReactNode }) {
 
     const fetchOrders = async () => {
       try {
-        console.log('🔄 Carregando pedidos do backend...');
         const backendOrders = await adminApi.getOrders();
-        console.log('📦 Dados brutos do backend:', backendOrders);
+        
 
         // Transform backend data to expected format
         const transformedOrders = backendOrders.map((order: any) => ({

@@ -22,7 +22,7 @@ Route::get('/products/{id}/stock', [CheckoutController::class, 'getProductStock'
 Route::get('/products/{id}', [ProductController::class, 'show']); // Esta por últim
 
 // Checkout
-Route::post('/checkout', [CheckoutController::class, 'store']);
+Route::post('/checkout', [CheckoutController::class, 'storeWithPix']);
 Route::get('/checkout/pedidos', [CheckoutController::class, 'getPedidos']);
 
 // Carrinho

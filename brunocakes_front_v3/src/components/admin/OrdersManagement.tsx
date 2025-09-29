@@ -47,17 +47,6 @@ export const OrdersManagement = () => {
   // Estado de autenticação
   const isAdminAuthenticated = admin?.role === 'staff';
 
-  // Debug: verificar se os dados estão chegando
-  console.log('📊 Total de pedidos carregados:', orders.length);
-  console.log('👤 Admin atual:', admin);
-  console.log('🔐 Admin autenticado:', isAdminAuthenticated);
-  console.log('🔑 Token no localStorage:', localStorage.getItem('admin_token') ? 'PRESENTE' : 'AUSENTE');
-
-  // Debug: log dos pedidos para verificar estrutura dos dados
-  console.log('� Total de pedidos carregados:', orders.length);
-
-  // Debug: log dos pedidos para verificar estrutura dos dados
-  console.log('🔍 Orders recebidos:', orders);
 
   // Funções auxiliares para atualizar pedidos
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
@@ -138,15 +127,16 @@ export const OrdersManagement = () => {
     }
   };
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  // Filtrar pedidos nulos ou undefined antes de aplicar o filtro de busca/status
+  const filteredOrders = orders
+    .filter(order => !!order)
+    .filter(order => {
+      const matchesSearch = (order.id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                           (order.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                           (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
 
   const getStatusIcon = (status: string) => {
     switch (status) {

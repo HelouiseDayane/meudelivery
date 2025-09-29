@@ -58,10 +58,16 @@ export const Checkout = () => {
       const sessionId = localStorage.getItem('bruno_session_id') || '';
       
       // Validar estrutura do carrinho
-      const validatedItems = cart.filter(item => item?.product?.id).map(item => ({
-        product_id: item.product.id,
-        quantity: item.quantity
-      }));
+      const validatedItems = cart.filter(item => item?.product?.id).map(item => {
+        const price = item.product.isPromotion ? item.product.promotionPrice || item.product.price : item.product.price;
+        return {
+          product_id: item.product.id,
+          product_name: item.product.name,
+          unit_price: price,
+          quantity: item.quantity,
+          total_price: price * item.quantity
+        };
+      });
 
       if (validatedItems.length === 0) {
         throw new Error('Carrinho vazio ou itens inválidos');
@@ -244,38 +250,7 @@ export const Checkout = () => {
     setIsExistingCustomerModalOpen(true); // Volta para o modal de busca
   };
 
-  const generateWhatsAppMessage = () => {
-    const phoneNumber = '5584999999999'; // Número do WhatsApp da loja - ALTERE AQUI PARA O NÚMERO REAL
-    
-    let message = `🎂 *Novo Pedido - Bruno Cakes* 🎂\n\n`;
-     message += `*Número do Pedido:* ${orderId || customerData.id}\n`; 
-    message += `*Cliente:* ${customerData.name}\n`;
-    message += `*Email:* ${customerData.email}\n`;
-    message += `*Telefone:* ${customerData.phone}\n`;
-    message += `*Endereço:* ${customerData.address}\n`;
-    message += `*Bairro:* ${customerData.neighborhood}\n`;
-    
-    if (customerData.additionalInfo) {
-      message += `*Observações:* ${customerData.additionalInfo}\n`;
-    }
-    
-    message += `\n*🛒 ITENS DO PEDIDO:*\n`;
-    
-    cart.forEach((item, index) => {
-      const price = item.product.isPromotion ? item.product.promotionPrice || item.product.price : item.product.price;
-      message += `${index + 1}. ${item.product.name}\n`;
-      message += `   Quantidade: ${item.quantity}x\n`;
-      message += `   Valor unitário: R$ ${price.toFixed(2)}\n`;
-      message += `   Subtotal: R$ ${(price * item.quantity).toFixed(2)}\n\n`;
-    });
-    
-    message += `*💰 VALOR TOTAL: R$ ${total.toFixed(2)}*\n\n`;
-    message += `*Forma de Pagamento:* PIX (será enviado após confirmação)\n`;
-    message += `*Retirada na loja:* Rua das Tortas, 123 - Centro\n\n`;
-    message += `_Aqui não é fatia nem pedaço, aqui é tora!_ 🍰`;
-    
-    return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -295,30 +270,16 @@ export const Checkout = () => {
     
     try {
       const orderId = await createOrder(customerData, cart, total);
-      // Gerar link do WhatsApp
-      const whatsappUrl = generateWhatsAppMessage();
-      window.open(whatsappUrl, '_blank');// Criar pedido no sistema
-    
-      
-      // Limpar carrinho
       clearCart();
-      
-      // Redirecionar para WhatsApp
-      window.open(whatsappUrl, '_blank');
-      
-      toast.success('Pedido criado! Redirecionando para WhatsApp...');
-      
-      // Redirecionar para página de acompanhamento
+      toast.success('Pedido criado com sucesso! Aguarde alguns segundos, você receberá a chave PIX para pagamento do seu pedido. Caso não receba, verifique se o número de telefone foi inserido corretamente.');
       setTimeout(() => {
         navigate('/tracking');
-      }, 2000);
-      
+      }, 3000);
     } catch (error) {
       if (error instanceof Error && error.message.includes('Carrinho expirado')) {
         // Erro já tratado na função createOrder
         return;
       }
-      
       toast.error('Erro ao processar pedido. Verifique seus dados e tente novamente.');
     } finally {
       setIsLoading(false);

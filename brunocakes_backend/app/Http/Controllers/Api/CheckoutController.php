@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use App\Jobs\ExpireCartJob;
 use App\Jobs\ExpireCheckoutJob;
 use App\Jobs\SyncStockJob;
+use App\Http\Controllers\Api\PaymentWebhookController;
 
 class CheckoutController extends Controller
 {
@@ -317,16 +318,24 @@ class CheckoutController extends Controller
         ]);
     }
 
+
+
     /**
-     * ✅ Criar pedido (checkout)
+     * ✅ Criar pedido + pagamento PIX
      */
-    public function store(Request $request)
+    public function storeWithPix(Request $request)
     {
         $data = $request->validate([
             'session_id' => 'required|string',
             'customer_name' => 'required|string|max:255',
+            'customer_email' => 'required|string|email',
             'customer_phone' => 'required|string|max:20',
-            'customer_address' => 'nullable|string'
+            'address_street' => 'nullable|string',
+            'address_neighborhood' => 'nullable|string',
+            'items' => 'required|array',
+            'items.*.product_id' => 'required|integer',
+            'items.*.quantity' => 'required|integer|min:1',
+            'observations' => 'nullable|string'
         ]);
 
         $sessionId = $data['session_id'];
@@ -343,63 +352,65 @@ class CheckoutController extends Controller
         $totalAmount = array_sum(array_column($cart, 'total_price'));
 
         DB::beginTransaction();
-        
         try {
-            
             // Criar ordem
             $order = Order::create([
                 'customer_name' => $data['customer_name'],
+                'customer_email' => $data['customer_email'],
                 'customer_phone' => $data['customer_phone'],
-                'customer_address' => $data['customer_address'] ?? null,
+                'address_street' => $data['address_street'] ?? null,
+                'address_neighborhood' => $data['address_neighborhood'] ?? null,
                 'total_amount' => $totalAmount,
                 'status' => 'pending_payment',
-                'checkout_expires_at' => now()->addMinutes(10),
+                'checkout_expires_at' => now()->addMinutes(15),
                 'stock_reserved' => true
             ]);
 
             // Criar itens da ordem
-            foreach ($cart as $productId => $item) {
+            foreach ($data['items'] as $item) {
                 OrderItem::create([
                     'order_id' => $order->id,
-                    'product_id' => $productId,
-                    'product_name' => $item['product_name'],
-                    'unit_price' => $item['unit_price'],
+                    'product_id' => $item['product_id'],
+                    'product_name' => $cart[$item['product_id']]['product_name'] ?? '',
+                    'unit_price' => $cart[$item['product_id']]['unit_price'] ?? 0,
                     'quantity' => $item['quantity'],
-                    'total_price' => $item['total_price']
+                    'total_price' => $cart[$item['product_id']]['total_price'] ?? 0
                 ]);
             }
 
-            // Limpar carrinho (mas manter reservas até pagamento)
+            // Limpar carrinho
             Redis::del($cartKey);
 
-            // ✅ AGENDAR JOB PARA EXPIRAR CHECKOUT
-            ExpireCheckoutJob::dispatch($order->id)
-                ->delay(now()->addMinutes(10));
-
-            Log::info('🛒 Checkout criado e job agendado', [
+            // Criar registro de pagamento
+            $payment = Payment::create([
                 'order_id' => $order->id,
-                'customer' => $data['customer_name'],
-                'total' => $totalAmount,
-                'expires_at' => $order->checkout_expires_at
+                'provider' => 'mercadopago',
+                'status' => 'pending',
+                'amount' => $totalAmount
             ]);
+
+            // Gerar PIX
+            $pixResponse = app(PaymentWebhookController::class)->gerarPixPagamento($order->id);
+            $payment->update([
+                'pix_payload' => json_encode($pixResponse)
+            ]);
+
+            // Agendar expiração do checkout
+            ExpireCheckoutJob::dispatch($order->id)
+                ->delay(now()->addMinutes(20));
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Pedido criado com sucesso',
+                'message' => 'Pedido e pagamento PIX criados com sucesso',
                 'order_id' => $order->id,
                 'order' => $order->load('items'),
-                'checkout_expires_in_minutes' => 10
+                'payment' => $payment,
+                'pix' => $pixResponse,
+                'checkout_expires_in_minutes' => 15
             ], 201);
-
         } catch (\Exception $e) {
             DB::rollback();
-            
-            Log::error('❌ Erro ao criar checkout', [
-                'session_id' => $sessionId,
-                'error' => $e->getMessage()
-            ]);
-
             return response()->json([
                 'message' => 'Erro interno do servidor',
                 'error' => $e->getMessage()

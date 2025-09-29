@@ -10,15 +10,29 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use App\Jobs\SyncStockJob;
 use App\Events\StockUpdated;
+use Illuminate\Support\Facades\Http;
+
 
 class PaymentWebhookController extends Controller
 {
     public function notify(Request $request)
     {
         $paymentId = $request->input('payment_id');
+        $idSession = $request->input('id_session');
         $status = $request->input('status'); // paid, failed, pending
-        
-        $payment = Payment::with('order.items')->find($paymentId);
+
+        // Busca por payment_id ou session_id na tabela orders
+        if ($paymentId) {
+            $payment = Payment::with('order.items')->find($paymentId);
+        } elseif ($idSession) {
+            $order = Order::where('session_id', $idSession)->first();
+            if (!$order) {
+                return response()->json(['error' => 'Order com session_id não encontrada'], 404);
+            }
+            $payment = Payment::with('order.items')->where('order_id', $order->id)->first();
+        } else {
+            return response()->json(['error' => 'Payment id ou session id não informado'], 400);
+        }
 
         if (!$payment) {
             return response()->json(['error' => 'Payment not found'], 404);
@@ -30,7 +44,6 @@ class PaymentWebhookController extends Controller
             if ($status === 'paid') {
                 // Pagamento aprovado - finaliza venda
                 $this->finalizeOrder($order, $payment);
-                
             } elseif ($status === 'failed') {
                 // Pagamento falhou - reverte estoque
                 $this->revertOrderStock($order, $payment);
@@ -40,47 +53,73 @@ class PaymentWebhookController extends Controller
         });
     }
 
-    /**
-     * ✅ NOVA: Simular pagamento para desenvolvimento
-     */
-    public function simulatePayment(Request $request)
+    public function gerarPixPagamento($orderId)
     {
-        $data = $request->validate([
-            'payment_id' => 'required|exists:payments,id',
-            'status' => 'required|in:paid,failed,pending'
-        ]);
+        $order = Order::with('items')->findOrFail($orderId);
+        // Recupera session id (SKU) - pode ser passado via parâmetro ou buscar no Payment
+        $payment = Payment::where('order_id', $order->id)->first();
+        $id_session = $payment ? ($payment->provider_payment_id ?? $order->id) : $order->id;
 
-        $payment = Payment::with('order.items')->find($data['payment_id']);
+        // Monta descrição detalhada dos itens
+        $descricao = "";
+        foreach ($order->items as $item) {
+            $descricao .= "{$item->product_name} (Qtd: {$item->quantity}, Preço: R$ {$item->unit_price}) | ";
+        }
+        $descricao = rtrim($descricao, '| ');
+        $descricao = "PEDIDO ID: REF-{$order->id} || " . $descricao;
 
-        if (!$payment) {
-            return response()->json(['error' => 'Payment not found'], 404);
+        // Extrai DDD e número do telefone
+        $ddd = null;
+        $numero = null;
+        if (preg_match('/\((\d{2,3})\)\s*(\d{4,5}-\d{4})/', $order->customer_phone, $matches)) {
+            $ddd = $matches[1];
+            $numero = preg_replace('/\D/', '', $matches[2]);
+        } else {
+            // fallback: extrai só números
+            $numero = preg_replace('/\D/', '', $order->customer_phone);
         }
 
-        return DB::transaction(function () use ($payment, $data) {
-            $order = $payment->order;
-            $status = $data['status'];
+        // Monta url de notificação com id_session
+        $url_notificacao = "https://brunocakes.zapsrv.com/api/payment/notify?id_session={$id_session}";
 
-            if ($status === 'paid') {
-                $this->finalizeOrder($order, $payment);
-                $message = 'Pagamento simulado como APROVADO';
-                
-            } elseif ($status === 'failed') {
-                $this->revertOrderStock($order, $payment);
-                $message = 'Pagamento simulado como REJEITADO';
-                
-            } else {
-                $payment->update(['status' => 'pending']);
-                $message = 'Pagamento mantido como PENDENTE';
-            }
+    $payload = [
+        "valor" => (string)number_format($order->total_amount, 2, '.', ''),
+        "titulo" => "Pagamento PIX Bruno Cake",
+        "descricao" => (string)$descricao,
+        "referencia_externa" => (string)"REF-{$order->id}",
+        "SKU" => (string)$id_session,
+        "NomeCliente" => (string)$order->customer_name,
+        "UltNomeCliente" => "",
+        "email_cliente" => (string)$order->customer_email,
+        "DDD_Cliente" => (string)$ddd,
+        "Tel_Cliente" => (string)$numero,
+        "tipo_notificacao" => "GET | POST | JSON",
+        "url_notificacao" => (string)$url_notificacao,
+        "texto" => "Pagamento realizado com sucesso!",
+        "access_token_plataforma" => "APP_USR-2954630391946213-092217-6b5cdbe01a967e4debb13f09bac7b210-672482120",
+        "access_token_vendedor" => "APP_USR-2954630391946213-092218-3c911573cc885ff46d176fd1e56b3a10-41047718"
+    ];
 
-            return response()->json([
-                'message' => $message,
-                'order_id' => $order->id,
-                'payment_status' => $payment->fresh()->status,
-                'order_status' => $order->fresh()->status
+       
+        \Log::info('Enviando payload para mppix', ['payload' => $payload]);
+
+        $response = Http::withHeaders([
+            'Content-Type' => 'application/json'
+        ])->post('https://01.zapsrv.com/zap_request/delivery/mppix/', $payload);
+
+        \Log::info('Status HTTP mppix', ['status' => $response->status()]);
+        \Log::info('Resposta mppix', ['response' => $response->body()]);
+
+        if (!$response->successful()) {
+            \Log::error('Erro ao disparar mppix', [
+                'status' => $response->status(),
+                'body' => $response->body()
             ]);
-        });
+        }
+
+        return $response->json();
     }
+
 
     private function finalizeOrder($order, $payment)
     {
