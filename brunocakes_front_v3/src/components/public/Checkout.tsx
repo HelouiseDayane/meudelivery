@@ -51,6 +51,9 @@ export const Checkout = () => {
     additionalInfo: ''
   });
 
+  // Estado para modal de confirmação do pedido
+  const [showOrderConfirmationModal, setShowOrderConfirmationModal] = useState(false);
+
   // Função para criar pedido
   const createOrder = async (customerData: CustomerData, cart: any[], total: number) => {
     try {
@@ -193,10 +196,8 @@ export const Checkout = () => {
     setIsSearchingCustomer(true);
     try {
       // Enviar apenas os dígitos do telefone
-      const contactToSend = customerContact.replace(/\D/g, '');
-      
+      const contactToSend = customerContact; // já está formatado
       const response = await api.getCustomerLastOrder(contactToSend);
-      
       if (response && response.customer_name) {
         // Salva os dados encontrados para confirmação
         setFoundCustomerData(response);
@@ -271,10 +272,7 @@ export const Checkout = () => {
     try {
       const orderId = await createOrder(customerData, cart, total);
       clearCart();
-      toast.success('Pedido criado com sucesso! Aguarde alguns segundos, você receberá a chave PIX para pagamento do seu pedido. Caso não receba, verifique se o número de telefone foi inserido corretamente.');
-      setTimeout(() => {
-        navigate('/tracking');
-      }, 3000);
+      setShowOrderConfirmationModal(true);
     } catch (error) {
       if (error instanceof Error && error.message.includes('Carrinho expirado')) {
         // Erro já tratado na função createOrder
@@ -303,7 +301,34 @@ export const Checkout = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-4xl">
+  <div className="container mx-auto px-4 py-6 max-w-4xl">
+      {/* Modal de confirmação do pedido criado */}
+      <Dialog open={showOrderConfirmationModal} onOpenChange={setShowOrderConfirmationModal}>
+        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto w-full">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-green-700 flex items-center gap-2">
+              <MessageCircle className="w-6 h-6 text-green-600" />
+              Pedido criado com sucesso!
+            </DialogTitle>
+            <DialogDescription className="mt-2 text-base text-green-800">
+              Aguarde alguns segundos, você receberá a chave PIX para pagamento do seu pedido.<br />
+              <strong>Importante:</strong> Caso não receba, verifique se o número de telefone foi inserido corretamente.<br /><br />
+              <span className="text-orange-700 font-semibold">Fique atento ao WhatsApp para receber a chave PIX e as instruções de pagamento.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center pt-6">
+            <Button
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white text-lg px-8 py-3"
+              onClick={() => {
+                setShowOrderConfirmationModal(false);
+                navigate('/tracking');
+              }}
+            >
+              OK, entendi!
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="mb-6">
         <Button 
           variant="ghost" 

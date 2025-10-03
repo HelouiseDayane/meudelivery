@@ -51,7 +51,6 @@ export const OrdersManagement = () => {
   // Funções auxiliares para atualizar pedidos
   const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      console.log(`🔄 Confirmando pedido ${orderId}`);
       
       // Usar o endpoint confirm-many que já existe
       await adminApi.confirmManyOrders([orderId]);
@@ -59,71 +58,55 @@ export const OrdersManagement = () => {
       // Atualiza o estado local após sucesso
       updateOrder(orderId, { status: newStatus as any });
       
-      console.log(`✅ Pedido ${orderId} confirmado com sucesso`);
       
     } catch (error) {
-      console.error(`❌ Erro ao confirmar pedido ${orderId}:`, error);
       // Aqui você pode adicionar um toast de erro se quiser
     }
   };
 
   const updatePaymentStatus = (orderId: string, paymentStatus: string) => {
     // Implementar lógica de pagamento se necessário
-    console.log(`Atualizar pagamento do pedido ${orderId} para ${paymentStatus}`);
   };
 
   // Confirmar pedido (para pedidos já pagos)
   const handleConfirmOrder = async (orderId: string) => {
     try {
-      console.log(`🔄 Confirmando pedido ${orderId}`);
-      console.log(`🔑 Token no localStorage:`, localStorage.getItem('admin_token') ? 'PRESENTE' : 'AUSENTE');
-      console.log(`👤 Admin autenticado:`, isAdminAuthenticated);
-      
+     
       await adminApi.confirmManyOrders([orderId]);
       
       // Atualiza o status local
       updateOrder(orderId, { status: 'confirmed' as any });
       
-      console.log(`✅ Pedido ${orderId} confirmado com sucesso`);
       
     } catch (error) {
-      console.error(`❌ Erro ao confirmar pedido ${orderId}:`, error);
     }
   };
 
   // Cancelar pedido
   const handleCancelPayment = async (orderId: string) => {
     try {
-      console.log(`🔄 Cancelando pedido ${orderId}`);
-      console.log(`📋 Modelo de request: PATCH /api/admin/orders/cancel-payment`);
-      console.log(`📋 Body: { "order_ids": [${orderId}] }`);
       
       await adminApi.cancelPayments([orderId]);
       
       // Atualiza o status local - usar "canceled" (8 chars) ao invés de "cancelled" (9 chars)
       updateOrder(orderId, { status: 'canceled' as any });
       
-      console.log(`✅ Pedido ${orderId} cancelado com sucesso`);
       
     } catch (error) {
-      console.error(`❌ Erro ao cancelar pedido ${orderId}:`, error);
     }
   };
 
   // Finalizar pedido (mark as completed)
   const handleFinishOrder = async (orderId: string) => {
     try {
-      console.log(`🔄 Finalizando pedido ${orderId}`);
       
       await adminApi.markAsCompleted([orderId]);
       
       // Atualiza o status local
       updateOrder(orderId, { status: 'completed' as any });
       
-      console.log(`✅ Pedido ${orderId} finalizado com sucesso`);
       
     } catch (error) {
-      console.error(`❌ Erro ao finalizar pedido ${orderId}:`, error);
     }
   };
 
@@ -183,25 +166,41 @@ export const OrdersManagement = () => {
   };
 
   // Função para verificar se o pagamento foi aprovado (status que vem da API)
-  const isPaymentApproved = (status: string) => {
+  // Função para verificar se o pagamento foi aprovado (usa payment_status do backend)
+  const isPaymentApproved = (paymentStatus: string) => {
     // Se o status não é 'pending_payment', significa que o pagamento foi processado
-    return status !== 'pending_payment';
+    return paymentStatus !== 'pending_payment';
   };
 
   // Função para mostrar indicador de pagamento
-  const getPaymentIndicator = (status: string) => {
-    if (status === 'pending_payment') {
+  // Função para mostrar indicador de pagamento (usa payment_status do backend)
+  const getPaymentIndicator = (paymentStatus: string) => {
+    if (paymentStatus === 'pending_payment') {
       return (
         <Badge variant="outline" className="text-orange-600 border-orange-600 ml-2">
           <Clock className="w-3 h-3 mr-1" />
           Aguardando Pagamento
         </Badge>
       );
-    } else {
+    } else if (paymentStatus === 'failed' || paymentStatus === 'falied' || paymentStatus === 'canceled' || paymentStatus === 'cancelled') {
+      return (
+        <Badge variant="outline" className="text-red-600 border-red-600 ml-2">
+          <XCircle className="w-3 h-3 mr-1" />
+          Cancelado
+        </Badge>
+      );
+    } else if (paymentStatus === 'paid') {
       return (
         <Badge variant="outline" className="text-green-600 border-green-600 ml-2">
           <CheckCircle className="w-3 h-3 mr-1" />
           Pago
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" className="text-gray-600 border-gray-600 ml-2">
+          <Flag className="w-3 h-3 mr-1" />
+          {paymentStatus}
         </Badge>
       );
     }
@@ -242,7 +241,6 @@ export const OrdersManagement = () => {
   const generateWhatsAppLink = (order: Order) => {
     // Verificar se o whatsapp existe e não é undefined
     if (!order.whatsapp) {
-      console.warn('WhatsApp não informado para o pedido:', order.id);
       return '#'; // Retorna link vazio se não houver whatsapp
     }
     
@@ -360,7 +358,7 @@ export const OrdersManagement = () => {
                             {getStatusIcon(order.status)}
                             <span className="ml-1">{getStatusText(order.status)}</span>
                           </Badge>
-                          {getPaymentIndicator(order.status)}
+                          {getPaymentIndicator((order as any).payment_status || order.status)}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -381,8 +379,6 @@ export const OrdersManagement = () => {
                                 variant="outline" 
                                 size="sm"
                                 onClick={() => {
-                                  console.log('🎯 Pedido selecionado:', order);
-                                  console.log('📋 Items do pedido:', order.items);
                                   setSelectedOrder(order);
                                 }}
                                 className="gap-1"
@@ -393,7 +389,7 @@ export const OrdersManagement = () => {
                             </DialogTrigger>
                             
                             {/* Botão de confirmar pedido - apenas para pedidos já pagos */}
-                            {isPaymentApproved(order.status) && 
+                            {isPaymentApproved((order as any).payment_status || order.status) && 
                              order.status !== 'confirmed' && 
                              order.status !== 'completed' && 
                              order.status !== 'canceled' && (
@@ -445,11 +441,11 @@ export const OrdersManagement = () => {
                                         {getStatusIcon(selectedOrder.status)}
                                         <span className="ml-1">{getStatusText(selectedOrder.status)}</span>
                                       </Badge>
-                                      {getPaymentIndicator(selectedOrder.status)}
+                                      {getPaymentIndicator((selectedOrder as any).payment_status || selectedOrder.status)}
                                     </div>
                                     <div className="flex gap-2">
                                       {/* Botão de confirmar pedido - apenas para pedidos já pagos */}
-                                      {isPaymentApproved(selectedOrder.status) && 
+                                      {isPaymentApproved((selectedOrder as any).payment_status || selectedOrder.status) && 
                                        selectedOrder.status !== 'confirmed' && 
                                        selectedOrder.status !== 'completed' && 
                                        selectedOrder.status !== 'canceled' && (
@@ -551,7 +547,6 @@ export const OrdersManagement = () => {
                                       {selectedOrder.items && selectedOrder.items.length > 0 ? (
                                         selectedOrder.items.map((item: any, index: number) => {
                                           // Debug: log do item individual
-                                          console.log(`🔍 Item ${index}:`, item);
                                           
                                           // Usar o preço diretamente do item (unit_price do backend)
                                           const price = Number(item.price || item.unit_price || 0);
@@ -559,7 +554,6 @@ export const OrdersManagement = () => {
                                           const itemName = item.name || item.product_name || item.product?.name || 'Produto não informado';
                                           
                                           // Debug: valores processados
-                                          console.log(`💰 Item processado - Nome: ${itemName}, Preço: ${price}, Quantidade: ${quantity}`);
                                           
                                           return (
                                             <div key={index} className="flex justify-between items-center p-2 bg-muted/50 rounded">

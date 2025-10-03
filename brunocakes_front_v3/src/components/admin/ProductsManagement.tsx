@@ -290,30 +290,24 @@ export function ProductsManagement() {
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleSyncStock}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Sincronizar Estoque
-          </Button>
-          
-          <Button variant="outline" onClick={refreshProducts}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Atualizar Lista
-          </Button>
-          
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={resetForm}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Doce
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingProduct ? 'Editar Doce' : 'Novo Doce'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={resetForm}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Doce
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingProduct ? 'Editar Doce' : 'Novo Doce'}
+                </DialogTitle>
+              </DialogHeader>
+              <form onSubmit={async (e) => {
+                await handleSubmit(e);
+                // Atualiza lista de produtos automaticamente após criar/editar
+                await refreshProducts();
+              }} className="space-y-6">
               {/* Basic Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

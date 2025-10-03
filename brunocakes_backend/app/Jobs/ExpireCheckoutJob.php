@@ -58,18 +58,23 @@ class ExpireCheckoutJob implements ShouldQueue
         }
 
         // Expirar a ordem usando status 'canceled'
-        $order->update([
-            'status' => 'canceled',
-            'stock_reserved' => false
-        ]);
+        // Cancelar pedido e pagamento corretamente (status 'failed' no pagamento)
+        $payment = $order->payment;
+        if ($payment) {
+            // Usa lógica centralizada do PaymentWebhookController
+            app(\App\Http\Controllers\Api\PaymentWebhookController::class)->revertOrderStock($order, $payment);
+        } else {
+            $order->update([
+                'status' => 'canceled',
+                'stock_reserved' => false
+            ]);
+        }
 
-        // Liberar estoque de todos os itens
+        // Liberar estoque de todos os itens (mantém para garantir consistência)
         foreach ($order->items as $item) {
             $currentReserved = Redis::get("product_reserved_{$item->product_id}") ?? 0;
             $newReserved = max(0, $currentReserved - $item->quantity);
-            
             Redis::set("product_reserved_{$item->product_id}", $newReserved);
-            
             Log::info('📦 Estoque liberado do checkout expirado', [
                 'order_id' => $this->orderId,
                 'product_id' => $item->product_id,
@@ -78,11 +83,6 @@ class ExpireCheckoutJob implements ShouldQueue
                 'reserved_before' => $currentReserved,
                 'reserved_after' => $newReserved
             ]);
-        }
-
-        // Cancelar pagamento se existir
-        if ($order->payment) {
-            $order->payment->update(['status' => 'canceled']);
         }
 
         Log::info('❌ Checkout expirado automaticamente', [

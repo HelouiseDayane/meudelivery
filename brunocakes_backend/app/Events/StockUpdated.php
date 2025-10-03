@@ -10,6 +10,7 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Redis;
 
 class StockUpdated implements ShouldBroadcast
 {
@@ -63,8 +64,8 @@ class StockUpdated implements ShouldBroadcast
 
     private function getStockData($productId)
     {
-        $totalStock = \Redis::get("product_stock_{$productId}") ?? 0;
-        $reservedStock = \Redis::get("product_reserved_{$productId}") ?? 0;
+        $totalStock = Redis::get("product_stock_{$productId}") ?? 0;
+        $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
         $availableStock = max(0, $totalStock - $reservedStock);
 
         return [

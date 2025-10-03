@@ -125,8 +125,12 @@ class ProductAdminController extends Controller
 
         $data = [];
         foreach ($validated as $key => $value) {
-            // Só atualiza os campos enviados
             $data[$key] = $value;
+        }
+
+        // Se não está em promoção, zere o campo promotion_price
+        if (isset($data['is_promo']) && !$data['is_promo']) {
+            $data['promotion_price'] = null;
         }
 
         // Imagem: só altera se for enviada
@@ -139,7 +143,7 @@ class ProductAdminController extends Controller
         }
 
         $product->update($data);
-        
+
         // ✅ CORRIGIDO: Sincronizar estoque com Redis automaticamente após update
         $this->syncProductStock($product->fresh());
 

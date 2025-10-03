@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRealTime } from '../../hooks/useRealTime';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -15,12 +16,19 @@ import { toast } from 'sonner';
 export const PublicMenu = () => {
   const { products, addToCart, getAvailableStock, hasStock, refreshProducts } = useApp();
   const { isMobile } = usePWA();
-  
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [quantities, setQuantities] = useState<{[key: string]: number}>({});
+
+  // Atualização em tempo real do estoque
+  const { lastEvent } = useRealTime();
+  useEffect(() => {
+    if (lastEvent && lastEvent.type === 'stock_update') {
+      refreshProducts();
+    }
+  }, [lastEvent, refreshProducts]);
 
   // Listener para eventos de carrinho expirado
   useEffect(() => {

@@ -401,51 +401,37 @@ function AppProvider({ children }: { children: ReactNode }) {
       // Se for admin, usa API de admin; senão usa API pública
       if (isAdminAuthenticated) {
         const adminProducts = await adminApi.getProducts();
-        
         const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-        
-        // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
         if (mappedProducts.length > 0) {
           setProducts(mappedProducts);
           toast.success('Lista de produtos atualizada!');
+        } else {
+          toast.info('Nenhum produto cadastrado no momento.');
+          setProducts([]);
         }
-        
       } else {
-        try {
-          const productsWithStock = await api.getProductsWithStock();
-          
-          const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-          
-          // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
-          if (mappedProducts.length > 0) {
-            setProducts(mappedProducts);
+        const response = await api.getProductsWithStock();
+        const mappedProducts = Array.isArray(response) ? response.map(mapProductFromBackend) : [];
+        if (mappedProducts.length > 0) {
+          setProducts(mappedProducts);
+          toast.success('Lista de produtos atualizada!');
+        } else {
+          // Fallback para API básica
+          const basicProducts = await api.getPublicProducts();
+          const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+          if (basicMappedProducts.length > 0) {
+            setProducts(basicMappedProducts);
             toast.success('Lista de produtos atualizada!');
           } else {
-            // Fallback para API básica se with-stock retornar vazio
-            const basicProducts = await api.getPublicProducts();
-            const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-            
-            if (basicMappedProducts.length > 0) {
-              setProducts(basicMappedProducts);
-              toast.success('Lista de produtos atualizada!');
-            }
-          }
-          
-        } catch (publicApiError) {
-          // Fallback para API básica se with-stock falhar
-          const basicProducts = await api.getPublicProducts();
-          const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-          
-          if (mappedProducts.length > 0) {
-            setProducts(mappedProducts);
-            toast.success('Lista de produtos atualizada!');
+            toast.info('Nenhum produto cadastrado no momento.');
+            setProducts([]);
           }
         }
       }
-      
     } catch (error) {
       console.error('❌ Erro ao atualizar produtos:', error);
       toast.error('Erro ao atualizar produtos');
+      setProducts([]);
     }
   };
 
@@ -606,76 +592,13 @@ function AppProvider({ children }: { children: ReactNode }) {
     validateAdminSession();
   }, []);
 
-  // --- Load products based on authentication status ---
+  // --- Carregar produtos automaticamente ao mudar autenticação/admin ---
   useEffect(() => {
-    const loadProductsWithStock = async () => {
-      try {
-        // Se for admin, usar API de admin; senão usar API pública
-        if (isAdminAuthenticated) {
-          const adminProducts = await adminApi.getProducts();
-          
-          const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-          
-          if (mappedProducts.length > 0) {
-            setProducts(mappedProducts);
-          }
-          
-        } else {
-          try {
-            const productsWithStock = await api.getProductsWithStock();
-            
-            const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-            
-            if (mappedProducts.length > 0) {
-              setProducts(mappedProducts);
-            } else {
-              // Fallback para API básica
-              const basicProducts = await api.getPublicProducts();
-              const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-              
-              if (basicMappedProducts.length > 0) {
-                setProducts(basicMappedProducts);
-              }
-            }
-            
-          } catch (publicApiError) {
-            // Fallback para API básica se with-stock falhar
-            const basicProducts = await api.getPublicProducts();
-            const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-            
-            if (mappedProducts.length > 0) {
-              setProducts(mappedProducts);
-            }
-          }
-        }
-        
-      } catch (error) {
-        console.error('❌ Erro ao carregar produtos:', error);
-        
-        // Tentar adminApi como último recurso se disponível
-        if (localStorage.getItem('admin_token')) {
-          try {
-            const adminProducts = await adminApi.getProducts();
-            const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-            
-            if (mappedProducts.length > 0) {
-              setProducts(mappedProducts);
-            }
-          } catch (adminError) {
-            console.error('❌ Fallback adminApi também falhou:', adminError);
-            toast.error('Erro ao carregar produtos - verifique se o backend está rodando');
-          }
-        }
-      }
-    };
-
-    // Só carregar produtos se admin foi definido (pode ser null ou objeto)
-    // Isso evita carregar produtos antes da validação terminar
     if (admin !== undefined) {
-      loadProductsWithStock();
+      refreshProducts();
       setLoading(false);
     }
-  }, [isAdminAuthenticated, admin]);
+  }, [admin]);
 
   // Load orders from backend for admin
   useEffect(() => {
@@ -712,7 +635,17 @@ function AppProvider({ children }: { children: ReactNode }) {
           observations: order.observations || '',
           scheduledDate: order.scheduled_date,
           createdAt: order.created_at,
-          pixCode: order.payment?.pix_payload ? JSON.parse(order.payment.pix_payload || '{}').copy_paste : null,
+            pixCode: (() => {
+              if (order.payment?.pix_payload) {
+                try {
+                  const payload = JSON.parse(order.payment.pix_payload);
+                  return payload?.copy_paste || null;
+                } catch {
+                  return null;
+                }
+              }
+              return null;
+            })(),
           pixExpiresAt: order.checkout_expires_at,
         }));
 

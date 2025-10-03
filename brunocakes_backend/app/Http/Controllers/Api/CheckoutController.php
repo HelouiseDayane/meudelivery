@@ -55,19 +55,28 @@ class CheckoutController extends Controller
         // Salvar reserva individual (para limpeza posterior)
         Redis::setex("reserve:{$sessionId}:{$productId}", 600, $quantity); // 10 min TTL
 
-        // Adicionar ao carrinho
+        // Adicionar ao carrinho acumulando produtos
         $cartKey = "cart:{$sessionId}";
-        $cartItem = [
-            'product_id' => $productId,
-            'product_name' => $product->name,
-            'unit_price' => $product->price,
-            'quantity' => $quantity,
-            'total_price' => $product->price * $quantity,
-            'image_url' => $product->image ? asset('storage/' . $product->image) : null,
-            'expires_at' => now()->addMinutes(10)->toISOString()
-        ];
+        $cartData = Redis::get($cartKey);
+        $cart = $cartData ? json_decode($cartData, true) : [];
 
-        Redis::setex($cartKey, 600, json_encode([$productId => $cartItem])); // 10 min TTL
+        // Se já existe o produto, soma a quantidade
+        if (isset($cart[$productId])) {
+            $cart[$productId]['quantity'] += $quantity;
+            $cart[$productId]['total_price'] = $cart[$productId]['unit_price'] * $cart[$productId]['quantity'];
+        } else {
+            $cart[$productId] = [
+                'product_id' => $productId,
+                'product_name' => $product->name,
+                'unit_price' => $product->price,
+                'quantity' => $quantity,
+                'total_price' => $product->price * $quantity,
+                'image_url' => $product->image ? asset('storage/' . $product->image) : null,
+                'expires_at' => now()->addMinutes(10)->toISOString()
+            ];
+        }
+
+        Redis::setex($cartKey, 600, json_encode($cart)); // 10 min TTL
 
         // ✅ DISPARAR JOB DE EXPIRAÇÃO
         try {
@@ -89,9 +98,11 @@ class CheckoutController extends Controller
             ]);
         }
 
+        // Retornar o item atualizado/adicionado
+        $cartItemResponse = $cart[$productId];
         return response()->json([
             'message' => 'Produto adicionado ao carrinho',
-            'cart_item' => $cartItem,
+            'cart_item' => $cartItemResponse,
             'available_stock' => $availableStock - $quantity,
             'cart_expires_in_minutes' => 10,
             'debug_job_dispatched' => true
@@ -271,6 +282,13 @@ class CheckoutController extends Controller
         $products = Product::where('is_active', true)->get();
         $productsWithStock = [];
 
+        // Sincroniza todos os estoques do MySQL para o Redis ANTES de montar o array de resposta
+        foreach ($products as $product) {
+            // Atualiza o Redis com o valor do banco
+            Redis::set("product_stock_{$product->id}", $product->quantity);
+        }
+
+        // Agora monta a resposta já com o Redis atualizado
         foreach ($products as $product) {
             $redisStock = Redis::get("product_stock_{$product->id}") ?? $product->quantity;
             $reservedStock = Redis::get("product_reserved_{$product->id}") ?? 0;
@@ -333,8 +351,8 @@ class CheckoutController extends Controller
             'address_street' => 'nullable|string',
             'address_neighborhood' => 'nullable|string',
             'items' => 'required|array',
-            'items.*.product_id' => 'required|integer',
-            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.product_id' => ['required', 'regex:/^\\d+$/'],
+            'items.*.quantity' => ['required', 'regex:/^\\d+$/', 'min:1'],
             'observations' => 'nullable|string'
         ]);
 
@@ -349,10 +367,38 @@ class CheckoutController extends Controller
         }
 
         $cart = json_decode($cartData, true);
-        $totalAmount = array_sum(array_column($cart, 'total_price'));
+        // Garante que as chaves do carrinho são inteiras
+        $cart = array_combine(
+            array_map('intval', array_keys($cart)),
+            array_values($cart)
+        );
+
+        // Calcular total com base no preço ATUAL do banco
+        $totalAmount = 0;
+        $orderItems = [];
+        foreach ($data['items'] as $item) {
+            $productId = (int) $item['product_id'];
+            $quantity = (int) $item['quantity'];
+            $product = Product::find($productId);
+            if ($product) {
+                $unitPrice = $product->is_promo && $product->promotion_price !== null ? $product->promotion_price : $product->price;
+                $totalPrice = $unitPrice * $quantity;
+                $orderItems[] = [
+                    'product_id' => $productId,
+                    'product_name' => $product->name,
+                    'unit_price' => $unitPrice,
+                    'quantity' => $quantity,
+                    'total_price' => $totalPrice
+                ];
+                $totalAmount += $totalPrice;
+            }
+        }
 
         DB::beginTransaction();
         try {
+          
+            $randomKey = strtoupper(bin2hex(random_bytes(8)));
+
             // Criar ordem
             $order = Order::create([
                 'customer_name' => $data['customer_name'],
@@ -363,18 +409,19 @@ class CheckoutController extends Controller
                 'total_amount' => $totalAmount,
                 'status' => 'pending_payment',
                 'checkout_expires_at' => now()->addMinutes(15),
-                'stock_reserved' => true
+                'stock_reserved' => true,
+                'payment_reference' => $randomKey
             ]);
 
-            // Criar itens da ordem
-            foreach ($data['items'] as $item) {
+            // Criar itens da ordem com preço atualizado do banco
+            foreach ($orderItems as $orderItem) {
                 OrderItem::create([
                     'order_id' => $order->id,
-                    'product_id' => $item['product_id'],
-                    'product_name' => $cart[$item['product_id']]['product_name'] ?? '',
-                    'unit_price' => $cart[$item['product_id']]['unit_price'] ?? 0,
-                    'quantity' => $item['quantity'],
-                    'total_price' => $cart[$item['product_id']]['total_price'] ?? 0
+                    'product_id' => $orderItem['product_id'],
+                    'product_name' => $orderItem['product_name'],
+                    'unit_price' => $orderItem['unit_price'],
+                    'quantity' => $orderItem['quantity'],
+                    'total_price' => $orderItem['total_price']
                 ]);
             }
 
@@ -389,8 +436,13 @@ class CheckoutController extends Controller
                 'amount' => $totalAmount
             ]);
 
-            // Gerar PIX
-            $pixResponse = app(PaymentWebhookController::class)->gerarPixPagamento($order->id);
+            // Se o status do pedido for cancelado, definir pagamento como 'failed'
+            if ($request->input('status') === 'canceled') {
+                $payment->update(['status' => 'failed']);
+            }
+
+            // Gerar PIX passando a chave aleatória
+            $pixResponse = app(PaymentWebhookController::class)->gerarPixPagamento($order->id, $randomKey);
             $payment->update([
                 'pix_payload' => json_encode($pixResponse)
             ]);
@@ -434,11 +486,21 @@ class CheckoutController extends Controller
     /**
      * ✅ Obter pedidos (para listagem pública)
      */
+
     public function getPedidos()
     {
-        $orders = Order::with('items')
+        $orders = Order::with(['items', 'payment'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
+
+        // Adiciona o total real somando os itens e inclui status do pagamento
+        $orders->getCollection()->transform(function ($order) {
+            $order->total_real = collect($order->items)->sum(function ($item) {
+                return (float) $item->total_price;
+            });
+            $order->payment_status = $order->payment ? $order->payment->status : null;
+            return $order;
+        });
 
         return response()->json($orders);
     }

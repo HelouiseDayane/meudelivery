@@ -17,91 +17,154 @@ class PaymentWebhookController extends Controller
 {
     public function notify(Request $request)
     {
-        $paymentId = $request->input('payment_id');
-        $idSession = $request->input('id_session');
-        $status = $request->input('status'); // paid, failed, pending
+        \Log::info('Webhook notify chamado', [
+            'payment_id' => $request->input('payment_id'),
+            'status' => $request->input('status'),
+            'payload' => $request->all()
+        ]);
 
-        // Busca por payment_id ou session_id na tabela orders
-        if ($paymentId) {
-            $payment = Payment::with('order.items')->find($paymentId);
-        } elseif ($idSession) {
-            $order = Order::where('session_id', $idSession)->first();
-            if (!$order) {
-                return response()->json(['error' => 'Order com session_id não encontrada'], 404);
-            }
-            $payment = Payment::with('order.items')->where('order_id', $order->id)->first();
-        } else {
-            return response()->json(['error' => 'Payment id ou session id não informado'], 400);
+        $paymentId = $request->input('payment_id');
+        $status = $request->input('status'); // paid, failed, pending
+        $randomKey = $request->input('random_key');
+
+        if (!$paymentId) {
+            return response()->json(['error' => 'Payment id não informado'], 400);
         }
+
+        $payment = Payment::with('order.items')->find($paymentId);
 
         if (!$payment) {
             return response()->json(['error' => 'Payment not found'], 404);
+        }
+
+        $order = $payment->order;
+        // Validação da random_key
+        if (!$randomKey || $randomKey !== $order->payment_reference) {
+            \Log::warning('Falha na validação da random_key no notify', [
+                'order_id' => $order->id,
+                'payment_id' => $paymentId,
+                'random_key_recebida' => $randomKey,
+                'random_key_esperada' => $order->payment_reference
+            ]);
+            return response()->json(['error' => 'Chave de validação inválida'], 403);
         }
 
         return DB::transaction(function () use ($payment, $status) {
             $order = $payment->order;
 
             if ($status === 'paid') {
-                // Pagamento aprovado - finaliza venda
                 $this->finalizeOrder($order, $payment);
             } elseif ($status === 'failed') {
-                // Pagamento falhou - reverte estoque
                 $this->revertOrderStock($order, $payment);
             }
 
-            return response()->json(['message' => 'Webhook processed']);
+            $order->refresh();
+            $payment->refresh();
+
+            return response()->json([
+                'message' => 'Webhook processed',
+                'order_status' => $order->status,
+                'payment_status' => $payment->status,
+                'order_id' => $order->id,
+                'payment_id' => $payment->id
+            ]);
         });
     }
 
-    public function gerarPixPagamento($orderId)
+
+    public function gerarPixPagamento($orderId, $randomKey = null)
     {
-        $order = Order::with('items')->findOrFail($orderId);
-        // Recupera session id (SKU) - pode ser passado via parâmetro ou buscar no Payment
-        $payment = Payment::where('order_id', $order->id)->first();
-        $id_session = $payment ? ($payment->provider_payment_id ?? $order->id) : $order->id;
+    $order = Order::with('items')->findOrFail($orderId);
+    // Se não veio a chave, usa a do pedido
+    $randomKey = $randomKey ?: $order->payment_reference;
 
-        // Monta descrição detalhada dos itens
-        $descricao = "";
+        // Calcular o valor total
+        $valorTotal = $order->items->sum(fn($item) => (float)$item->total_price);
+
+        // Pega o payment
+        $payment = Payment::where('order_id', $order->id)->firstOrFail();
+        $paymentId = $payment->id;
+
+
+        // Monta descrição fiscal detalhada
+        $descricao = "Bruno Cake\n";
+        $descricao .= sprintf("PEDIDO ID: %06d\n", $order->id);
+        $descricao .= str_repeat('-', 32) . "\n";
         foreach ($order->items as $item) {
-            $descricao .= "{$item->product_name} (Qtd: {$item->quantity}, Preço: R$ {$item->unit_price}) | ";
+            $descricao .= sprintf("%s x%d - R$ %.2f\n", $item->product_name, $item->quantity, $item->total_price);
         }
-        $descricao = rtrim($descricao, '| ');
-        $descricao = "PEDIDO ID: REF-{$order->id} || " . $descricao;
+        $descricao .= str_repeat('-', 32) . "\n";
+        $descricao .= sprintf("TOTAL: R$ %.2f\n", $valorTotal);
+        $descricao .= str_repeat('-', 32) . "\n";
+        $descricao .= "Cliente: {$order->customer_name}\n";
+        $descricao .= "Telefone: {$order->customer_phone}\n";
+        $descricao .= "Endereço: ";
+        $endereco = [];
+        if ($order->address_street) $endereco[] = $order->address_street;
+        if ($order->address_neighborhood) $endereco[] = $order->address_neighborhood;
+        $descricao .= implode(', ', $endereco) . "\n";
+        $descricao .= str_repeat('-', 56) . "\n";
 
-        // Extrai DDD e número do telefone
+
+        $produtos = [];
+        foreach ($order->items as $item) {
+            $produtos[] = [
+                'id' => $item->product_id,
+                'nome' => $item->product_name,
+                'quantidade' => $item->quantity,
+                'preco' => $item->unit_price,
+                'total' => $item->total_price,
+            ];
+        }
+
+        // Extrai telefone
         $ddd = null;
-        $numero = null;
-        if (preg_match('/\((\d{2,3})\)\s*(\d{4,5}-\d{4})/', $order->customer_phone, $matches)) {
+        $numero = preg_replace('/\D/', '', $order->customer_phone ?? '');
+        if (preg_match('/^(\d{2})(\d+)$/', $numero, $matches)) {
             $ddd = $matches[1];
-            $numero = preg_replace('/\D/', '', $matches[2]);
-        } else {
-            // fallback: extrai só números
-            $numero = preg_replace('/\D/', '', $order->customer_phone);
+            $numero = $matches[2];
         }
 
-        // Monta url de notificação com id_session
-        $url_notificacao = "https://brunocakes.zapsrv.com/api/payment/notify?id_session={$id_session}";
+        // Url de notificação usando payment_id
+        $url_notificacao = "https://brunocakes.zapsrv.com/api/payment/notify?payment_id={$paymentId}&status=paid";
 
-    $payload = [
-        "valor" => (string)number_format($order->total_amount, 2, '.', ''),
-        "titulo" => "Pagamento PIX Bruno Cake",
-        "descricao" => (string)$descricao,
-        "referencia_externa" => (string)"REF-{$order->id}",
-        "SKU" => (string)$id_session,
-        "NomeCliente" => (string)$order->customer_name,
-        "UltNomeCliente" => "",
-        "email_cliente" => (string)$order->customer_email,
-        "DDD_Cliente" => (string)$ddd,
-        "Tel_Cliente" => (string)$numero,
-        "tipo_notificacao" => "GET | POST | JSON",
-        "url_notificacao" => (string)$url_notificacao,
-        "texto" => "Pagamento realizado com sucesso!",
+        // Gerar SKU único (igual ao exemplo)
+        $sku = 'TORA' . $order->id . '-' . strtoupper(\Str::random(12));
+
+        // Pega sobrenome se existir
+        $nomeParts = explode(' ', trim($order->customer_name));
+        $ultNome = count($nomeParts) > 1 ? array_pop($nomeParts) : 'Integrado';
+
+        // E-mail padrão se não houver
+        $emailCliente = $order->customer_email ?: 'BRUNO_CAKE-DELIVERY@system.com';
+
+        $payload = [
+            "random_key" => $randomKey,
+            "valor" => (string)number_format($valorTotal, 2, '.', ''),
+            "titulo" => "Pagamento PIX",
+            "descricao" => (string)$descricao,
+            "produtos" => $produtos,
+            "referencia_externa" => (string)"REF-{$order->id}",
+            "SKU" => $sku,
+            "NomeCliente" => (string)$order->customer_name,
+            "UltNomeCliente" => $ultNome,
+            "email_cliente" => $emailCliente,
+            "DDD_Cliente" => (string)$ddd,
+            "Tel_Cliente" => (string)$numero,
+            "tipo_notificacao" => "GET | POST | JSON",
+            "url_notificacao" => (string)$url_notificacao,
+            "texto" => "Pagamento realizado com sucesso!",
         "access_token_plataforma" => "APP_USR-2954630391946213-092217-6b5cdbe01a967e4debb13f09bac7b210-672482120",
         "access_token_vendedor" => "APP_USR-2954630391946213-092218-3c911573cc885ff46d176fd1e56b3a10-41047718"
-    ];
+        ];
 
-       
-        \Log::info('Enviando payload para mppix', ['payload' => $payload]);
+
+        // Log detalhado do payload serializado para debug
+        \Log::info('Enviando payload para mppix', [
+            'payload' => $payload,
+            'random_key' => $randomKey,
+            'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+        ]);
 
         $response = Http::withHeaders([
             'Content-Type' => 'application/json'
@@ -117,8 +180,14 @@ class PaymentWebhookController extends Controller
             ]);
         }
 
-        return $response->json();
+        return response()->json([
+        'message' => 'Pedido e pagamento PIX criados com sucesso',
+        'order_id' => $order->id,
+        'payment_id' => $paymentId,
+        'response_api' => $response->json(),
+    ]);
     }
+
 
 
     private function finalizeOrder($order, $payment)

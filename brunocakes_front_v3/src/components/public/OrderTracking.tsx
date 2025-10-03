@@ -298,7 +298,7 @@ export const OrderTracking = () => {
                   <Separator className="my-2" />
                   <div className="flex justify-between items-center font-semibold">
                     <span>Total</span>
-                    <span className="text-primary">R$ {Number(order.total_amount || order.total || 0).toFixed(2)}</span>
+                    <span className="text-primary">R$ {Number(order.total_real ?? order.total_amount ?? order.total ?? 0).toFixed(2)}</span>
                   </div>
                 </div>
 
