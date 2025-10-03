@@ -8,6 +8,24 @@ import { Badge } from '../ui/badge';
 import { Search, Users, ShoppingBag, Calendar, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface Order {
+  id: string;
+  clientName?: string;
+  email?: string;
+  whatsapp?: string;
+  address?: string;
+  neighborhood?: string;
+  total: number;
+  createdAt: string;
+  status?: string;
+  paymentStatus?: string;
+  payment_status?: string;
+  paymentMethod?: string;
+  payment_method?: string;
+  scheduledDate?: string;
+  scheduled_date?: string;
+}
+
 interface UniqueClient {
   name: string;
   email: string;
@@ -55,28 +73,30 @@ export function ClientsManagement() {
           uniqueClients = [];
         }
         
-  // ...
-        
         // Mapear dados do backend para o formato esperado pelo frontend
         if (Array.isArray(uniqueClients) && uniqueClients.length > 0) {
           const mappedClients = uniqueClients.map((client: any) => {
-            // Debug: log do cliente recebido
-            // ...
-            
+            // Se vierem os pedidos do cliente, filtrar só pagos
+            let orders = client.orders || [];
+            if (!Array.isArray(orders)) orders = [];
+            const pedidosPagos = orders.filter((order: any) => {
+              const status = (order['payment_status'] || order.status || '').toLowerCase();
+              return status === 'paid' || status === 'confirmed';
+            });
+            const totalSpent = pedidosPagos.reduce((sum: number, order: any) => sum + (order.total || 0), 0);
+            const totalOrders = pedidosPagos.length;
+            // Se não vierem os pedidos, usar os campos antigos (mas pode vir errado do backend)
             return {
-              // Usar os nomes dos campos que realmente vêm do backend
               name: client.name || client.customer_name || 'Nome não informado',
               email: client.email || client.customer_email || '',
               phone: client.phone || client.customer_phone || '',
               address: client.address || client.address_street || '',
               neighborhood: client.neighborhood || client.address_neighborhood || '',
-              totalOrders: client.totalOrders || parseInt(client.total_orders) || 0,
-              totalSpent: client.totalSpent || parseFloat(client.total_spent) || 0,
+              totalOrders: totalOrders || client.totalOrders || parseInt(client.total_orders) || 0,
+              totalSpent: totalSpent || client.totalSpent || parseFloat(client.total_spent) || 0,
               lastOrderDate: client.lastOrderDate || client.last_order_date || '',
               customerTier: '',
-              averageOrderValue: (client.totalOrders || client.total_orders) > 0 
-                ? (client.totalSpent || client.total_spent) / (client.totalOrders || client.total_orders) 
-                : 0,
+              averageOrderValue: (totalOrders > 0) ? (totalSpent / totalOrders) : 0,
               customerSince: client.lastOrderDate || client.last_order_date || ''
             };
           });
@@ -121,6 +141,10 @@ export function ClientsManagement() {
     const clientsMap = new Map<string, UniqueClient>();
 
     orders.forEach(order => {
+      // Considerar apenas pedidos pagos
+  const paymentStatus = (order['payment_status'] || order.status || '').toLowerCase();
+      if (paymentStatus !== 'paid' && paymentStatus !== 'confirmed') return;
+
       const key = order.whatsapp || order.email;
       if (!key) return;
 

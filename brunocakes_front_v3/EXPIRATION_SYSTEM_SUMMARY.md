@@ -1,4 +1,4 @@
-# Sistema de Expiração de Carrinho e Checkout - Bruno Cakes
+# Sistema de Expiração de Carrinho e Checkout - Bruno Cake
 
 ## Resumo das Implementações
 

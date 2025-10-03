@@ -1,10 +1,10 @@
-// Configuração da API pública para Bruno Cakes
+// Configuração da API pública para Bruno Cake
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL;
 
-// Configuração da loja Bruno Cakes
+// Configuração da loja Bruno Cake
 export const STORE_CONFIG = {
-  name: 'Bruno Cakes',
+  name: 'Bruno Cake',
   slogan: 'Aqui não é fatia nem pedaço, aqui é tora!',
   address: 'Rua das Tortas, 123 - Centro, São Paulo - SP',
   phone: '(11) 99999-9999',

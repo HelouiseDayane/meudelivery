@@ -1,4 +1,4 @@
-// API Administrativa para Bruno Cakes
+// API Administrativa para Bruno Cake
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ;
 const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL;
 // Headers com token de admin

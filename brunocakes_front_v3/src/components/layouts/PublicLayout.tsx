@@ -31,7 +31,7 @@ export const PublicLayout = () => {
                 <span className="text-white font-bold text-sm">BC</span>
               </div>
               <div className="hidden sm:block">
-                <h1 className="font-bold bruno-text-gradient">Bruno Cakes</h1>
+                <h1 className="font-bold bruno-text-gradient">Bruno Cake</h1>
                 <p className="text-xs text-muted-foreground">Aqui não é fatia nem pedaço, aqui é tora!</p>
               </div>
             </Link>
@@ -100,7 +100,7 @@ export const PublicLayout = () => {
         <div className="container mx-auto px-4 py-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
             <div>
-              <h3 className="font-semibold mb-2 bruno-text-gradient">Bruno Cakes</h3>
+              <h3 className="font-semibold mb-2 bruno-text-gradient">Bruno Cake</h3>
               <p className="text-muted-foreground">
                 A melhor doceria da cidade!<br />
                 Aqui não é fatia nem pedaço, aqui é tora!
@@ -124,7 +124,7 @@ export const PublicLayout = () => {
             </div>
           </div>
           <div className="border-t pt-4 mt-4 text-center text-muted-foreground">
-            <p>&copy; 2024 Bruno Cakes. Todos os direitos reservados.</p>
+            <p>&copy; 2024 Bruno Cake. Todos os direitos reservados.</p>
           </div>
         </div>
       </footer>

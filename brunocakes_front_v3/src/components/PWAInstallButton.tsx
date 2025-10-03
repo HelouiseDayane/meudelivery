@@ -27,7 +27,7 @@ export const PWAInstallButton = () => {
     try {
       const success = await installApp();
       if (success) {
-        toast.success('🎉 Bruno Cakes instalado com sucesso!');
+        toast.success('🎉 Bruno Cake instalado com sucesso!');
         setShowBanner(false);
       } else {
         toast.error('Instalação cancelada');
@@ -51,7 +51,7 @@ export const PWAInstallButton = () => {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-sm text-primary">
-                  🍰 Instale o Bruno Cakes
+                  🍰 Instale o Bruno Cake
                 </p>
                 <p className="text-xs text-muted-foreground">
                   No iPhone/iPad, toque em <b>Compartilhar</b> <Share className="inline w-4 h-4" /> e depois <b>Adicionar à Tela de Início</b>.
@@ -99,7 +99,7 @@ export const PWAInstallButton = () => {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-sm text-primary">
-                  🍰 Instale o Bruno Cakes
+                  🍰 Instale o Bruno Cake
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Acesso rápido, sem ocupar espaço!

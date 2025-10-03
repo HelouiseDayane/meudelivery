@@ -1,4 +1,4 @@
-// Bruno Cakes PWA Service Worker
+// Bruno Cake PWA Service Worker
 const CACHE_NAME = 'bruno-cakes-v1';
 const CACHE_ASSETS = [
   '/',
@@ -8,27 +8,27 @@ const CACHE_ASSETS = [
 
 // Install event
 self.addEventListener('install', (event) => {
-  console.log('Bruno Cakes Service Worker: Installing...');
+  console.log('Bruno Cake Service Worker: Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Bruno Cakes Service Worker: Caching assets');
+        console.log('Bruno Cake Service Worker: Caching assets');
         return cache.addAll(CACHE_ASSETS);
       })
       .then(() => self.skipWaiting())
-      .catch(err => console.log('Bruno Cakes Service Worker: Cache failed', err))
+      .catch(err => console.log('Bruno Cake Service Worker: Cache failed', err))
   );
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
-  console.log('Bruno Cakes Service Worker: Activating...');
+  console.log('Bruno Cake Service Worker: Activating...');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cache => {
           if (cache !== CACHE_NAME) {
-            console.log('Bruno Cakes Service Worker: Clearing old cache');
+            console.log('Bruno Cake Service Worker: Clearing old cache');
             return caches.delete(cache);
           }
         })
@@ -72,14 +72,14 @@ self.addEventListener('fetch', (event) => {
 // Background sync for offline orders (future enhancement)
 self.addEventListener('sync', (event) => {
   if (event.tag === 'background-sync') {
-    console.log('Bruno Cakes Service Worker: Background sync triggered');
+    console.log('Bruno Cake Service Worker: Background sync triggered');
   }
 });
 
 // Push notifications (future enhancement)
 self.addEventListener('push', (event) => {
   const options = {
-    body: event.data ? event.data.text() : 'Nova notificação do Bruno Cakes',
+    body: event.data ? event.data.text() : 'Nova notificação do Bruno Cake',
     icon: '/favicon.ico',
     badge: '/favicon.ico',
     vibrate: [100, 50, 100],
@@ -90,8 +90,8 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification('Bruno Cakes', options)
+    self.registration.showNotification('Bruno Cake', options)
   );
 });
 
-console.log('Bruno Cakes Service Worker loaded successfully! 🍰');
+console.log('Bruno Cake Service Worker loaded successfully! 🍰');

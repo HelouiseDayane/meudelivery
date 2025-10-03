@@ -1,3 +1,8 @@
+use App\Http\Controllers\Api\AddressController;
+// Rotas de endereços (apenas admin, protegidas por sanctum)
+Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
+    Route::apiResource('addresses', AddressController::class);
+});
 <?php
 
 use Illuminate\Support\Facades\Route;

@@ -245,7 +245,7 @@ export const OrdersManagement = () => {
     }
     
     const phoneNumber = order.whatsapp.replace(/\D/g, '');
-    let message = `🎂 *Bruno Cakes - Atualização do Pedido* 🎂\\n\\n`;
+    let message = `🎂 *Bruno Cake - Atualização do Pedido* 🎂\\n\\n`;
     message += `Olá ${order.clientName || 'Cliente'}!\\n\\n`;
     message += `Seu pedido #${order.id} foi atualizado:\\n`;
     message += `*Status:* ${getStatusText(order.status)}\\n\\n`;

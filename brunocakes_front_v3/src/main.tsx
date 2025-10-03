@@ -10,7 +10,7 @@ if ('serviceWorker' in navigator) {
       const registration = await navigator.serviceWorker.register('/sw.js');
       
     } catch (error) {
-      console.log('❌ Bruno Cakes PWA: Falha ao registrar Service Worker', error);
+      console.log('❌ Bruno Cake PWA: Falha ao registrar Service Worker', error);
     }
   });
 }

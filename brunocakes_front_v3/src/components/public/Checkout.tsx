@@ -30,6 +30,12 @@ interface CustomerData {
 export const Checkout = () => {
   const navigate = useNavigate();
   const { cart, clearCart } = useApp();
+  // Função para verificar se há item sem estoque (usa estoque real)
+  const { getAvailableStock } = useApp();
+  const hasOutOfStock = cart.some(item => {
+    const stock = getAvailableStock(item.product.id);
+    return stock === 0;
+  });
   const { currentStatus, startCheckoutExpiration, clearAllExpirationItems, CHECKOUT_EXPIRATION_MINUTES } = useCartExpiration();
   const [isLoading, setIsLoading] = useState(false);
   const [isExistingCustomerModalOpen, setIsExistingCustomerModalOpen] = useState(false);
@@ -255,9 +261,16 @@ export const Checkout = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+
     if (cart.length === 0) {
       toast.error('Seu carrinho está vazio');
+      return;
+    }
+
+    // Validação: impedir finalizar se algum item está sem estoque
+    if (hasOutOfStock) {
+      toast.error('Um ou mais itens do seu carrinho estão sem estoque. Remova-os para finalizar o pedido.');
       return;
     }
 
@@ -268,11 +281,12 @@ export const Checkout = () => {
     }
 
     setIsLoading(true);
-    
+
     try {
       const orderId = await createOrder(customerData, cart, total);
-      clearCart();
       setShowOrderConfirmationModal(true);
+      console.log('Modal de confirmação aberto!');
+      // Limpeza do carrinho e redirecionamento só após o usuário clicar no botão do modal
     } catch (error) {
       if (error instanceof Error && error.message.includes('Carrinho expirado')) {
         // Erro já tratado na função createOrder
@@ -301,34 +315,51 @@ export const Checkout = () => {
   }
 
   return (
-  <div className="container mx-auto px-4 py-6 max-w-4xl">
-      {/* Modal de confirmação do pedido criado */}
+    <div className="checkout-container">
+      {/* Botão de confirmação do pedido (modal) */}
       <Dialog open={showOrderConfirmationModal} onOpenChange={setShowOrderConfirmationModal}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto w-full">
+        <DialogContent
+          onOpenAutoFocus={() => {
+            setTimeout(() => {
+              setShowOrderConfirmationModal(false);
+              clearCart();
+              if (customerData.phone) {
+                const phone = customerData.phone.replace(/\D/g, '');
+                navigate(`/tracking?phone=${phone}`);
+              } else {
+                navigate('/tracking');
+              }
+            }, 2000);
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-green-700 flex items-center gap-2">
-              <MessageCircle className="w-6 h-6 text-green-600" />
-              Pedido criado com sucesso!
-            </DialogTitle>
-            <DialogDescription className="mt-2 text-base text-green-800">
-              Aguarde alguns segundos, você receberá a chave PIX para pagamento do seu pedido.<br />
-              <strong>Importante:</strong> Caso não receba, verifique se o número de telefone foi inserido corretamente.<br /><br />
-              <span className="text-orange-700 font-semibold">Fique atento ao WhatsApp para receber a chave PIX e as instruções de pagamento.</span>
+            <DialogTitle>Pedido realizado com sucesso!</DialogTitle>
+            <DialogDescription>
+              Seu pedido foi enviado para o seu WhatsApp!<br />
+              Verifique o aplicativo para confirmar o pedido e aguarde o contato da loja.<br />
+              Você pode acompanhar o status na tela de rastreamento.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-center pt-6">
+          <div className="flex justify-center mt-6">
             <Button
               className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white text-lg px-8 py-3"
               onClick={() => {
                 setShowOrderConfirmationModal(false);
-                navigate('/tracking');
+                clearCart();
+                if (customerData.phone) {
+                  const phone = customerData.phone.replace(/\D/g, '');
+                  navigate(`/tracking?phone=${phone}`);
+                } else {
+                  navigate('/tracking');
+                }
               }}
             >
-              OK, entendi!
+              Certo!
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
       <div className="mb-6">
         <Button 
           variant="ghost" 
@@ -507,14 +538,11 @@ export const Checkout = () => {
                 </div>
               );
             })}
-            
             <Separator />
-            
             <div className="flex justify-between items-center text-lg font-semibold">
               <span>Total</span>
               <span className="text-primary">R$ {total.toFixed(2)}</span>
             </div>
-
             <div className="bg-secondary/50 rounded-lg p-4 space-y-2">
               <h4 className="font-medium flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
@@ -556,16 +584,14 @@ export const Checkout = () => {
                 className="w-full"
               />
               <p className="text-xs text-muted-foreground">
-                Digite o telefone no formato (84) 99999-9999. A máscara será aplicada automaticamente.
+                Digite apenas números. A máscara será aplicada automaticamente.
               </p>
             </div>
           </div>
-          
-          {/* Footer com botões */}
           <div className="w-full flex justify-between gap-3 pt-4 border-t bg-gray-50 p-4 -mx-6 -mb-6 mt-4">
             <button 
               type="button" 
-              className="flex-1 px-4 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50 font-semibold"
               onClick={() => {
                 setIsExistingCustomerModalOpen(false);
                 setCustomerContact('');
@@ -574,13 +600,15 @@ export const Checkout = () => {
             >
               ❌ Cancelar
             </button>
-            <button 
-              type="button" 
-              className="flex-1 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+            <button
+              type="button"
+              className={`flex-1 min-w-[140px] px-4 py-2 border border-gray-300 rounded bg-white hover:bg-gray-50 font-semibold transition-all ${isSearchingCustomer || !customerContact.trim() ? 'opacity-60 cursor-not-allowed text-gray-500' : 'text-gray-700'}`}
               onClick={handleSearchExistingCustomer}
               disabled={isSearchingCustomer || !customerContact.trim()}
             >
-              {isSearchingCustomer ? '⏳ Buscando...' : '🔍 Buscar Dados'}
+              <span className="whitespace-nowrap">
+                {isSearchingCustomer ? '⏳ Buscando...' : '🔍 Buscar Dados'}
+              </span>
             </button>
           </div>
         </DialogContent>
@@ -598,7 +626,6 @@ export const Checkout = () => {
               Encontramos os dados deste cliente. Deseja preencher o formulário automaticamente com essas informações?
             </DialogDescription>
           </DialogHeader>
-          
           {foundCustomerData && (
             <div className="space-y-4 py-4 border rounded-lg p-4 bg-green-50">
               <div className="grid grid-cols-1 gap-3">
@@ -632,24 +659,26 @@ export const Checkout = () => {
               </div>
             </div>
           )}
-          
-          <DialogFooter className="flex-col sm:flex-row gap-3 pt-4">
+          <DialogFooter className="flex-col gap-3 pt-4">
             <Button 
               variant="outline" 
               onClick={handleRejectCustomer}
               className="w-full sm:w-auto border-red-200 text-red-700 hover:bg-red-50"
             >
-              ❌ Não, buscar novamente
+              ❌ buscar novamente
             </Button>
-            <Button 
+            <Button
+              variant="outline"
               onClick={handleConfirmCustomer}
-              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white"
+              className="w-full border-green-200 text-green-700 hover:bg-green-50 flex items-center justify-center gap-2 min-w-[200px] px-4 py-2 text-base font-semibold"
+              style={{ whiteSpace: 'normal', wordBreak: 'keep-all' }}
             >
-              ✅ Sim, preencher formulário
+              <span className="text-lg">✅</span>
+              <span>Sim, preencher formulário</span>
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
-};
+}

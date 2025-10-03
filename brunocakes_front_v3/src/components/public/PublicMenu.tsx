@@ -22,6 +22,7 @@ export const PublicMenu = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [quantities, setQuantities] = useState<{[key: string]: number}>({});
 
+
   // Atualização em tempo real do estoque
   const { lastEvent } = useRealTime();
   useEffect(() => {
@@ -29,6 +30,23 @@ export const PublicMenu = () => {
       refreshProducts();
     }
   }, [lastEvent, refreshProducts]);
+
+  // Sempre sincroniza a quantidade local máxima com o estoque disponível
+  useEffect(() => {
+    setQuantities(prev => {
+      const updated: {[key: string]: number} = { ...prev };
+      normalizedProducts.forEach(product => {
+        const availableStock = getAvailableStock(product.id);
+        // Se estoque zerou, zera quantidade local
+        if (availableStock === 0) {
+          updated[product.id] = 1;
+        } else if ((updated[product.id] || 1) > availableStock) {
+          updated[product.id] = availableStock;
+        }
+      });
+      return updated;
+    });
+  }, [products, getAvailableStock]);
 
   // Listener para eventos de carrinho expirado
   useEffect(() => {
@@ -45,43 +63,61 @@ export const PublicMenu = () => {
     };
   }, []);
 
-  // Função para obter quantidade local para um produto
+
+  // Função para obter quantidade local para um produto (máximo: estoque disponível)
   const getLocalQuantity = (productId: string) => {
-    return quantities[productId] || 1;
+    const availableStock = getAvailableStock(productId);
+    const local = quantities[productId] || 1;
+    return Math.min(local, availableStock);
   };
 
-  // Função para definir quantidade local para um produto
+
+  // Função para definir quantidade local para um produto (respeita estoque)
   const setLocalQuantity = (productId: string, quantity: number) => {
+    const availableStock = getAvailableStock(productId);
     setQuantities(prev => ({
       ...prev,
-      [productId]: Math.max(1, quantity)
+      [productId]: Math.max(1, Math.min(quantity, availableStock))
     }));
   };
 
   const categories = ['all', ...Array.from(new Set(products.map(p => p.category)))];
 
-  const filteredProducts = products.filter(product => {
+
+  // Padroniza os campos de badge para evitar bugs de exibição
+  const normalizedProducts = products.map((product) => ({
+    ...product,
+    isNew: product.isNew ?? product.is_new ?? false,
+    isPromotion: product.isPromotion ?? product.is_promo ?? false,
+  }));
+
+  const filteredProducts = normalizedProducts.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    
     // SEMPRE MOSTRAR PRODUTOS - apenas filtrar por busca e categoria
     return matchesSearch && matchesCategory;
   });
 
+
   const handleAddToCart = async (product: any, quantity: number = 1) => {
     const availableStock = getAvailableStock(product.id);
-    
-    if (availableStock < quantity) {
-      alert(`Estoque insuficiente! Disponível: ${availableStock} unidades`);
+    if (availableStock === 0) {
+      toast.error('Produto indisponível! Estoque esgotado.');
+      setLocalQuantity(product.id, 1);
       return;
     }
-    
+    if (availableStock < quantity) {
+      toast.error(`Estoque insuficiente! Disponível: ${availableStock} unidades`);
+      setLocalQuantity(product.id, availableStock);
+      return;
+    }
     setIsLoading(true);
     try {
       await addToCart(product, quantity);
-      // Reset local quantity after successful add
+      // Atualiza quantidade local e força atualização do estoque exibido
       setLocalQuantity(product.id, 1);
+      refreshProducts();
     } catch (error) {
       console.error('Erro ao adicionar ao carrinho:', error);
     } finally {
@@ -110,7 +146,7 @@ export const PublicMenu = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Bruno Cakes</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">Bruno Cake</h1>
         <p className="text-xl text-gray-600">Deliciosos bolos artesanais feitos com amor</p>
       </div>
 

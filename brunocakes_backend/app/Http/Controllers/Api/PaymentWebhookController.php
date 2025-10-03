@@ -23,6 +23,7 @@ class PaymentWebhookController extends Controller
             'payload' => $request->all()
         ]);
 
+
         $paymentId = $request->input('payment_id');
         $status = $request->input('status'); // paid, failed, pending
         $randomKey = $request->input('random_key');
@@ -38,7 +39,8 @@ class PaymentWebhookController extends Controller
         }
 
         $order = $payment->order;
-        // Validação da random_key
+
+        // Validação da random_key: deve ser a do pedido deste payment_id
         if (!$randomKey || $randomKey !== $order->payment_reference) {
             \Log::warning('Falha na validação da random_key no notify', [
                 'order_id' => $order->id,
@@ -47,6 +49,21 @@ class PaymentWebhookController extends Controller
                 'random_key_esperada' => $order->payment_reference
             ]);
             return response()->json(['error' => 'Chave de validação inválida'], 403);
+        }
+
+        // Validação extra: garantir que a random_key não está sendo usada para outro payment_id
+        $otherPayment = Payment::whereHas('order', function($q) use ($randomKey, $order) {
+            $q->where('payment_reference', $randomKey)->where('id', '!=', $order->id);
+        })->first();
+        if ($otherPayment) {
+            \Log::warning('Tentativa de usar random_key de outro pedido', [
+                'payment_id' => $paymentId,
+                'order_id' => $order->id,
+                'random_key' => $randomKey,
+                'other_payment_id' => $otherPayment->id,
+                'other_order_id' => $otherPayment->order_id
+            ]);
+            return response()->json(['error' => 'Chave de validação não pertence a este pagamento/pedido'], 403);
         }
 
         return DB::transaction(function () use ($payment, $status) {
@@ -125,8 +142,8 @@ class PaymentWebhookController extends Controller
             $numero = $matches[2];
         }
 
-        // Url de notificação usando payment_id
-        $url_notificacao = "https://brunocakes.zapsrv.com/api/payment/notify?payment_id={$paymentId}&status=paid";
+    // Url de notificação usando payment_id e random_key
+    $url_notificacao = "https://brunocakes.zapsrv.com/api/payment/notify?payment_id={$paymentId}&status=paid&random_key={$randomKey}";
 
         // Gerar SKU único (igual ao exemplo)
         $sku = 'TORA' . $order->id . '-' . strtoupper(\Str::random(12));

@@ -1,6 +1,6 @@
-# 🧁 Bruno Cakes API - Guia Completo de Testes com CURL
+# 🧁 Bruno Cake API - Guia Completo de Testes com CURL
 
-Este arquivo contém todos os endpoints da API do Bruno Cakes com exemplos práticos de uso em `curl`, explicações detalhadas e cenários de teste.
+Este arquivo contém todos os endpoints da API do Bruno Cake com exemplos práticos de uso em `curl`, explicações detalhadas e cenários de teste.
 
 ## 📋 **Índice**
 - [Configuração Inicial](#configuração-inicial)
