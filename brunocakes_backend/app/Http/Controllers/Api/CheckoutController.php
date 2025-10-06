@@ -77,6 +77,8 @@ class CheckoutController extends Controller
         }
 
         Redis::setex($cartKey, 600, json_encode($cart)); // 10 min TTL
+    
+        $this->registrarAtualizacaoEstoque($productId, 'stock_change');
 
         // ✅ DISPARAR JOB DE EXPIRAÇÃO
         try {
@@ -154,7 +156,7 @@ class CheckoutController extends Controller
                 Redis::setex($cartKey, 600, json_encode($cart));
             }
         }
-
+        $this->registrarAtualizacaoEstoque($productId, 'stock_change');
         return response()->json([
             'message' => 'Produto removido do carrinho',
             'released_quantity' => $reservedQuantity
@@ -181,6 +183,7 @@ class CheckoutController extends Controller
         $quantityDiff = $newQuantity - $oldQuantity;
         
         // Verificar se há estoque suficiente para o aumento
+        $this->registrarAtualizacaoEstoque($productId, 'stock_change');
         if ($quantityDiff > 0) {
             $product = Product::findOrFail($productId);
             $currentStock = Redis::get("product_stock_{$productId}") ?? $product->quantity;
@@ -258,6 +261,7 @@ class CheckoutController extends Controller
             
             // Liberar todas as reservas
             foreach ($cart as $productId => $item) {
+                $this->registrarAtualizacaoEstoque($productId, 'stock_change');
                 $reserveKey = "reserve:{$sessionId}:{$productId}";
                 $reservedQuantity = Redis::get($reserveKey) ?? 0;
                 
@@ -449,7 +453,7 @@ class CheckoutController extends Controller
 
             // Agendar expiração do checkout
             ExpireCheckoutJob::dispatch($order->id)
-                ->delay(now()->addMinutes(20));
+                ->delay(now()->addMinutes(15));
 
             DB::commit();
 
@@ -552,5 +556,22 @@ class CheckoutController extends Controller
         }
         
         return response()->json($lastOrder);
+    }
+
+        private function registrarAtualizacaoEstoque($productId, $tipo = 'stock_change') {
+        $totalStock = Redis::get("product_stock_{$productId}") ?? 0;
+        $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
+        $availableStock = max(0, $totalStock - $reservedStock);
+        $evento = [
+            'type' => $tipo,
+            'product_id' => $productId,
+            'available_stock' => $availableStock,
+            'total_stock' => (int)$totalStock,
+            'reserved_stock' => (int)$reservedStock,
+            'is_available' => $availableStock > 0,
+            'is_low_stock' => $availableStock <= 5 && $availableStock > 0,
+            'timestamp' => now()->toISOString()
+        ];
+        Redis::lpush('stock_updates', json_encode($evento));
     }
 }

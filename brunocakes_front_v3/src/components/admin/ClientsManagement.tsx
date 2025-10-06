@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useApp } from '../../App';
-import { adminApi } from '../../api_admin';
+import { getCustomerAnalytics } from '../../api_admin';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -22,6 +21,7 @@ interface Order {
   payment_status?: string;
   paymentMethod?: string;
   payment_method?: string;
+
   scheduledDate?: string;
   scheduled_date?: string;
 }
@@ -29,184 +29,62 @@ interface Order {
 interface UniqueClient {
   name: string;
   email: string;
-  phone: string;
-  address: string;
-  neighborhood: string;
   totalOrders: number;
   totalSpent: number;
   lastOrderDate: string;
-  customerTier?: string;
-  averageOrderValue?: number;
-  customerSince?: string;
 }
 
-export function ClientsManagement() {
-  const { orders } = useApp();
+function ClientsManagement() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [clients, setClients] = useState<UniqueClient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [clientDetails, setClientDetails] = useState<any>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [clientsStats, setClientsStats] = useState<any>(null);
+  const [filteredClients, setFilteredClients] = useState<UniqueClient[]>([]);
 
-  // Carregar clientes únicos da API
   useEffect(() => {
-    const loadUniqueClients = async () => {
+    const fetchClientsStats = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        
-        const response = await adminApi.getUniqueClients();
-        
-        // O backend retorna um array direto, não um objeto com propriedade customers
-        let uniqueClients = [];
-        
-        if (Array.isArray(response)) {
-          // A resposta É o array de clientes diretamente
-          uniqueClients = response;
-        } else if (response?.customers && Array.isArray(response.customers)) {
-          // Fallback para formato antigo se existir
-          uniqueClients = response.customers;
-        } else if (response?.data && Array.isArray(response.data)) {
-          // Fallback para formato com data
-          uniqueClients = response.data;
+        // Busca todos os dados de clientes do novo endpoint centralizado
+        const response = await getCustomerAnalytics();
+        if (response) {
+          setClientsStats(response);
+          setFilteredClients(response.top_clients || []);
         } else {
-          uniqueClients = [];
-        }
-        
-        // Mapear dados do backend para o formato esperado pelo frontend
-        if (Array.isArray(uniqueClients) && uniqueClients.length > 0) {
-          const mappedClients = uniqueClients.map((client: any) => {
-            // Se vierem os pedidos do cliente, filtrar só pagos
-            let orders = client.orders || [];
-            if (!Array.isArray(orders)) orders = [];
-            const pedidosPagos = orders.filter((order: any) => {
-              const status = (order['payment_status'] || order.status || '').toLowerCase();
-              return status === 'paid' || status === 'confirmed';
-            });
-            const totalSpent = pedidosPagos.reduce((sum: number, order: any) => sum + (order.total || 0), 0);
-            const totalOrders = pedidosPagos.length;
-            // Se não vierem os pedidos, usar os campos antigos (mas pode vir errado do backend)
-            return {
-              name: client.name || client.customer_name || 'Nome não informado',
-              email: client.email || client.customer_email || '',
-              phone: client.phone || client.customer_phone || '',
-              address: client.address || client.address_street || '',
-              neighborhood: client.neighborhood || client.address_neighborhood || '',
-              totalOrders: totalOrders || client.totalOrders || parseInt(client.total_orders) || 0,
-              totalSpent: totalSpent || client.totalSpent || parseFloat(client.total_spent) || 0,
-              lastOrderDate: client.lastOrderDate || client.last_order_date || '',
-              customerTier: '',
-              averageOrderValue: (totalOrders > 0) ? (totalSpent / totalOrders) : 0,
-              customerSince: client.lastOrderDate || client.last_order_date || ''
-            };
-          });
-          
-          setClients(mappedClients);
-        } else {
-          setClients([]);
-          // Fallback: extrair clientes dos pedidos locais
-          extractClientsFromOrders();
+          setClientsStats(null);
+          setFilteredClients([]);
         }
       } catch (error) {
-        console.error('Erro ao carregar clientes únicos:', error);
-        toast.error('Erro ao carregar clientes da API');
-        // Fallback: extrair clientes dos pedidos locais
-        extractClientsFromOrders();
+        setClientsStats(null);
+        setFilteredClients([]);
+        toast.error('Erro ao carregar estatísticas de clientes');
       } finally {
         setLoading(false);
       }
     };
+    fetchClientsStats();
+  }, []);
 
-    loadUniqueClients();
-  }, [orders]); // Adicionar orders como dependência para fallback
-
-  // Função para carregar detalhes específicos do cliente
-  const loadClientDetails = async (clientEmail: string) => {
-    try {
-      setLoadingDetails(true);
-      // Como não temos um ID específico, vamos usar o email como identificador
-      // Se o backend suportar busca por email, senão usar os dados que já temos
-      const clientData = clients.find(c => c.email === clientEmail);
-      setClientDetails(clientData);
-    } catch (error) {
-      console.error('Erro ao carregar detalhes do cliente:', error);
-      toast.error('Erro ao carregar detalhes do cliente');
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
-
-  // Função de fallback para extrair clientes dos pedidos locais
-  const extractClientsFromOrders = () => {
-    const clientsMap = new Map<string, UniqueClient>();
-
-    orders.forEach(order => {
-      // Considerar apenas pedidos pagos
-  const paymentStatus = (order['payment_status'] || order.status || '').toLowerCase();
-      if (paymentStatus !== 'paid' && paymentStatus !== 'confirmed') return;
-
-      const key = order.whatsapp || order.email;
-      if (!key) return;
-
-      if (clientsMap.has(key)) {
-        const existing = clientsMap.get(key)!;
-        existing.totalOrders += 1;
-        existing.totalSpent += order.total;
-        existing.lastOrderDate = new Date(order.createdAt) > new Date(existing.lastOrderDate) 
-          ? order.createdAt 
-          : existing.lastOrderDate;
-      } else {
-        clientsMap.set(key, {
-          name: order.clientName || 'Nome não informado',
-          email: order.email || '',
-          phone: order.whatsapp || '',
-          address: order.address || '',
-          neighborhood: '',
-          totalOrders: 1,
-          totalSpent: order.total,
-          lastOrderDate: order.createdAt,
-        });
-      }
-    });
-
-    const extractedClients = Array.from(clientsMap.values());
-    setClients(extractedClients);
-  };
-
-  const filteredClients = Array.isArray(clients) ? clients.filter(client => {
-    const name = (client.name || '').toLowerCase();
-    const phone = (client.phone || '');
-    const email = (client.email || '').toLowerCase();
+  useEffect(() => {
+    if (!clientsStats || !clientsStats.top_clients) return;
     const searchLower = searchTerm.toLowerCase();
-    
-    return name.includes(searchLower) || 
-           phone.includes(searchTerm) ||
-           email.includes(searchLower);
-  }) : [];
+    const filtered = clientsStats.top_clients.filter((client: UniqueClient) => {
+      const name = (client.name || '').toLowerCase();
+      const email = (client.email || '').toLowerCase();
+      return name.includes(searchLower) || email.includes(searchLower);
+    });
+    setFilteredClients(filtered);
+  }, [searchTerm, clientsStats]);
 
   const getClientStatus = (lastOrderDate: string) => {
     const daysSinceLastOrder = Math.floor(
       (new Date().getTime() - new Date(lastOrderDate).getTime()) / (1000 * 60 * 60 * 24)
     );
-    
     if (daysSinceLastOrder <= 7) return { text: 'Ativo', color: 'bg-green-100 text-green-800' };
     if (daysSinceLastOrder <= 30) return { text: 'Regular', color: 'bg-yellow-100 text-yellow-800' };
     return { text: 'Inativo', color: 'bg-gray-100 text-gray-800' };
   };
 
-  const totalClients = clients.length;
-  const activeClients = clients.filter(client => {
-    const daysSinceLastOrder = Math.floor(
-      (new Date().getTime() - new Date(client.lastOrderDate).getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return daysSinceLastOrder <= 30;
-  }).length;
-
-  const totalRevenue = clients.reduce((sum, client) => sum + client.totalSpent, 0);
-  const totalOrdersCount = clients.reduce((sum, client) => sum + client.totalOrders, 0);
-  const averageOrderValue = totalOrdersCount > 0 ? totalRevenue / totalOrdersCount : 0;
-
-  if (loading) {
+  if (loading || !clientsStats) {
     return (
       <div className="space-y-6">
         <div>
@@ -236,7 +114,7 @@ export function ClientsManagement() {
               <Users className="w-5 h-5 text-blue-600" />
               <div>
                 <p className="text-sm text-gray-600">Total de Clientes</p>
-                <p className="text-xl font-bold">{totalClients}</p>
+                <p className="text-xl font-bold">{clientsStats.total_clients}</p>
               </div>
             </div>
           </CardContent>
@@ -247,7 +125,7 @@ export function ClientsManagement() {
               <Users className="w-5 h-5 text-green-600" />
               <div>
                 <p className="text-sm text-gray-600">Clientes Ativos</p>
-                <p className="text-xl font-bold">{activeClients}</p>
+                <p className="text-xl font-bold">{clientsStats.active_clients}</p>
               </div>
             </div>
           </CardContent>
@@ -258,7 +136,7 @@ export function ClientsManagement() {
               <ShoppingBag className="w-5 h-5 text-purple-600" />
               <div>
                 <p className="text-sm text-gray-600">Receita Total</p>
-                <p className="text-xl font-bold">R$ {totalRevenue.toFixed(2).replace('.', ',')}</p>
+                <p className="text-xl font-bold">R$ {Number(clientsStats.total_clients_revenue || 0).toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
           </CardContent>
@@ -269,7 +147,7 @@ export function ClientsManagement() {
               <Calendar className="w-5 h-5 text-orange-600" />
               <div>
                 <p className="text-sm text-gray-600">Ticket Médio</p>
-                <p className="text-xl font-bold">R$ {averageOrderValue.toFixed(2).replace('.', ',')}</p>
+                <p className="text-xl font-bold">R$ {Number(clientsStats.average_ticket || 0).toFixed(2).replace('.', ',')}</p>
               </div>
             </div>
           </CardContent>
@@ -312,7 +190,6 @@ export function ClientsManagement() {
                   <TableHead>Total de Pedidos</TableHead>
                   <TableHead>Total Gasto</TableHead>
                   <TableHead>Último Pedido</TableHead>
-                  <TableHead>Categoria</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -320,13 +197,10 @@ export function ClientsManagement() {
                 {filteredClients.map((client, index) => {
                   const status = getClientStatus(client.lastOrderDate);
                   return (
-                    <TableRow key={`${client.phone || client.email || index}`}>
+                    <TableRow key={`${client.email || index}`}>
                       <TableCell>
                         <div>
                           <p className="font-medium">{client.name}</p>
-                          {client.phone && (
-                            <p className="text-sm text-gray-600">{client.phone}</p>
-                          )}
                           {client.email && (
                             <p className="text-sm text-gray-500">{client.email}</p>
                           )}
@@ -339,24 +213,10 @@ export function ClientsManagement() {
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold text-green-600">
-                        R$ {client.totalSpent.toFixed(2).replace('.', ',')}
+                        R$ {Number(client.totalSpent).toFixed(2).replace('.', ',')}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {new Date(client.lastOrderDate).toLocaleDateString('pt-BR')}
-                      </TableCell>
-                      <TableCell>
-                        {client.customerTier && (
-                          <Badge 
-                            className={
-                              client.customerTier === 'VIP' ? 'bg-purple-100 text-purple-800' :
-                              client.customerTier === 'Gold' ? 'bg-yellow-100 text-yellow-800' :
-                              client.customerTier === 'Silver' ? 'bg-gray-100 text-gray-800' :
-                              'bg-orange-100 text-orange-800'
-                            }
-                          >
-                            {client.customerTier}
-                          </Badge>
-                        )}
+                        {client.lastOrderDate ? new Date(client.lastOrderDate).toLocaleDateString('pt-BR') : '-'}
                       </TableCell>
                       <TableCell>
                         <Badge className={status.color}>
@@ -380,11 +240,9 @@ export function ClientsManagement() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {clients
-                .sort((a: UniqueClient, b: UniqueClient) => b.totalSpent - a.totalSpent)
-                .slice(0, 5)
-                .map((client: UniqueClient, index: number) => (
-                  <div key={`${client.phone || client.email || index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+              {clientsStats.top_clients && clientsStats.top_clients.length > 0 ? (
+                clientsStats.top_clients.map((client: UniqueClient, index: number) => (
+                  <div key={`${client.email || index}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                         {index + 1}
@@ -395,10 +253,13 @@ export function ClientsManagement() {
                       </div>
                     </div>
                     <p className="font-semibold text-green-600">
-                      R$ {client.totalSpent.toFixed(2).replace('.', ',')}
+                      R$ {Number(client.totalSpent).toFixed(2).replace('.', ',')}
                     </p>
                   </div>
-                ))}
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-500">Nenhum cliente encontrado</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -411,25 +272,27 @@ export function ClientsManagement() {
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600">Cliente mais frequente:</span>
               <span className="font-semibold">
-                {clients.sort((a: UniqueClient, b: UniqueClient) => b.totalOrders - a.totalOrders)[0]?.name || 'N/A'}
+                {clientsStats.most_frequent_client?.name || 'N/A'}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600">Cliente que mais gastou:</span>
               <span className="font-semibold">
-                {clients.sort((a: UniqueClient, b: UniqueClient) => b.totalSpent - a.totalSpent)[0]?.name || 'N/A'}
+                {clientsStats.biggest_spender?.name || 'N/A'}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600">Pedidos por cliente (média):</span>
               <span className="font-semibold">
-                {totalClients > 0 ? (totalOrdersCount / totalClients).toFixed(1) : '0'}
+                {clientsStats.total_clients > 0 && clientsStats.top_clients ?
+                  (clientsStats.top_clients.reduce((sum: number, c: any) => sum + (c.totalOrders || 0), 0) / clientsStats.total_clients).toFixed(1)
+                  : '0'}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600">Taxa de retenção:</span>
               <span className="font-semibold text-green-600">
-                {totalClients > 0 ? ((activeClients / totalClients) * 100).toFixed(1) : '0'}%
+                {clientsStats.retention_rate}%
               </span>
             </div>
           </CardContent>
@@ -438,3 +301,5 @@ export function ClientsManagement() {
     </div>
   );
 }
+
+export default ClientsManagement;

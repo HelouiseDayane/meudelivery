@@ -17,5 +17,7 @@ class Address extends Model
         'estado',
         'ponto_referencia',
         'horarios',
+        'endereco_entrega',
+        'ativo',
     ];
 }

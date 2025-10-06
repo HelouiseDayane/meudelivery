@@ -14,10 +14,18 @@ class ProductAdminController extends Controller
     {
         $products = Product::all();
 
-        $products->map(function ($product) {
-            $product->image_url = $product->image 
-                ? Storage::url($product->image) 
-                : null;
+        $appUrl = config('app.url');
+        $products->map(function ($product) use ($appUrl) {
+            if ($product->image) {
+                if (preg_match('/^https?:\/\//', $product->image)) {
+                    $product->image_url = $product->image;
+                } else {
+                    $imagePath = Storage::url($product->image);
+                    $product->image_url = rtrim($appUrl, '/') . $imagePath;
+                }
+            } else {
+                $product->image_url = null;
+            }
             return $product;
         });
 
@@ -76,9 +84,17 @@ class ProductAdminController extends Controller
         $this->syncProductStock($product);
         
         // Adicionar image_url para response
-        $product->image_url = $product->image 
-            ? Storage::url($product->image) 
-            : null;
+        $appUrl = config('app.url');
+        if ($product->image) {
+            if (preg_match('/^https?:\/\//', $product->image)) {
+                $product->image_url = $product->image;
+            } else {
+                $imagePath = Storage::url($product->image);
+                $product->image_url = rtrim($appUrl, '/') . $imagePath;
+            }
+        } else {
+            $product->image_url = null;
+        }
         
         \Log::info('Produto criado com sucesso', ['product_id' => $product->id]);
         
@@ -89,9 +105,17 @@ class ProductAdminController extends Controller
     {
         $product = Product::findOrFail($id);
         
-        $product->image_url = $product->image 
-            ? Storage::url($product->image) 
-            : null;
+        $appUrl = config('app.url');
+        if ($product->image) {
+            if (preg_match('/^https?:\/\//', $product->image)) {
+                $product->image_url = $product->image;
+            } else {
+                $imagePath = Storage::url($product->image);
+                $product->image_url = rtrim($appUrl, '/') . $imagePath;
+            }
+        } else {
+            $product->image_url = null;
+        }
             
         return response()->json($product);
     }
@@ -149,10 +173,17 @@ class ProductAdminController extends Controller
 
         // Adicionar image_url para response
         $updatedProduct = $product->fresh();
-        $updatedProduct->image_url = $updatedProduct->image 
-            ? Storage::url($updatedProduct->image) 
-            : null;
-
+        $appUrl = config('app.url');
+        if ($updatedProduct->image) {
+            if (preg_match('/^https?:\/\//', $updatedProduct->image)) {
+                $updatedProduct->image_url = $updatedProduct->image;
+            } else {
+                $imagePath = Storage::url($updatedProduct->image);
+                $updatedProduct->image_url = rtrim($appUrl, '/') . $imagePath;
+            }
+        } else {
+            $updatedProduct->image_url = null;
+        }
         return response()->json($updatedProduct);
     }
 

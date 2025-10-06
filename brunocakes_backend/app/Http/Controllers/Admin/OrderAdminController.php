@@ -10,8 +10,72 @@ use App\Jobs\ProcessOrderJob;
 use Illuminate\Support\Facades\Log; // Adicione esta linha no início do arquivo
 
 
-class OrderAdminController extends Controller
-{
+class OrderAdminController extends Controller {
+
+    // Retorna estatísticas de clientes baseadas em orders com status 'confirmed' OU 'completed'
+    public function getCustomerAnalytics()
+    {
+        $validStatuses = ['confirmed', 'completed'];
+
+        // Total de clientes únicos com pelo menos 1 pedido confirmado ou finalizado
+        $totalClients = Order::whereIn('status', $validStatuses)
+            ->distinct('customer_email')
+            ->count('customer_email');
+
+        // Clientes ativos: último pedido confirmado/finalizado nos últimos 30 dias
+        $thirtyDaysAgo = now()->subDays(30);
+        $activeClients = Order::whereIn('status', $validStatuses)
+            ->where('created_at', '>=', $thirtyDaysAgo)
+            ->distinct('customer_email')
+            ->count('customer_email');
+
+        // Receita total de pedidos confirmados/finalizados
+        $totalRevenue = Order::whereIn('status', $validStatuses)->sum('total_amount');
+
+        // Ticket médio por cliente
+        $averageTicket = $totalClients > 0 ? $totalRevenue / $totalClients : 0;
+
+        // Top clientes por valor gasto
+        $topClients = Order::whereIn('status', $validStatuses)
+            ->select('customer_name as name', 'customer_email as email', \DB::raw('COUNT(*) as totalOrders'), \DB::raw('SUM(total_amount) as totalSpent'), \DB::raw('MAX(created_at) as lastOrderDate'))
+            ->groupBy('customer_email', 'customer_name')
+            ->orderByDesc('totalSpent')
+            ->limit(5)
+            ->get();
+
+        // Cliente mais frequente
+        $mostFrequentClient = Order::whereIn('status', $validStatuses)
+            ->select('customer_name as name', 'customer_email as email', \DB::raw('COUNT(*) as totalOrders'))
+            ->groupBy('customer_email', 'customer_name')
+            ->orderByDesc('totalOrders')
+            ->first();
+
+        // Cliente que mais gastou
+        $biggestSpender = Order::whereIn('status', $validStatuses)
+            ->select('customer_name as name', 'customer_email as email', \DB::raw('SUM(total_amount) as totalSpent'))
+            ->groupBy('customer_email', 'customer_name')
+            ->orderByDesc('totalSpent')
+            ->first();
+
+        // Taxa de retenção: clientes com pelo menos 2 pedidos confirmados/finalizados / total de clientes únicos
+        $retainedClients = Order::whereIn('status', $validStatuses)
+            ->select('customer_email', \DB::raw('COUNT(*) as total_orders'))
+            ->groupBy('customer_email')
+            ->havingRaw('COUNT(*) >= 2')
+            ->count();
+        $retentionRate = $totalClients > 0 ? round(($retainedClients / $totalClients) * 100, 1) : 0;
+
+        return response()->json([
+            'total_clients' => $totalClients,
+            'active_clients' => $activeClients,
+            'total_clients_revenue' => $totalRevenue,
+            'average_ticket' => $averageTicket,
+            'top_clients' => $topClients,
+            'most_frequent_client' => $mostFrequentClient,
+            'biggest_spender' => $biggestSpender,
+            'retention_rate' => $retentionRate,
+        ]);
+    }
     public function index()
     {
         return response()->json(Order::with('items', 'payment')->latest()->get());
@@ -28,7 +92,6 @@ class OrderAdminController extends Controller
         $updatedCount = 0;
 
         foreach ($request->order_ids as $orderId) {
-            Log::info("Aprovando pagamento para o pedido ID: {$orderId}"); // Log para rastrear o ID do pedido
             $order = Order::with('payment')->findOrFail($orderId);
             
             // Verifica se o pagamento está associado ao pedido
@@ -40,8 +103,8 @@ class OrderAdminController extends Controller
                 Log::warning("Nenhum pagamento encontrado para o pedido ID: {$orderId}"); // Log se não houver pagamento
             }
 
-            // Atualiza o status do pedido para 'awaiting_seller_confirmation'
-            $order->update(['status' => 'confirmed']);
+            // Atualiza o status do pedido para 'completed'
+            $order->update(['status' => 'completed']);
             
             // Dispara o Job para processar o pedido
             ProcessOrderJob::dispatch($order->id)->onQueue('orders');

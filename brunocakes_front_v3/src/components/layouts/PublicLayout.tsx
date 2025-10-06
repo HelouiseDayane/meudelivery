@@ -1,4 +1,7 @@
+
 import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { STORE_CONFIG, fetchAndSetActiveAddress, fetchAllAddresses } from '../../api';
 import { ShoppingCart, Package, Search } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -10,7 +13,33 @@ export const PublicLayout = () => {
   const { cart } = useApp();
   const location = useLocation();
   const { isMobile } = usePWA();
-  
+
+  // Estado local para dados do rodapé
+  const [footerData, setFooterData] = useState({
+    address: '',
+    workingHours: '',
+    isOpen: false,
+  });
+  const [loadingAddress, setLoadingAddress] = useState(true);
+  const [allAddresses, setAllAddresses] = useState<any[]>([]);
+
+  // Busca endereço/horário dinâmico ao montar o layout público
+  useEffect(() => {
+    setLoadingAddress(true);
+    fetchAndSetActiveAddress().then(() => {
+      setFooterData({
+        address: STORE_CONFIG.address,
+        workingHours: STORE_CONFIG.workingHours,
+        isOpen: STORE_CONFIG.isOpen,
+      });
+      setLoadingAddress(false);
+    }).catch(() => {
+      setLoadingAddress(false);
+    });
+    // Busca todos os endereços públicos
+    fetchAllAddresses().then(setAllAddresses);
+  }, []);
+
   const cartItemsCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   const isActive = (path: string) => {
@@ -109,17 +138,34 @@ export const PublicLayout = () => {
             <div>
               <h4 className="font-semibold mb-2">Contato</h4>
               <p className="text-muted-foreground">
-                📞 (11) 99999-9999<br />
-                📧 contato@brunocakes.com.br<br />
-                📍 Rua das Tortas, 123 - Centro
+                <span role="img" aria-label="whatsapp">�</span> <a href={`https://wa.me/5584991277973`} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 600, textDecoration: 'underline' }}>WhatsApp</a><br />
+                <span role="img" aria-label="instagram">📸</span> <a href="https://instagram.com/brunocakee" target="_blank" rel="noopener noreferrer" style={{ color: '#a21caf', fontWeight: 600, textDecoration: 'underline' }}>@brunocakee</a><br />
+                {loadingAddress ? (
+                  'Carregando endereço...'
+                ) : allAddresses.length > 0 ? (
+                  <span>
+                    {allAddresses.map((addr, idx) => (
+                      <span key={addr.id || idx}>
+                        📍 {addr.rua}, {addr.numero} - {addr.bairro}, {addr.cidade} - {addr.estado}<br/>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  footerData.address || 'Endereço não disponível'
+                )}
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-2">Horário de Funcionamento</h4>
               <p className="text-muted-foreground">
-                Segunda a Sexta: 8h às 18h<br />
-                Sábado: 8h às 16h<br />
-                Domingo: Fechado
+                {footerData.workingHours
+                  ? <>
+                      {footerData.workingHours}
+                      {footerData.isOpen === false && (
+                        <span style={{ color: '#dc2626', fontWeight: 600, marginLeft: 8 }}>(Fechado)</span>
+                      )}
+                    </>
+                  : 'Horário não disponível'}
               </p>
             </div>
           </div>

@@ -13,7 +13,7 @@ export function AdminDashboard() {
   const { analytics, loadAnalytics, orders, products } = useApp();
 
   useEffect(() => {
-    loadAnalytics();
+    loadAnalytics(true); // true = admin, busca dados filtrados do dashboard
   }, []);
 
   // Debug logs
@@ -34,17 +34,20 @@ export function AdminDashboard() {
     );
   }
 
-const todaySales = analytics.statistics?.todaySales || 0;
-const todayOrders = analytics.statistics?.totalOrders || 0; // total de pedidos no dia não vem separado, usa totalOrders ou calcula do salesByDay
-const thisMonthSales = analytics.statistics?.monthSales || 0;
-const thisYearSales = analytics.statistics?.yearSales || 0;
-const totalRevenue = analytics.statistics?.todaySales || analytics.statistics?.monthSales || 0;
-const pendingOrders = analytics.statistics?.pendingOrders || 0;
-  // Usar dados do backend quando disponíveis, senão usar dados locais
-  const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
-  const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length || 0;
-  const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length || 0;
-  const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
+
+
+// Usar os campos do backend do dashboard admin (forçar any para evitar erro de tipagem)
+const analyticsAny = analytics as any;
+const todaySales = analyticsAny.sales_today || 0;
+const todayOrders = analyticsAny.orders_today || 0;
+const thisMonthSales = analyticsAny.sales_month || 0;
+const thisYearSales = analyticsAny.sales_year || 0;
+const totalRevenue = analyticsAny.total_revenue || 0;
+const pendingOrders = analyticsAny.ticket_statistics?.pending_payment || 0;
+const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
+const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length || 0;
+const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length || 0;
+const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
   
 
 
@@ -197,7 +200,7 @@ const pendingOrders = analytics.statistics?.pendingOrders || 0;
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">R$ {(item.revenue || 0).toFixed(2)}</p>
+                      <p className="font-medium">R$ {Number(item.revenue || 0).toFixed(2)}</p>
                     </div>
                   </div>
                 ))
@@ -278,6 +281,31 @@ const pendingOrders = analytics.statistics?.pendingOrders || 0;
         </CardContent>
       </Card>
 
+      {/* Engajamento */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Métricas de Engajamento</CardTitle>
+          <CardDescription>Interações dos clientes com a loja</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Se houver dados de engajamento, exiba-os. Caso contrário, mostre zero. */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{analyticsAny.engagement?.unique_visitors ?? 0}</div>
+              <p className="text-sm text-muted-foreground">Visitantes Únicos</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-700">{analyticsAny.engagement?.pwa_installs ?? 0}</div>
+              <p className="text-sm text-muted-foreground">Instalações PWA</p>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-700">{analyticsAny.engagement?.carts_with_products ?? 0}</div>
+              <p className="text-sm text-muted-foreground">Carrinhos com Produto</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Neighborhood Sales Detail */}
       {analytics.neighborhoodsSales && analytics.neighborhoodsSales.length > 0 && (
         <Card>
@@ -298,9 +326,9 @@ const pendingOrders = analytics.statistics?.pendingOrders || 0;
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">R$ {(item.revenue || 0).toFixed(2)}</p>
+                      <p className="font-medium">R$ {Number(item.revenue || 0).toFixed(2)}</p>
                       <p className="text-sm text-muted-foreground">
-                        Ticket médio: R$ {((item.revenue || 0) / (item.sales || 1)).toFixed(2)}
+                        Ticket médio: R$ {(Number(item.revenue || 0) / (item.sales || 1)).toFixed(2)}
                       </p>
                     </div>
                   </div>

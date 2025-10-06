@@ -11,37 +11,55 @@ use Illuminate\Support\Facades\Redis;
 use App\Jobs\SyncStockJob;
 use App\Events\StockUpdated;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 
 class PaymentWebhookController extends Controller
 {
+
     public function notify(Request $request)
     {
-        \Log::info('Webhook notify chamado', [
-            'payment_id' => $request->input('payment_id'),
-            'status' => $request->input('status'),
-            'payload' => $request->all()
+        // Log detalhado de todos os dados recebidos (apenas query string)
+          \Log::info('ENTROU NO NOTIFY');
+        Log::info('Webhook notify chamado [' . __FILE__ . ':' . __LINE__ . ']', [
+            'payment_id' => $request->query('payment_id'),
+            'status' => $request->query('status'),
+            'random_key' => $request->query('random_key'),
+            'payload_query' => $request->query(),
+            'random_key_type' => gettype($request->query('random_key')),
+            'random_key_len' => strlen((string)$request->query('random_key')),
         ]);
 
-
-        $paymentId = $request->input('payment_id');
-        $status = $request->input('status'); // paid, failed, pending
-        $randomKey = $request->input('random_key');
+        // Só aceita parâmetros via query string
+        $paymentId = $request->query('payment_id');
+        $status = $request->query('status'); // paid, failed, pending
+        $randomKey = $request->query('random_key');
 
         if (!$paymentId) {
             return response()->json(['error' => 'Payment id não informado'], 400);
         }
 
         $payment = Payment::with('order.items')->find($paymentId);
-
         if (!$payment) {
             return response()->json(['error' => 'Payment not found'], 404);
         }
-
         $order = $payment->order;
 
-        // Validação da random_key: deve ser a do pedido deste payment_id
-        if (!$randomKey || $randomKey !== $order->payment_reference) {
+        // Log detalhado para depuração da random_key
+        \Log::info('DEBUG random_key notify [' . __FILE__ . ':' . __LINE__ . ']', [
+            'order_id' => $order->id,
+            'payment_id' => $paymentId,
+            'random_key_recebida' => $randomKey,
+            'random_key_recebida_type' => gettype($randomKey),
+            'random_key_recebida_len' => strlen((string)$randomKey),
+            'random_key_esperada' => $order->payment_reference,
+            'random_key_esperada_type' => gettype($order->payment_reference),
+            'random_key_esperada_len' => strlen((string)$order->payment_reference),
+            'comparacao' => trim((string)$randomKey) === trim((string)$order->payment_reference)
+        ]);
+
+        // Validação da random_key: só confere se bate com o pedido
+        if (!$randomKey || trim((string)$randomKey) !== trim((string)$order->payment_reference)) {
             \Log::warning('Falha na validação da random_key no notify', [
                 'order_id' => $order->id,
                 'payment_id' => $paymentId,
@@ -51,41 +69,23 @@ class PaymentWebhookController extends Controller
             return response()->json(['error' => 'Chave de validação inválida'], 403);
         }
 
-        // Validação extra: garantir que a random_key não está sendo usada para outro payment_id
-        $otherPayment = Payment::whereHas('order', function($q) use ($randomKey, $order) {
-            $q->where('payment_reference', $randomKey)->where('id', '!=', $order->id);
-        })->first();
-        if ($otherPayment) {
-            \Log::warning('Tentativa de usar random_key de outro pedido', [
-                'payment_id' => $paymentId,
-                'order_id' => $order->id,
-                'random_key' => $randomKey,
-                'other_payment_id' => $otherPayment->id,
-                'other_order_id' => $otherPayment->order_id
-            ]);
-            return response()->json(['error' => 'Chave de validação não pertence a este pagamento/pedido'], 403);
+        // Se status for "paid", confirma o pedido
+        if ($status === 'paid') {
+            $this->finalizeOrder($order, $payment);
+        } elseif ($status === 'failed') {
+            $this->revertOrderStock($order, $payment);
         }
 
-        return DB::transaction(function () use ($payment, $status) {
-            $order = $payment->order;
+        $order->refresh();
+        $payment->refresh();
 
-            if ($status === 'paid') {
-                $this->finalizeOrder($order, $payment);
-            } elseif ($status === 'failed') {
-                $this->revertOrderStock($order, $payment);
-            }
-
-            $order->refresh();
-            $payment->refresh();
-
-            return response()->json([
-                'message' => 'Webhook processed',
-                'order_status' => $order->status,
-                'payment_status' => $payment->status,
-                'order_id' => $order->id,
-                'payment_id' => $payment->id
-            ]);
-        });
+        return response()->json([
+            'message' => 'Webhook processed',
+            'order_status' => $order->status,
+            'payment_status' => $payment->status,
+            'order_id' => $order->id,
+            'payment_id' => $payment->id
+        ]);
     }
 
 
@@ -142,8 +142,11 @@ class PaymentWebhookController extends Controller
             $numero = $matches[2];
         }
 
-    // Url de notificação usando payment_id e random_key
-    $url_notificacao = "https://brunocakes.zapsrv.com/api/payment/notify?payment_id={$paymentId}&status=paid&random_key={$randomKey}";
+                // Detecta a base da URL pelo APP_URL do .env ou usa localhost como fallback
+                $baseUrl = config('app.url') ?? 'http://localhost:8191';
+                // Remove barra final se houver
+                $baseUrl = rtrim($baseUrl, '/');
+                $url_notificacao = "$baseUrl/api/payment/notify?payment_id={$paymentId}&status=paid&random_key={$randomKey}";
 
         // Gerar SKU único (igual ao exemplo)
         $sku = 'TORA' . $order->id . '-' . strtoupper(\Str::random(12));
@@ -168,7 +171,7 @@ class PaymentWebhookController extends Controller
             "email_cliente" => $emailCliente,
             "DDD_Cliente" => (string)$ddd,
             "Tel_Cliente" => (string)$numero,
-            "tipo_notificacao" => "GET | POST | JSON",
+            "tipo_notificacao" => "JSON",
             "url_notificacao" => (string)$url_notificacao,
             "texto" => "Pagamento realizado com sucesso!",
         "access_token_plataforma" => "APP_USR-2954630391946213-092217-6b5cdbe01a967e4debb13f09bac7b210-672482120",
@@ -177,7 +180,7 @@ class PaymentWebhookController extends Controller
 
 
         // Log detalhado do payload serializado para debug
-        \Log::info('Enviando payload para mppix', [
+    Log::info('Enviando payload para mppix', [
             'payload' => $payload,
             'random_key' => $randomKey,
             'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
@@ -186,23 +189,38 @@ class PaymentWebhookController extends Controller
         $response = Http::withHeaders([
             'Content-Type' => 'application/json'
         ])->post('https://01.zapsrv.com/zap_request/delivery/mppix/', $payload);
+        
 
-        \Log::info('Status HTTP mppix', ['status' => $response->status()]);
-        \Log::info('Resposta mppix', ['response' => $response->body()]);
+  
 
         if (!$response->successful()) {
-            \Log::error('Erro ao disparar mppix', [
+            Log::error('Erro ao disparar mppix', [
                 'status' => $response->status(),
                 'body' => $response->body()
             ]);
+        } else {
+            // Se resposta 200, já dispara notify (pagamento aprovado)
+            try {
+                $notifyResponse = Http::get($url_notificacao);
+                Log::info('Notificação enviada para url_notificacao', [
+                    'url' => $url_notificacao,
+                    'status' => $notifyResponse->status(),
+                    'body' => $notifyResponse->body()
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Erro ao enviar notificação para url_notificacao', [
+                    'url' => $url_notificacao,
+                    'error' => $e->getMessage()
+                ]);
+            }
         }
 
         return response()->json([
-        'message' => 'Pedido e pagamento PIX criados com sucesso',
-        'order_id' => $order->id,
-        'payment_id' => $paymentId,
-        'response_api' => $response->json(),
-    ]);
+            'message' => 'Pedido e pagamento PIX criados com sucesso',
+            'order_id' => $order->id,
+            'payment_id' => $paymentId,
+            'response_api' => $response->json(),
+        ]);
     }
 
 

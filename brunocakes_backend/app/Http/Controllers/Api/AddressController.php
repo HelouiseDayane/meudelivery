@@ -9,17 +9,7 @@ use Illuminate\Support\Facades\Auth;
 
 class AddressController extends Controller
 {
-    // Middleware para garantir que só admin pode acessar
-    public function __construct()
-    {
-        $this->middleware('auth:sanctum');
-        $this->middleware(function ($request, $next) {
-            if (!Auth::user() || Auth::user()->role !== 'admin') {
-                return response()->json(['error' => 'Acesso restrito a administradores'], 403);
-            }
-            return $next($request);
-        });
-    }
+
 
     public function index()
     {
@@ -36,6 +26,7 @@ class AddressController extends Controller
             'estado' => 'required|string',
             'ponto_referencia' => 'nullable|string',
             'horarios' => 'nullable|string',
+            'endereco_entrega' => 'boolean',
         ]);
         $address = Address::create($data);
         return response()->json($address, 201);
@@ -58,6 +49,7 @@ class AddressController extends Controller
             'estado' => 'sometimes|required|string',
             'ponto_referencia' => 'nullable|string',
             'horarios' => 'nullable|string',
+            'endereco_entrega' => 'boolean',
         ]);
         $address->update($data);
         return response()->json($address);
@@ -68,5 +60,28 @@ class AddressController extends Controller
         $address = Address::findOrFail($id);
         $address->delete();
         return response()->json(['message' => 'Endereço removido com sucesso']);
+    }
+    /**
+     * Ativa o endereço informado e desativa os demais.
+     */
+    public function activate($id)
+    {
+        // Adicione o campo 'ativo' na migration/model se ainda não existir
+        // Desativa todos
+        Address::query()->update(['ativo' => false]);
+        // Ativa o selecionado
+        $address = Address::findOrFail($id);
+        $address->ativo = true;
+        $address->save();
+        return response()->json(['message' => 'Endereço ativado com sucesso', 'id' => $id]);
+    }
+
+        /**
+     * Retorna o endereço ativo (público)
+     */
+    public function getActive()
+    {
+        $active = Address::where('ativo', true)->first();
+        return $active ? response()->json($active) : response()->json(null, 404);
     }
 }

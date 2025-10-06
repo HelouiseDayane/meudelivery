@@ -1,6 +1,9 @@
 // API Administrativa para Bruno Cake
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL;
+// === CLIENTES ANALYTICS ===
+// Função para buscar analytics de clientes
+export const getCustomerAnalytics = () => adminApiRequest(`${API_BASE_URL}/admin/customers/analytics`);
 // Headers com token de admin
 const getAdminAuthHeaders = () => {
   const token = localStorage.getItem('admin_token');
@@ -336,6 +339,7 @@ export const adminApi = {
       body: JSON.stringify({ order_ids: orderIds }),
       headers: {
         'Content-Type': 'application/json',
+        ...getAdminAuthHeaders(),
       },
     });
   },

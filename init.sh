@@ -3,13 +3,33 @@ set -e
 
 echo "🚀 Iniciando sistema BrunoCakes..."
 
-docker-compose build
+docker-compose build --no-cache
 docker-compose up -d
+
+echo "⏳ Aguardando container backend subir..."
+until docker-compose exec backend php -v >/dev/null 2>&1; do
+  sleep 2
+  echo -n "."
+done
+echo
+
+# Corrige permissões do Laravel
+echo "🔧 Corrigindo permissões do storage e cache..."
+docker-compose exec backend chown -R www-data:www-data storage bootstrap/cache
+docker-compose exec backend chmod -R 775 storage bootstrap/cache
+
+# Permissões e storage link (adicionados aqui)
+echo "🔑 Ajustando permissões e storage link..."
+# Remove permissões antigas do storage link
+docker-compose exec backend rm -rf public/storage || echo "⚠️ Não foi possível remover storage antigo, continuando..."
+
+docker-compose exec backend php artisan storage:link || echo "⚠️ Link storage já existe, continuando..."
 
 # Espera MySQL e Redis ficarem prontos
 echo "⏳ Aguardando MySQL e Redis ficarem prontos..."
 docker-compose exec backend bash -c 'until nc -z mysql 3306; do sleep 1; done'
 docker-compose exec backend bash -c 'until nc -z redis 6379; do sleep 1; done'
+
 
 # Aguarda backend responder ao PHP
 echo "⏳ Esperando backend responder ao PHP..."

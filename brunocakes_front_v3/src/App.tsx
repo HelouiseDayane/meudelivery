@@ -16,7 +16,8 @@ import { AdminLogin } from './components/auth/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ProductsManagement } from './components/admin/ProductsManagement';
 import { OrdersManagement } from './components/admin/OrdersManagement';
-import { ClientsManagement } from './components/admin/ClientsManagement';
+import ClientsManagement from './components/admin/ClientsManagement';
+import { AddressesManagement } from './components/admin/AddressesManagement';
 import { PublicMenu } from './components/public/PublicMenu';
 import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
@@ -404,7 +405,7 @@ function AppProvider({ children }: { children: ReactNode }) {
         const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
         if (mappedProducts.length > 0) {
           setProducts(mappedProducts);
-          toast.success('Lista de produtos atualizada!');
+       //    toast.success('Lista de produtos atualizada!');
         } else {
           toast.info('Nenhum produto cadastrado no momento.');
           setProducts([]);
@@ -414,14 +415,14 @@ function AppProvider({ children }: { children: ReactNode }) {
         const mappedProducts = Array.isArray(response) ? response.map(mapProductFromBackend) : [];
         if (mappedProducts.length > 0) {
           setProducts(mappedProducts);
-          toast.success('Lista de produtos atualizada!');
+       //    toast.success('Lista de produtos atualizada!');
         } else {
           // Fallback para API básica
           const basicProducts = await api.getPublicProducts();
           const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
           if (basicMappedProducts.length > 0) {
             setProducts(basicMappedProducts);
-            toast.success('Lista de produtos atualizada!');
+         //    toast.success('Lista de produtos atualizada!');
           } else {
             toast.info('Nenhum produto cadastrado no momento.');
             setProducts([]);
@@ -818,6 +819,7 @@ function App() {
                     <Route path="products" element={<ProductsManagement />} />
                     <Route path="orders" element={<OrdersManagement />} />
                     <Route path="clients" element={<ClientsManagement />} />
+                    <Route path="addresses" element={<AddressesManagement />} />
                   </Route>
 
                   <Route path="*" element={<Navigate to="/admin/login" />} />

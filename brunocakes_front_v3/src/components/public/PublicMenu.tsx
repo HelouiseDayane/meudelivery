@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { fetchAndSetActiveAddress, STORE_CONFIG } from '../../api';
 import { useRealTime } from '../../hooks/useRealTime';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -14,6 +15,33 @@ import { usePWA } from '../../hooks/usePWA';
 import { toast } from 'sonner';
 
 export const PublicMenu = () => {
+  // Dados do footer para horário/status
+  const [footerData, setFooterData] = useState({
+    workingHours: '',
+    isOpen: true,
+  });
+  // Não usar mais isStoreOpen, usar sempre footerData.isOpen para garantir alinhamento com o footer
+  useEffect(() => {
+    const updateStoreStatus = async () => {
+      await fetchAndSetActiveAddress();
+      const apiModule = await import('../../api');
+      const { STORE_CONFIG } = apiModule;
+      // Garante que isOpen seja sempre booleano
+      let isOpen = STORE_CONFIG.isOpen;
+      if (typeof isOpen !== 'boolean') {
+        isOpen = String(isOpen).toLowerCase() === 'true';
+      }
+      // Log para depuração
+      console.log('[DEBUG] STORE_CONFIG.isOpen:', STORE_CONFIG.isOpen, '| workingHours:', STORE_CONFIG.workingHours);
+      setFooterData({
+        workingHours: STORE_CONFIG.workingHours,
+        isOpen,
+      });
+    };
+    updateStoreStatus();
+    const interval = setInterval(updateStoreStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
   const { products, addToCart, getAvailableStock, hasStock, refreshProducts } = useApp();
   const { isMobile } = usePWA();
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -91,11 +119,11 @@ export const PublicMenu = () => {
     isPromotion: product.isPromotion ?? product.is_promo ?? false,
   }));
 
+  // Se a loja estiver fechada, todos os produtos ficam indisponíveis para adicionar ao carrinho
   const filteredProducts = normalizedProducts.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    // SEMPRE MOSTRAR PRODUTOS - apenas filtrar por busca e categoria
     return matchesSearch && matchesCategory;
   });
 
@@ -147,8 +175,21 @@ export const PublicMenu = () => {
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">Bruno Cake</h1>
-        <p className="text-xl text-gray-600">Deliciosos bolos artesanais feitos com amor</p>
+        <p className="text-xl text-gray-600">Aqui não é fatia nem pedaço, aqui é tora!</p>
+        {/* Horário de funcionamento e status igual ao footer */}
+        {footerData.workingHours && (
+          <div className="mt-2 text-base font-medium">
+            <span className="mr-2">{footerData.workingHours}</span>
+            {footerData.isOpen ? (
+              <span className="text-green-700 font-bold">(Aberto)</span>
+            ) : (
+              <span className="text-red-700 font-bold">(Fechado)</span>
+            )}
+          </div>
+        )}
       </div>
+      {/* Aviso de disponibilidade geral da loja */}
+    
 
       {/* Alerta sobre tempo limite do carrinho */}
       <Alert className="mb-6 border-2 border-orange-500 bg-orange-50">
@@ -190,9 +231,10 @@ export const PublicMenu = () => {
         {filteredProducts.map(product => {
           const availableStock = getAvailableStock(product.id);
           const isLowStock = availableStock <= 5 && availableStock > 0;
-          
+          // Produto só está disponível se loja aberta E estoque > 0
+          const isIndisponivel = !footerData.isOpen || availableStock === 0;
           return (
-            <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+            <Card key={product.id} className={`overflow-hidden transition-shadow ${isIndisponivel ? 'opacity-80 grayscale' : 'hover:shadow-lg'}`}>
               <div className="relative">
                 {product.imageUrl && (
                   <img
@@ -201,7 +243,6 @@ export const PublicMenu = () => {
                     className="w-full h-48 object-cover"
                   />
                 )}
-                
                 {/* Badges */}
                 <div className="absolute top-2 left-2 flex gap-2">
                   {product.isNew && (
@@ -217,23 +258,20 @@ export const PublicMenu = () => {
                     </Badge>
                   )}
                 </div>
-
                 {/* Stock Badge */}
                 <div className="absolute top-2 right-2">
                   <Badge 
-                    variant={availableStock === 0 ? "destructive" : isLowStock ? "destructive" : "secondary"}
-                    className={availableStock === 0 ? "bg-red-500 text-white" : isLowStock ? "bg-yellow-500 text-black" : ""}
+                    variant="destructive"
+                    className={isIndisponivel ? "bg-red-600 text-white" : (isLowStock ? "bg-yellow-500 text-black" : "bg-green-600 text-white")}
                   >
-                    {availableStock === 0 ? "Indisponível" : `Estoque: ${availableStock}`}
+                    {isIndisponivel ? "Indisponível" : `Estoque: ${availableStock}`}
                   </Badge>
                 </div>
               </div>
-
               <CardHeader>
                 <CardTitle className="text-lg">{product.name}</CardTitle>
                 <p className="text-sm text-gray-600 line-clamp-2">{product.description}</p>
               </CardHeader>
-
               <CardContent>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex flex-col">
@@ -252,7 +290,6 @@ export const PublicMenu = () => {
                       </span>
                     )}
                   </div>
-                  
                   <div className="flex flex-col gap-2">
                     {/* Quantity Selector */}
                     <div className="flex items-center justify-between">
@@ -262,7 +299,8 @@ export const PublicMenu = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
-                          disabled={getLocalQuantity(product.id) <= 1 || availableStock === 0}
+                          disabled={isIndisponivel || getLocalQuantity(product.id) <= 1}
+                          className={isIndisponivel || getLocalQuantity(product.id) <= 1 ? "opacity-50 cursor-not-allowed" : ""}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -271,17 +309,20 @@ export const PublicMenu = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
-                          disabled={getLocalQuantity(product.id) >= availableStock || availableStock === 0}
+                          disabled={isIndisponivel || getLocalQuantity(product.id) >= availableStock}
+                          className={isIndisponivel || getLocalQuantity(product.id) >= availableStock ? "opacity-50 cursor-not-allowed" : ""}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
-                    
                     <div className="flex gap-2">
                       <Dialog>
                         <DialogTrigger asChild>
-                          <button className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors">
+                          <button
+                            className={`flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md ${isIndisponivel ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60' : 'bg-white text-gray-900 hover:bg-gray-100'}`}
+                            disabled={isIndisponivel}
+                          >
                             Ver detalhes
                           </button>
                         </DialogTrigger>
@@ -315,11 +356,10 @@ export const PublicMenu = () => {
                                   </span>
                                 )}
                               </div>
-                              <Badge className={availableStock === 0 ? "bg-red-500 text-white" : ""}>
-                                {availableStock === 0 ? "Indisponível" : `Estoque: ${availableStock}`}
+                              <Badge className={isIndisponivel ? "bg-red-600 text-white" : "bg-green-600 text-white"}>
+                                {isIndisponivel ? "Indisponível" : `Estoque: ${availableStock}`}
                               </Badge>
                             </div>
-                            
                             {/* Quantity Selector */}
                             <div className="flex items-center gap-2 mb-4">
                               <span className="text-sm font-medium">Quantidade:</span>
@@ -327,8 +367,8 @@ export const PublicMenu = () => {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
-                                  disabled={getLocalQuantity(product.id) <= 1 || availableStock === 0}
+                                  disabled={isIndisponivel || getLocalQuantity(product.id) <= 1}
+                                  className={isIndisponivel || getLocalQuantity(product.id) <= 1 ? "opacity-50 cursor-not-allowed" : ""}
                                 >
                                   <Minus className="h-3 w-3" />
                                 </Button>
@@ -336,41 +376,32 @@ export const PublicMenu = () => {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
-                                  disabled={getLocalQuantity(product.id) >= availableStock || availableStock === 0}
+                                  disabled={isIndisponivel || getLocalQuantity(product.id) >= availableStock}
+                                  className={isIndisponivel || getLocalQuantity(product.id) >= availableStock ? "opacity-50 cursor-not-allowed" : ""}
                                 >
                                   <Plus className="h-3 w-3" />
                                 </Button>
                               </div>
                             </div>
-                            
                             <Button
-                              onClick={() => handleAddToCart(product, getLocalQuantity(product.id))}
-                              disabled={availableStock === 0 || isLoading}
-                              className={`w-full ${availableStock === 0 ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed' : ''}`}
+                              disabled={isIndisponivel}
+                              className={`w-full ${isIndisponivel ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed opacity-70' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
                             >
                               <ShoppingCart className="w-4 h-4 mr-2" />
-                              {availableStock === 0 ? 'Indisponível' : 'Adicionar ao Carrinho'}
+                              {isIndisponivel ? 'Indisponível' : 'Adicionar ao carrinho'}
                             </Button>
                           </div>
                         </DialogContent>
                       </Dialog>
-                      
                       <Button
-                        onClick={() => handleAddToCart(product, getLocalQuantity(product.id))}
-                        disabled={availableStock === 0 || isLoading}
+                        disabled={isIndisponivel}
                         size="sm"
-                        variant={availableStock === 0 ? "secondary" : "default"}
-                        className={availableStock === 0 ? "opacity-50 cursor-not-allowed" : ""}
+                        variant="secondary"
+                        className={isIndisponivel ? "opacity-50 cursor-not-allowed" : ""}
+                        onClick={() => !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
                       >
-                        {availableStock === 0 ? (
-                          <>
-                            <span className="w-4 h-4 mr-1">❌</span>
-                            Indisponível
-                          </>
-                        ) : (
-                          <Plus className="w-4 h-4" />
-                        )}
+                        <span className="w-4 h-4 mr-1">{isIndisponivel ? '❌' : <ShoppingCart className="w-4 h-4" />}</span>
+                        {isIndisponivel ? 'Indisponível' : 'Adicionar'}
                       </Button>
                     </div>
                   </div>

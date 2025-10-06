@@ -1,19 +1,94 @@
+// Busca todos os endereços públicos
+export const fetchAllAddresses = async () => {
+  try {
+    const res = await apiRequest(`${API_BASE_URL}/addresses`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    return Array.isArray(res) ? res : [];
+  } catch (e) {
+    return [];
+  }
+};
 // Configuração da API pública para Bruno Cake
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const DOMAIN_BASE_URL = import.meta.env.VITE_DOMAIN_BASE_URL;
 
 // Configuração da loja Bruno Cake
+// STORE_CONFIG agora é dinâmico: endereço será atualizado conforme o endereço ativo do backend
 export const STORE_CONFIG = {
   name: 'Bruno Cake',
   slogan: 'Aqui não é fatia nem pedaço, aqui é tora!',
-  address: 'Rua das Tortas, 123 - Centro, São Paulo - SP',
-  phone: '(11) 99999-9999',
-  email: 'contato@brunocakes.com.br',
-  pixKey: 'contato@brunocakes.com.br',
-  workingHours: 'Segunda à Sábado: 8h às 18h | Domingo: 9h às 15h',
-  instagram: '@brunocakes_oficial',
-  whatsapp: '5511999999999'
+  address: '', // será preenchido dinamicamente
+  phone: '(84) 99127-7973',
+  instagram: '@brunocakee',
+  workingHours: '', // será preenchido dinamicamente
+  isOpen: false, // status aberto/fechado
 };
+
+// Função para buscar o endereço ativo do backend e atualizar STORE_CONFIG.address
+export const fetchAndSetActiveAddress = async () => {
+  try {
+    // Busca apenas o endereço ativo
+    const active = await apiRequest(`${API_BASE_URL}/addresses/active`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+    if (active && active.rua) {
+      const fullAddress = `${active.rua}, ${active.numero} - ${active.bairro}, ${active.cidade} - ${active.estado}`;
+      STORE_CONFIG.address = fullAddress;
+      let horarios = active.horarios || '';
+      STORE_CONFIG.workingHours = horarios;
+      STORE_CONFIG.isOpen = horarios ? isOpenNow(horarios) : false;
+      return fullAddress;
+    }
+    STORE_CONFIG.address = '';
+    STORE_CONFIG.workingHours = '';
+    STORE_CONFIG.isOpen = false;
+    return '';
+  } catch (e) {
+    STORE_CONFIG.address = '';
+    STORE_CONFIG.workingHours = '';
+    STORE_CONFIG.isOpen = false;
+    return '';
+  }
+};
+
+// Função para verificar se está aberto agora, dado o texto de horários
+function isOpenNow(horarios: string): boolean {
+  // Suporta formatos:
+  // "Sábado: 05:00h às 14:00h" ou "05:00 até 14:00" (sem dia e sem 'h')
+  const now = new Date();
+  const nowBrasilia = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const dias = [
+    'Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'
+  ];
+  const diaAtual = dias[nowBrasilia.getDay()];
+
+  // 1. Tenta encontrar formato com dia da semana
+  let regex = new RegExp(`${diaAtual}[^:]*: ?([0-9]{1,2})[:h]?([0-9]{2})? ?[h]? ?(?:às|ate|até) ?([0-9]{1,2})[:h]?([0-9]{2})?`, 'i');
+  let match = horarios.match(regex);
+  if (!match) {
+    // 2. Tenta formato sem dia da semana: "05:00 até 14:00" ou "05:00h às 14:00h"
+    regex = /([0-9]{1,2}):?([0-9]{2})? ?[h]? ?(?:às|ate|até) ?([0-9]{1,2}):?([0-9]{2})?/i;
+    match = horarios.match(regex);
+  }
+  if (match) {
+    // match[1]=horaIni, match[2]=minIni, match[3]=horaFim, match[4]=minFim
+    const hA = parseInt(match[1], 10);
+    const mA = match[2] ? parseInt(match[2], 10) : 0;
+    const hF = parseInt(match[3], 10);
+    const mF = match[4] ? parseInt(match[4], 10) : 0;
+    const abertura = new Date(nowBrasilia);
+    abertura.setHours(hA, mA, 0, 0);
+    const fechamento = new Date(nowBrasilia);
+    fechamento.setHours(hF, mF, 0, 0);
+    // Aberto se: nowBrasilia >= abertura && nowBrasilia < fechamento
+    return nowBrasilia >= abertura && nowBrasilia < fechamento;
+  }
+  // Se não encontrar, assume fechado
+  return false;
+}
 
 // Função utilitária para montar a URL da imagem do produto
 export const getProductImageUrl = (image: string | undefined | null) => {

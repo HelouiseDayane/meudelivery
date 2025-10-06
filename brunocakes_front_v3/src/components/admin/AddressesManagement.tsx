@@ -1,0 +1,317 @@
+import React, { useEffect, useState } from 'react';
+
+interface Address {
+  id: string;
+  rua: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  ponto_referencia?: string;
+  horario_abertura?: string;
+  horario_fechamento?: string;
+  ativo?: boolean;
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const getHeaders = () => {
+  const token = localStorage.getItem('admin_token');
+  return {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
+export function AddressesManagement() {
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Address | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const estados = [
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+    'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
+    'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+  ];
+  const [form, setForm] = useState<Omit<Address, 'id'>>({
+    rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: ''
+  });
+
+  // Carregar endereços
+  const fetchAddresses = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/addresses`, { headers: getHeaders() });
+      if (!res.ok) throw new Error('Erro ao buscar endereços');
+      const data = await res.json();
+      let active = null;
+      setAddresses(
+        (Array.isArray(data) ? data : []).map((a: any) => {
+          let horario_abertura = '', horario_fechamento = '';
+          if (a.horarios && typeof a.horarios === 'string' && a.horarios.includes('até')) {
+            const [ini, fim] = a.horarios.split('até').map((s: string) => s.trim());
+            horario_abertura = ini;
+            horario_fechamento = fim;
+          } else {
+            horario_abertura = a.horario_abertura || '';
+            horario_fechamento = a.horario_fechamento || '';
+          }
+          if (a.ativo) active = a.id;
+          return { ...a, horario_abertura, horario_fechamento };
+        })
+      );
+      if (active) setActiveId(active);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Ativar endereço
+  const handleActivate = async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/addresses/${id}/activate`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+      });
+      if (!res.ok) throw new Error('Erro ao ativar endereço');
+      setActiveId(id);
+      await fetchAddresses();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchAddresses(); }, []);
+
+  // Handlers de formulário
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  };
+
+  const handleEdit = (address: Address) => {
+    setEditing(address);
+    setForm({
+      rua: address.rua,
+      numero: address.numero,
+      bairro: address.bairro,
+      cidade: address.cidade,
+      estado: address.estado,
+      ponto_referencia: address.ponto_referencia || '',
+      horario_abertura: address.horario_abertura || '',
+      horario_fechamento: address.horario_fechamento || '',
+    });
+  };
+
+  const handleCancel = () => {
+    setEditing(null);
+    setForm({ rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '' });
+  };
+
+  // Adicionar ou atualizar endereço
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const method = editing ? 'PUT' : 'POST';
+      const url = editing
+        ? `${API_BASE_URL}/admin/addresses/${editing.id}`
+        : `${API_BASE_URL}/admin/addresses`;
+      const payload = {
+        ...form,
+        horarios: form.horario_abertura && form.horario_fechamento
+          ? `${form.horario_abertura} até ${form.horario_fechamento}`
+          : '',
+      };
+      const res = await fetch(url, {
+        method,
+        headers: getHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Erro ao salvar endereço');
+      await fetchAddresses();
+      handleCancel();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Excluir endereço
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este endereço?')) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/addresses/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      if (!res.ok) throw new Error('Erro ao excluir endereço');
+      await fetchAddresses();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-4">Gerenciar Endereços</h1>
+      <p className="text-muted-foreground mb-4">Cadastre, edite e remova endereços de retirada ou entrega.</p>
+
+      {/* Formulário de cadastro/edição */}
+      <form onSubmit={handleSubmit} className="mb-6 space-y-2 bg-white p-4 rounded shadow">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <input name="rua" value={form.rua} onChange={handleChange} required placeholder="Rua" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
+          <input name="numero" value={form.numero} onChange={handleChange} required placeholder="Número" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
+          <input name="bairro" value={form.bairro} onChange={handleChange} required placeholder="Bairro" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
+          <input name="cidade" value={form.cidade} onChange={handleChange} required placeholder="Cidade" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
+          <select
+            name="estado"
+            value={form.estado}
+            onChange={handleChange}
+            required
+            style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}}
+          >
+            <option value="">Selecione o estado</option>
+            {estados.map(uf => (
+              <option key={uf} value={uf}>{uf}</option>
+            ))}
+          </select>
+          <input name="ponto_referencia" value={form.ponto_referencia} onChange={handleChange} placeholder="Ponto de Referência" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
+          <input
+            type="time"
+            name="horario_abertura"
+            value={form.horario_abertura}
+            onChange={handleChange}
+            placeholder="Abertura"
+            style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}}
+            min="00:00"
+            max="23:59"
+            required
+          />
+          <input
+            type="time"
+            name="horario_fechamento"
+            value={form.horario_fechamento}
+            onChange={handleChange}
+            placeholder="Fechamento"
+            style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}}
+            min="00:00"
+            max="23:59"
+            required
+          />
+        </div>
+        <div className="flex gap-2 mt-2">
+            <button
+              type="submit"
+              style={editing
+                ? { background: '#facc15', color: '#222', border: '2px solid #eab308', borderRadius: 6, minWidth: 160, fontWeight: 600, padding: '8px 20px', boxShadow: '0 1px 4px #eab30833', transition: 'background 0.2s' }
+                : { background: '#22c55e', color: '#fff', border: '2px solid #16a34a', borderRadius: 6, minWidth: 160, fontWeight: 600, padding: '8px 20px', boxShadow: '0 1px 4px #16a34a33', transition: 'background 0.2s' }
+              }
+              disabled={loading}
+            >
+              {editing ? 'Salvar Alterações' : 'Adicionar Endereço'}
+            </button>
+            {editing && (
+              <button
+                type="button"
+                style={{ marginLeft: 8, background: '#e5e7eb', color: '#222', border: '2px solid #9ca3af', borderRadius: 6, fontWeight: 600, padding: '8px 20px', boxShadow: '0 1px 4px #9ca3af33', transition: 'background 0.2s' }}
+                onClick={handleCancel}
+                disabled={loading}
+              >
+                Cancelar
+              </button>
+            )}
+        </div>
+        {error && <div className="text-red-500">{error}</div>}
+      </form>
+
+      {/* Lista de endereços */}
+      <div className="overflow-x-auto">
+        <table className="w-full bg-white rounded-lg shadow border border-gray-200">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="px-3 py-2 text-left">Rua</th>
+              <th className="px-3 py-2 text-left">Número</th>
+              <th className="px-3 py-2 text-left">Bairro</th>
+              <th className="px-3 py-2 text-left">Horários</th>
+              <th className="px-3 py-2 text-center">Ações</th>
+              <th className="px-3 py-2 text-center">Checkout</th>
+            </tr>
+          </thead>
+          <tbody>
+            {addresses.map(address => {
+              const rua = address.rua ?? '';
+              const numero = address.numero ?? '';
+              const bairro = address.bairro ?? '';
+              const isActive = address.id === activeId;
+              return (
+                <tr key={address.id} className={`hover:bg-gray-50 border-b last:border-b-0 ${isActive ? 'bg-green-50' : ''}`}>
+                  <td className="px-3 py-2">{rua.length > 15 ? rua.slice(0, 15) + '…' : rua}</td>
+                  <td className="px-3 py-2">{numero.length > 15 ? numero.slice(0, 15) + '…' : numero}</td>
+                  <td className="px-3 py-2">{bairro.length > 15 ? bairro.slice(0, 15) + '…' : bairro}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-block bg-blue-100 text-blue-800 rounded px-2 py-1 text-xs font-semibold mr-2">
+                      {address.horario_abertura} - {address.horario_fechamento}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      style={{ background: '#facc15', color: '#222', border: '1px solid #eab308', borderRadius: 4, padding: '4px 12px', fontWeight: 600, marginRight: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => handleEdit(address)}
+                      disabled={loading}
+                      title="Editar"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      style={{ background: '#ef4444', color: '#fff', border: '1px solid #b91c1c', borderRadius: 4, padding: '4px 12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      onClick={() => handleDelete(address.id)}
+                      disabled={loading}
+                      title="Excluir"
+                    >
+                      Excluir
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {isActive ? (
+                      <span className="inline-block bg-green-500 text-white rounded px-2 py-1 text-xs font-semibold">Ativo</span>
+                    ) : (
+                      <button
+                        style={{ background: '#22d3ee', color: '#222', border: '1px solid #0891b2', borderRadius: 4, padding: '4px 12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        onClick={() => handleActivate(address.id)}
+                        disabled={loading}
+                        title="Ativar este endereço"
+                      >
+                        Checkout
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {addresses.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center text-gray-400 py-4">Nenhum endereço cadastrado.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

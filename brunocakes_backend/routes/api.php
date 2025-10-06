@@ -1,8 +1,3 @@
-use App\Http\Controllers\Api\AddressController;
-// Rotas de endereços (apenas admin, protegidas por sanctum)
-Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
-    Route::apiResource('addresses', AddressController::class);
-});
 <?php
 
 use Illuminate\Support\Facades\Route;
@@ -15,6 +10,8 @@ use App\Http\Controllers\Admin\ProductAdminController;
 use App\Http\Controllers\Admin\OrderAdminController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\Api\AddressController;
+use App\Http\Controllers\Api\EngagementController;
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -48,7 +45,7 @@ Route::prefix('orders')->group(function () {
 
 // Payment
 Route::post('/payment/notify', [PaymentWebhookController::class, 'notify']);
-Route::post('/payment/simulate', [PaymentWebhookController::class, 'simulatePayment']);
+Route::get('/payment/notify', [PaymentWebhookController::class, 'notify']);
 
 // Customer
 Route::get('/customer/last-order', [CheckoutController::class, 'getLastOrderCustomer']);
@@ -62,6 +59,13 @@ Route::prefix('stream')->group(function () {
     Route::post('/trigger-stock-update', [StreamController::class, 'triggerStockUpdate']);
 });
 
+Route::get('/addresses/active', [AddressController::class, 'getActive']);
+
+// Engajamento (registro de eventos)
+Route::post('/engagement/visitor', [EngagementController::class, 'registerVisitor']);
+Route::post('/engagement/pwa-install', [EngagementController::class, 'registerPwaInstall']);
+Route::post('/engagement/cart-with-product', [EngagementController::class, 'registerCartWithProduct']);
+
 // ==========================================
 // ROTAS ADMIN
 // ==========================================
@@ -71,9 +75,11 @@ Route::prefix('admin')->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::post('/logout', [AuthController::class, 'logout']);
-        // Customer
-       // Route::get('/customer/last-order', [CheckoutController::class, 'Customer']);
-         Route::get('/customers/unique', [OrderAdminController::class, 'getUniqueCustomers']);
+
+                // Customer
+                // Route::get('/customer/last-order', [CheckoutController::class, 'Customer']);
+                Route::get('/customers/unique', [OrderAdminController::class, 'getUniqueCustomers']);
+                Route::get('/customers/analytics', [OrderAdminController::class, 'getCustomerAnalytics']);
 
         // Products
              Route::prefix('products')->group(function () {
@@ -105,10 +111,9 @@ Route::prefix('admin')->group(function () {
             Route::post('/clean-expired-carts', [OrderAdminController::class, 'cleanExpiredCarts']);
             Route::get('/redis-stats', [OrderAdminController::class, 'redisStats']);
         });
-
-         Route::post('/test-queue', function() {
-            \App\Jobs\TestQueueJob::dispatch('Testando fila do admin - ' . now());
-            return response()->json(['message' => 'Job de teste disparado! Verifique o terminal do worker.']);
-        });
+        
+            Route::patch('addresses/{id}/activate', [AddressController::class, 'activate']);
+            Route::apiResource('addresses', AddressController::class);
+      
     });
 });

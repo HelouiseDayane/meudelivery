@@ -1,3 +1,4 @@
+import { Checkbox } from '../ui/checkbox';
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -39,13 +40,56 @@ interface Order {
 }
 
 export const OrdersManagement = () => {
+
   const { orders, updateOrder, admin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+
   // Estado de autenticação
   const isAdminAuthenticated = admin?.role === 'staff';
+
+  // Seleção múltipla
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkLoading, setIsBulkLoading] = useState(false);
+
+  // Filtrar pedidos nulos ou undefined antes de aplicar o filtro de busca/status
+  const filteredOrders = orders
+    .filter(order => !!order)
+    .filter(order => {
+      const matchesSearch = (order.id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                           (order.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                           (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+
+  // IDs de pedidos aguardando confirmação
+  const selectableIds = filteredOrders.filter(o => o.status === 'awaiting_seller_confirmation').map(o => o.id);
+  const isAllSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.includes(id));
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(ids => ids.filter(id => !selectableIds.includes(id)));
+    } else {
+      setSelectedIds(ids => Array.from(new Set([...ids, ...selectableIds])));
+    }
+  };
+  const handleSelectOne = (id: string) => {
+    setSelectedIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
+  };
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkLoading(true);
+    try {
+      await adminApi.approvePayments(selectedIds);
+      selectedIds.forEach(id => updateOrder(id, { status: 'completed' }));
+      setSelectedIds([]);
+    } catch (e) {
+      // TODO: feedback de erro
+    }
+    setIsBulkLoading(false);
+  };
 
 
   // Funções auxiliares para atualizar pedidos
@@ -110,16 +154,6 @@ export const OrdersManagement = () => {
     }
   };
 
-  // Filtrar pedidos nulos ou undefined antes de aplicar o filtro de busca/status
-  const filteredOrders = orders
-    .filter(order => !!order)
-    .filter(order => {
-      const matchesSearch = (order.id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                           (order.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                           (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -269,7 +303,7 @@ export const OrdersManagement = () => {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 items-end">
         <div className="flex-1">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -281,23 +315,35 @@ export const OrdersManagement = () => {
             />
           </div>
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os Status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="pending_payment">Aguardando Pagamento</SelectItem>
-            <SelectItem value="awaiting_seller_confirmation">Aguardando Confirmação</SelectItem>
-            <SelectItem value="confirmed">Confirmado</SelectItem>
-            <SelectItem value="preparing">Preparando</SelectItem>
-            <SelectItem value="ready">Pronto</SelectItem>
-            <SelectItem value="completed">Concluído</SelectItem>
-            <SelectItem value="canceled">Cancelado</SelectItem>
-            <SelectItem value="cancelled">Cancelado (Legacy)</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2 items-end">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os Status</SelectItem>
+              <SelectItem value="pending">Pendente</SelectItem>
+              <SelectItem value="pending_payment">Aguardando Pagamento</SelectItem>
+              <SelectItem value="awaiting_seller_confirmation">Aguardando Confirmação</SelectItem>
+              <SelectItem value="confirmed">Confirmado</SelectItem>
+              <SelectItem value="preparing">Preparando</SelectItem>
+              <SelectItem value="ready">Pronto</SelectItem>
+              <SelectItem value="completed">Concluído</SelectItem>
+              <SelectItem value="canceled">Cancelado</SelectItem>
+              <SelectItem value="cancelled">Cancelado (Legacy)</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={selectedIds.length === 0 || isBulkLoading}
+            onClick={handleBulkApprove}
+            className="gap-1"
+          >
+            <CheckCircle className="w-4 h-4" />
+            Confirmar Pedidos Selecionados para Entrega
+          </Button>
+        </div>
       </div>
 
       {/* Tabela de Pedidos */}
@@ -316,6 +362,14 @@ export const OrdersManagement = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Selecionar todos"
+                        disabled={selectableIds.length === 0}
+                      />
+                    </TableHead>
                     <TableHead>ID</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Total</TableHead>
@@ -327,6 +381,15 @@ export const OrdersManagement = () => {
                 <TableBody>
                   {filteredOrders.map((order) => (
                     <TableRow key={order.id}>
+                      <TableCell>
+                        {'confirmed'.includes(order.status) && (
+                          <Checkbox
+                            checked={selectedIds.includes(order.id)}
+                            onCheckedChange={() => handleSelectOne(order.id)}
+                            aria-label={`Selecionar pedido ${order.id}`}
+                          />
+                        )}
+                      </TableCell>
                       <TableCell className="font-mono">#{order.id}</TableCell>
                       <TableCell>
                         <div>
