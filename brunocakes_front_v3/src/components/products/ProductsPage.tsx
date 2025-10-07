@@ -171,27 +171,35 @@ export function ProductsPage() {
 
       {/* Products Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredProducts.map(product => (
-          <Card key={product.id} className="group hover:shadow-lg transition-shadow">
-            <div className="relative">
-              <ImageWithFallback
-                src={product.imageUrl || getProductImageUrl(product.image)}
-                alt={product.name}
-                className="w-full h-48 object-cover rounded-t-lg"
-              />
-              
-              {/* Badges */}
-              <div className="absolute top-2 left-2 flex flex-col gap-1">
-                {product.isNew && (
-                  <Badge className="bg-green-500 text-white">Novo</Badge>
-                )}
-                {product.isPromotion && (
-                  <Badge className="bg-red-500 text-white">Promoção</Badge>
-                )}
-                {!product.available && (
-                  <Badge variant="secondary">Esgotado</Badge>
-                )}
-              </div>
+        {filteredProducts.map(product => {
+          // Usar apenas o campo available_stock para exibir e validar estoque
+          let estoque = 0;
+          if (product.available_stock !== undefined && product.available_stock !== null && product.available_stock !== '') {
+            estoque = typeof product.available_stock === 'string' ? parseInt(product.available_stock, 10) : Number(product.available_stock);
+          }
+          const isAvailable = estoque > 0;
+          return (
+            <Card key={product.id} className="group hover:shadow-lg transition-shadow">
+              <div className="relative">
+                <ImageWithFallback
+                  src={product.imageUrl || getProductImageUrl(product.image)}
+                  alt={product.name}
+                  className="w-full h-48 object-cover rounded-t-lg"
+                />
+                {/* Badges */}
+                <div className="absolute top-2 left-2 flex flex-col gap-1">
+                  {product.isNew && (
+                    <Badge className="bg-green-500 text-white">Novo</Badge>
+                  )}
+                  {product.isPromotion && (
+                    <Badge className="bg-red-500 text-white">Promoção</Badge>
+                  )}
+                  {isAvailable ? (
+                    <Badge className="bg-yellow-400 text-black">Estoque: {estoque}</Badge>
+                  ) : (
+                    <Badge variant="secondary">Esgotado</Badge>
+                  )}
+                </div>
 
               {/* Favorite Button (Client only) */}
               {!isAdmin && (
@@ -260,7 +268,7 @@ export function ProductsPage() {
                     <Button
                       size="sm"
                       onClick={() => handleAddToCart(product)}
-                      disabled={!product.available}
+                      disabled={!isAvailable}
                       className="bg-orange-500 hover:bg-orange-600"
                     >
                       <ShoppingCart className="h-4 w-4 mr-1" />
@@ -271,7 +279,8 @@ export function ProductsPage() {
               </div>
             </CardContent>
           </Card>
-        ))}
+  );
+  })}
       </div>
 
       {/* Empty State */}

@@ -43,6 +43,7 @@ interface Product {
   category: string;
   available: boolean;
   stock: number;
+  available_stock?: number;
   quantity?: number; // Campo alternativo do backend
   expiryDate?: string;
   expires_at?: string; // Campo do backend
@@ -272,7 +273,10 @@ function AppProvider({ children }: { children: ReactNode }) {
       console.warn(`[DEBUG] Produto não encontrado para id: ${productId}`);
       return 0;
     }
-   // console.log(`[DEBUG] Estoque do produto (${product.name} - ${product.id}):`, product.stock);
+    // Se vier o campo available_stock da API, priorize ele
+    if (typeof product.available_stock === 'number') {
+      return product.available_stock;
+    }
     return product.stock || 0;
   };
 
@@ -404,60 +408,30 @@ function AppProvider({ children }: { children: ReactNode }) {
   // Refresh products with stock from API
   const refreshProducts = async () => {
     try {
-      // Se for admin, usa API de admin; senão usa API pública
       if (isAdminAuthenticated) {
         const adminProducts = await adminApi.getProducts();
-        
         const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-        
-        // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
         if (mappedProducts.length > 0) {
           setProducts(mappedProducts);
-          toast.success('Lista de produtos atualizada!');
         }
-        
       } else {
-        try {
-          // Substituir por chamada válida
-          // Exemplo: buscar estoque de todos os produtos
-          // const productsWithStock = await Promise.all(products.map(p => api.getProductStock(p.id)));
-          // Ou apenas buscar produtos normalmente
-          const productsWithStock = await api.getPublicProducts();
-          
-          const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-          
-          // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
-          if (mappedProducts.length > 0) {
-            setProducts(mappedProducts);
-            toast.success('Lista de produtos atualizada!');
-          } else {
-            // Fallback para API básica se with-stock retornar vazio
-            const basicProducts = await api.getPublicProducts();
-            const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-            
-            if (basicMappedProducts.length > 0) {
-              setProducts(basicMappedProducts);
-              toast.success('Lista de produtos atualizada!');
-            }
-          }
-          
-        } catch (publicApiError) {
-          // Fallback para API básica se with-stock falhar
-          const basicProducts = await api.getPublicProducts();
-          const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-          
-          if (mappedProducts.length > 0) {
-            setProducts(mappedProducts);
-            toast.success('Lista de produtos atualizada!');
-          }
+        const productsWithStock = await api.getPublicProducts();
+        const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+        if (mappedProducts.length > 0) {
+          setProducts(mappedProducts);
         }
       }
-      
     } catch (error) {
       console.error('❌ Erro ao atualizar produtos:', error);
-      toast.error('Erro ao atualizar produtos');
     }
   };
+  // Atualização automática do estoque a cada segundo
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      refreshProducts();
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Load analytics data
   const loadAnalytics = async () => {
@@ -564,7 +538,7 @@ function AppProvider({ children }: { children: ReactNode }) {
   // Função para mapear os dados do backend para camelCase
   function mapProductFromBackend(p: any): Product {
     // Log do produto bruto para depuração
-    console.log('[DEBUG] Produto bruto do backend:', p);
+    //console.log('[DEBUG] Produto bruto do backend:', p);
     let stockValue = 0;
     if (p.available_stock !== undefined && p.available_stock !== null && p.available_stock !== '') {
       stockValue = typeof p.available_stock === 'string' ? parseInt(p.available_stock, 10) : Number(p.available_stock);
