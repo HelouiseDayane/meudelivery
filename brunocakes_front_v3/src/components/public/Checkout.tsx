@@ -29,9 +29,7 @@ interface CustomerData {
 
 export const Checkout = () => {
   const navigate = useNavigate();
-  const { cart, clearCart } = useApp();
-  // Função para verificar se há item sem estoque (usa estoque real)
-  const { getAvailableStock } = useApp();
+  const { cart, clearCart, refreshProducts, getAvailableStock } = useApp();
   const hasOutOfStock = cart.some(item => {
     const stock = getAvailableStock(item.product.id);
     return stock === 0;
@@ -110,25 +108,31 @@ export const Checkout = () => {
       return response?.id || Date.now().toString();
     } catch (error) {
       console.error('Erro ao criar pedido:', error);
-      
-      // Verificar se é erro de carrinho expirado
-      if (error instanceof Error && error.message.includes('Carrinho vazio ou expirado')) {
-        // Limpar carrinho local
-        clearCart();
-        
-        // Mostrar alerta específico
-        toast.error('⏰ Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.', {
-          duration: 6000,
-        });
-        
-        // Redirecionar para o cardápio após 2 segundos
-        setTimeout(() => {
-          navigate('/');
-        }, 2000);
-        
-        throw new Error('Carrinho expirado - redirecionando para o cardápio');
+      // Tratar erro de estoque insuficiente ou carrinho expirado
+      if (error instanceof Error) {
+        if (error.message.includes('Carrinho vazio ou expirado')) {
+          clearCart();
+          await refreshProducts();
+          toast.error('⏰ Seu carrinho expirou ou algum produto ficou sem estoque. Revise seu pedido!', {
+            duration: 6000,
+          });
+          setTimeout(() => {
+            navigate('/');
+          }, 2000);
+          throw new Error('Carrinho expirado - redirecionando para o cardápio');
+        }
+        if (error.message.includes('Estoque insuficiente')) {
+          clearCart();
+          await refreshProducts();
+          toast.error('❌ Um ou mais produtos do seu carrinho ficaram sem estoque. Seu carrinho foi limpo.', {
+            duration: 6000,
+          });
+          setTimeout(() => {
+            navigate('/');
+          }, 2000);
+          throw new Error('Estoque insuficiente - redirecionando para o cardápio');
+        }
       }
-      
       throw error;
     }
   };

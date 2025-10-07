@@ -32,39 +32,18 @@ class ExpireCartJob implements ShouldQueue
             'quantity' => $this->quantity
         ]);
 
-        // Verificar se carrinho ainda existe
-        $cartKey = "cart:{$this->sessionId}";
-        $reserveKey = "reserve:{$this->sessionId}:{$this->productId}";
-        
-        $cartExists = Redis::exists($cartKey);
-        $reserveExists = Redis::exists($reserveKey);
-
-        if (!$cartExists && !$reserveExists) {
-            Log::info('🧹 Carrinho já expirado naturalmente (TTL)', [
-                'session_id' => $this->sessionId,
-                'product_id' => $this->productId
+        // Chama o controller para liberar todas as reservas do carrinho
+        try {
+            $controller = app(\App\Http\Controllers\Api\CheckoutController::class);
+            $controller->clearCart($this->sessionId);
+            Log::info('✅ Carrinho expirado e estoque liberado via clearCart', [
+                'session_id' => $this->sessionId
             ]);
-            return;
+        } catch (\Exception $e) {
+            Log::error('❌ Erro ao liberar carrinho expirado', [
+                'session_id' => $this->sessionId,
+                'error' => $e->getMessage()
+            ]);
         }
-
-        // Liberar estoque reservado
-        $currentReserved = Redis::get("product_reserved_{$this->productId}") ?? 0;
-        $newReserved = max(0, $currentReserved - $this->quantity);
-        
-        Redis::set("product_reserved_{$this->productId}", $newReserved);
-        
-        // Remover reserva específica
-        Redis::del($reserveKey);
-        
-        // Remover carrinho se ainda existir
-        Redis::del($cartKey);
-
-        Log::info('✅ Estoque liberado automaticamente', [
-            'session_id' => $this->sessionId,
-            'product_id' => $this->productId,
-            'quantity_released' => $this->quantity,
-            'reserved_before' => $currentReserved,
-            'reserved_after' => $newReserved
-        ]);
     }
 }

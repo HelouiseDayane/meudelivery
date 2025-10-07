@@ -64,24 +64,44 @@ class AddressController extends Controller
     /**
      * Ativa o endereço informado e desativa os demais.
      */
-    public function activate($id)
+   public function activate($id)
     {
-        // Adicione o campo 'ativo' na migration/model se ainda não existir
         // Desativa todos
         Address::query()->update(['ativo' => false]);
         // Ativa o selecionado
         $address = Address::findOrFail($id);
         $address->ativo = true;
         $address->save();
-        return response()->json(['message' => 'Endereço ativado com sucesso', 'id' => $id]);
-    }
 
+        $data = [
+            'message' => 'Endereço ativado com sucesso',
+            'id' => $id,
+            // Ao invés de toArray, inclua o modelo diretamente no array
+            // para que o Laravel cuide da serialização com as opções corretas.
+            'address' => $address, 
+        ];
+
+        // O terceiro parâmetro de response()->json() é para cabeçalhos,
+        // e o quarto é para as opções json_encode.
+        return response()
+            ->json(
+                $data, 
+                200, 
+                ['Content-Type' => 'application/json; charset=UTF-8'], 
+                JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+}
         /**
      * Retorna o endereço ativo (público)
      */
     public function getActive()
     {
         $active = Address::where('ativo', true)->first();
-        return $active ? response()->json($active) : response()->json(null, 404);
+        if (!$active) {
+            return response()->json(null, 404);
+        }
+
+        // Retorna o modelo diretamente, Laravel cuida da serialização
+        return response()->json($active, 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 }

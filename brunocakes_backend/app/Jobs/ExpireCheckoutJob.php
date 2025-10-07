@@ -38,12 +38,41 @@ class ExpireCheckoutJob implements ShouldQueue
             return;
         }
 
-        // Verificar se ordem já foi processada
-        if (in_array($order->status, ['awaiting_seller_confirmation', 'confirmed', 'completed', 'canceled'])) {
+        // Se o pedido está confirmado ou completado, não faz nada
+        if (in_array($order->status, ['awaiting_seller_confirmation', 'confirmed', 'completed'])) {
             Log::info('✅ Ordem já processada, não precisa expirar', [
                 'order_id' => $this->orderId,
                 'status' => $order->status
             ]);
+            return;
+        }
+
+        // Se já está cancelado, libera estoque se ainda houver reservado
+        if ($order->status === 'canceled') {
+            Log::info('⚠️ Ordem já cancelada, verificando estoque reservado para liberar', [
+                'order_id' => $this->orderId
+            ]);
+            foreach ($order->items as $item) {
+                $reservedKey = "product_reserved_{$item->product_id}";
+                $currentReserved = Redis::get($reservedKey) ?? 0;
+                $newReserved = max(0, $currentReserved - $item->quantity);
+                Redis::set($reservedKey, $newReserved);
+
+                // Adiciona de volta ao estoque disponível no Redis
+                Redis::incrby("product_stock_{$item->product_id}", $item->quantity);
+
+                // Atualiza MySQL
+                Product::where('id', $item->product_id)->increment('quantity', $item->quantity);
+
+                Log::info('📦 Estoque liberado do pedido já cancelado', [
+                    'order_id' => $this->orderId,
+                    'product_id' => $item->product_id,
+                    'product_name' => $item->product_name,
+                    'quantity_released' => $item->quantity,
+                    'reserved_before' => $currentReserved,
+                    'reserved_after' => $newReserved
+                ]);
+            }
             return;
         }
 
@@ -58,23 +87,24 @@ class ExpireCheckoutJob implements ShouldQueue
         }
 
         // Expirar a ordem usando status 'canceled'
-        // Cancelar pedido e pagamento corretamente (status 'failed' no pagamento)
-        $payment = $order->payment;
-        if ($payment) {
-            // Usa lógica centralizada do PaymentWebhookController
-            app(\App\Http\Controllers\Api\PaymentWebhookController::class)->revertOrderStock($order, $payment);
-        } else {
-            $order->update([
-                'status' => 'canceled',
-                'stock_reserved' => false
-            ]);
-        }
+        $order->update([
+            'status' => 'canceled',
+            'stock_reserved' => false
+        ]);
 
-        // Liberar estoque de todos os itens (mantém para garantir consistência)
+        // Liberar estoque de todos os itens (devolve para disponível e libera reservado)
         foreach ($order->items as $item) {
-            $currentReserved = Redis::get("product_reserved_{$item->product_id}") ?? 0;
+            $reservedKey = "product_reserved_{$item->product_id}";
+            $currentReserved = Redis::get($reservedKey) ?? 0;
             $newReserved = max(0, $currentReserved - $item->quantity);
-            Redis::set("product_reserved_{$item->product_id}", $newReserved);
+            Redis::set($reservedKey, $newReserved);
+
+            // Adiciona de volta ao estoque disponível no Redis
+            Redis::incrby("product_stock_{$item->product_id}", $item->quantity);
+
+            // Atualiza MySQL
+            Product::where('id', $item->product_id)->increment('quantity', $item->quantity);
+
             Log::info('📦 Estoque liberado do checkout expirado', [
                 'order_id' => $this->orderId,
                 'product_id' => $item->product_id,
@@ -83,6 +113,11 @@ class ExpireCheckoutJob implements ShouldQueue
                 'reserved_before' => $currentReserved,
                 'reserved_after' => $newReserved
             ]);
+        }
+
+        // Cancelar pagamento se existir
+        if ($order->payment) {
+            $order->payment->update(['status' => 'canceled']);
         }
 
         Log::info('❌ Checkout expirado automaticamente', [

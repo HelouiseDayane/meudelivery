@@ -79,7 +79,7 @@ Route::prefix('admin')->group(function () {
                 // Customer
                 // Route::get('/customer/last-order', [CheckoutController::class, 'Customer']);
                 Route::get('/customers/unique', [OrderAdminController::class, 'getUniqueCustomers']);
-                Route::get('/customers/analytics', [OrderAdminController::class, 'getCustomerAnalytics']);
+                Route::get('customers/analytics', [AnalyticsController::class, 'customerAnalytics']);
 
         // Products
              Route::prefix('products')->group(function () {
@@ -114,6 +114,7 @@ Route::prefix('admin')->group(function () {
         
             Route::patch('addresses/{id}/activate', [AddressController::class, 'activate']);
             Route::apiResource('addresses', AddressController::class);
+           
       
     });
 });

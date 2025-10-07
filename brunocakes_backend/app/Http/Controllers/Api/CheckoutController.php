@@ -51,7 +51,8 @@ class CheckoutController extends Controller
 
         // Reservar estoque
         Redis::incrby("product_reserved_{$productId}", $quantity);
-        
+        // Salvar timestamp da reserva global do produto
+        Redis::set("product_reserved_time_{$productId}", time());
         // Salvar reserva individual (para limpeza posterior)
         Redis::setex("reserve:{$sessionId}:{$productId}", 600, $quantity); // 10 min TTL
 
@@ -102,6 +103,9 @@ class CheckoutController extends Controller
 
         // Retornar o item atualizado/adicionado
         $cartItemResponse = $cart[$productId];
+    
+        // Sincroniza estoque do produto após operação
+        Redis::set("product_stock_{$productId}", Product::find($productId)->quantity);
         return response()->json([
             'message' => 'Produto adicionado ao carrinho',
             'cart_item' => $cartItemResponse,
@@ -138,6 +142,8 @@ class CheckoutController extends Controller
             $currentReserved = Redis::get("product_reserved_{$productId}") ?? 0;
             if ($currentReserved < 0) {
                 Redis::set("product_reserved_{$productId}", 0);
+                Redis::set("product_reserved_{$productId}", $quantidade);
+                Redis::set("product_reserved_time_{$productId}", time());
             }
         }
         
@@ -157,6 +163,8 @@ class CheckoutController extends Controller
             }
         }
         $this->registrarAtualizacaoEstoque($productId, 'stock_change');
+     
+        Redis::set("product_stock_{$productId}", Product::find($productId)->quantity);
         return response()->json([
             'message' => 'Produto removido do carrinho',
             'released_quantity' => $reservedQuantity
@@ -231,11 +239,11 @@ class CheckoutController extends Controller
         $cartData = Redis::get($cartKey);
         
         if (!$cartData) {
+            // Limpa carrinho e libera estoque se expirado
+            $this->clearCart($sessionId);
             return response()->json([
-                'message' => 'Carrinho vazio ou expirado',
-                'cart' => [],
-                'total' => 0
-            ]);
+                'message' => 'Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.'
+            ], 410);
         }
         
         $cart = json_decode($cartData, true);
@@ -286,11 +294,7 @@ class CheckoutController extends Controller
         $products = Product::where('is_active', true)->get();
         $productsWithStock = [];
 
-        // Sincroniza todos os estoques do MySQL para o Redis ANTES de montar o array de resposta
-        foreach ($products as $product) {
-            // Atualiza o Redis com o valor do banco
-            Redis::set("product_stock_{$product->id}", $product->quantity);
-        }
+        // Removido: sincronização do estoque do MySQL para o Redis
 
         // Agora monta a resposta já com o Redis atualizado
         foreach ($products as $product) {
@@ -365,9 +369,9 @@ class CheckoutController extends Controller
         $cartData = Redis::get($cartKey);
 
         if (!$cartData) {
-            return response()->json([
-                'message' => 'Carrinho vazio ou expirado'
-            ], 400);
+               return response()->json([
+                'message' => 'Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.'
+            ], 410);
         }
 
         $cart = json_decode($cartData, true);

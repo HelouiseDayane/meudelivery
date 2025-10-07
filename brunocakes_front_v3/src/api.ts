@@ -1,11 +1,13 @@
 // Busca todos os endereços públicos
 export const fetchAllAddresses = async () => {
   try {
-    const res = await apiRequest(`${API_BASE_URL}/addresses`, {
+    // Busca apenas o endereço ativo (ajuste para refletir o backend)
+    const res = await apiRequest(`${API_BASE_URL}/addresses/active`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
-    return Array.isArray(res) ? res : [];
+    // Retorna como array para manter compatibilidade
+    return res ? [res] : [];
   } catch (e) {
     return [];
   }
@@ -154,7 +156,11 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
     if (response.status === 204) return null; // sem conteúdo
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      const error: any = new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      error.status = response.status;
+      error.response = response;
+      error.data = errorData;
+      throw error;
     }
     return await response.json();
   } catch (error) {
@@ -165,11 +171,10 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
 // API pública
 export const api = {
   // === PRODUTOS PÚBLICOS ===
-  getPublicProducts: () => apiRequest(API_ENDPOINTS.products.listPublic),
-  
-  getPublicProduct: (id: string) => apiRequest(API_ENDPOINTS.products.showPublic(id)),
+  // Retorna produtos com estoque real do Redis
+  getPublicProducts: () => apiRequest(API_ENDPOINTS.products.withStock),
 
-  getProductsWithStock: () => apiRequest(API_ENDPOINTS.products.withStock),
+  getPublicProduct: (id: string) => apiRequest(API_ENDPOINTS.products.showPublic(id)),
 
   getProductStock: (productId: string) => apiRequest(API_ENDPOINTS.products.stock(productId)),
 

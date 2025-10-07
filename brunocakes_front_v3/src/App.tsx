@@ -17,7 +17,6 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ProductsManagement } from './components/admin/ProductsManagement';
 import { OrdersManagement } from './components/admin/OrdersManagement';
 import ClientsManagement from './components/admin/ClientsManagement';
-import { AddressesManagement } from './components/admin/AddressesManagement';
 import { PublicMenu } from './components/public/PublicMenu';
 import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
@@ -46,10 +45,12 @@ interface Product {
   quantity?: number; // Campo alternativo do backend
   expiryDate?: string;
   expires_at?: string; // Campo do backend
+  expiresAt?: string | null; // Campo camelCase usado no frontend
   promotionPrice?: number;
   promotion_price?: number; // Campo do backend
   isPromotion?: boolean;
   is_promo?: boolean; // Campo do backend
+  isPromo?: boolean; // Campo camelCase usado no frontend
   isNew?: boolean;
   is_new?: boolean; // Campo do backend
   is_active?: boolean;
@@ -229,20 +230,18 @@ function AppProvider({ children }: { children: ReactNode }) {
     const checkCartExpiration = async () => {
       if (cart.length > 0) {
         try {
-          // Tentar buscar o carrinho do backend
           await api.getCart(sessionId);
         } catch (error: any) {
-          // Verificar especificamente erros de carrinho expirado (não erros de rede/servidor)
-          if (error?.message?.includes('expirado') || 
-              error?.message?.includes('não encontrado') ||
-              error?.message?.includes('Carrinho não encontrado') ||
-              (error?.message?.includes('404') && error?.message?.toLowerCase().includes('cart'))) {
-            
-            // LIMPAR APENAS O CARRINHO - NUNCA OS PRODUTOS
+          // Verifica status HTTP 410 (Gone) ou mensagens conhecidas
+          const status = error?.response?.status || error?.status;
+          const msg = error?.message || '';
+          if (status === 410 ||
+              msg.includes('expirado') || 
+              msg.includes('não encontrado') ||
+              msg.includes('Carrinho não encontrado') ||
+              (msg.includes('404') && msg.toLowerCase().includes('cart'))) {
             setCart([]);
             localStorage.removeItem('bruno_cart');
-            
-            // Disparar evento de carrinho expirado apenas se não estiver na página inicial
             if (typeof window !== 'undefined' && window.location.pathname !== '/') {
               window.dispatchEvent(new CustomEvent('cart-expired', {
                 detail: { message: 'Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.' }
@@ -268,7 +267,12 @@ function AppProvider({ children }: { children: ReactNode }) {
   // Utility functions for stock
   const getAvailableStock = (productId: string): number => {
     const product = products.find(p => p.id === productId);
-    return product?.stock || 0;
+    if (!product) {
+      console.warn(`[DEBUG] Produto não encontrado para id: ${productId}`);
+      return 0;
+    }
+   // console.log(`[DEBUG] Estoque do produto (${product.name} - ${product.id}):`, product.stock);
+    return product.stock || 0;
   };
 
   const hasStock = (productId: string): boolean => {
@@ -402,37 +406,55 @@ function AppProvider({ children }: { children: ReactNode }) {
       // Se for admin, usa API de admin; senão usa API pública
       if (isAdminAuthenticated) {
         const adminProducts = await adminApi.getProducts();
+        
         const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+        
+        // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
         if (mappedProducts.length > 0) {
           setProducts(mappedProducts);
-       //    toast.success('Lista de produtos atualizada!');
-        } else {
-          toast.info('Nenhum produto cadastrado no momento.');
-          setProducts([]);
+          toast.success('Lista de produtos atualizada!');
         }
+        
       } else {
-        const response = await api.getProductsWithStock();
-        const mappedProducts = Array.isArray(response) ? response.map(mapProductFromBackend) : [];
-        if (mappedProducts.length > 0) {
-          setProducts(mappedProducts);
-       //    toast.success('Lista de produtos atualizada!');
-        } else {
-          // Fallback para API básica
-          const basicProducts = await api.getPublicProducts();
-          const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-          if (basicMappedProducts.length > 0) {
-            setProducts(basicMappedProducts);
-         //    toast.success('Lista de produtos atualizada!');
+        try {
+          // Substituir por chamada válida
+          // Exemplo: buscar estoque de todos os produtos
+          // const productsWithStock = await Promise.all(products.map(p => api.getProductStock(p.id)));
+          // Ou apenas buscar produtos normalmente
+          const productsWithStock = await api.getPublicProducts();
+          
+          const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+          
+          // PROTEÇÃO: Nunca definir produtos como array vazio a menos que seja explicitamente necessário
+          if (mappedProducts.length > 0) {
+            setProducts(mappedProducts);
+            toast.success('Lista de produtos atualizada!');
           } else {
-            toast.info('Nenhum produto cadastrado no momento.');
-            setProducts([]);
+            // Fallback para API básica se with-stock retornar vazio
+            const basicProducts = await api.getPublicProducts();
+            const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+            
+            if (basicMappedProducts.length > 0) {
+              setProducts(basicMappedProducts);
+              toast.success('Lista de produtos atualizada!');
+            }
+          }
+          
+        } catch (publicApiError) {
+          // Fallback para API básica se with-stock falhar
+          const basicProducts = await api.getPublicProducts();
+          const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+          
+          if (mappedProducts.length > 0) {
+            setProducts(mappedProducts);
+            toast.success('Lista de produtos atualizada!');
           }
         }
       }
+      
     } catch (error) {
       console.error('❌ Erro ao atualizar produtos:', error);
       toast.error('Erro ao atualizar produtos');
-      setProducts([]);
     }
   };
 
@@ -540,26 +562,30 @@ function AppProvider({ children }: { children: ReactNode }) {
 
   // Função para mapear os dados do backend para camelCase
   function mapProductFromBackend(p: any): Product {
+    // Log do produto bruto para depuração
+    console.log('[DEBUG] Produto bruto do backend:', p);
+    let stockValue = 0;
+    if (p.available_stock !== undefined && p.available_stock !== null && p.available_stock !== '') {
+      stockValue = typeof p.available_stock === 'string' ? parseInt(p.available_stock, 10) : Number(p.available_stock);
+    } else if (p.quantity !== undefined && p.quantity !== null && p.quantity !== '') {
+      stockValue = typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity);
+    }
     return {
       id: String(p.id),
       name: p.name || '',
       description: p.description || '',
       price: Number(p.price || 0),
       promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
-      promotion_price: p.promotion_price ? Number(p.promotion_price) : undefined,
       category: p.category || '',
       image: p.image || '',
       imageUrl: getProductImageUrl(p.image_url || p.image),
-      available: Boolean(p.is_active), // Simplificar - produto disponível se ativo
-      is_active: Boolean(p.is_active),
-      stock: Number(p.quantity || p.available_stock || 0), // Usar quantity (admin) ou available_stock (público)
-      quantity: Number(p.quantity || 0), // Campo direto do backend
+      available: Boolean(p.is_active),
+      stock: stockValue,
+      quantity: p.quantity !== undefined ? (typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity)) : 0,
       expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
-      expires_at: p.expires_at || null, // Manter campo original também
-      isPromotion: Boolean(p.is_promo),
-      is_promo: Boolean(p.is_promo),
+      expiresAt: p.expires_at || null,
+      isPromo: Boolean(p.is_promo),
       isNew: Boolean(p.is_new),
-      is_new: Boolean(p.is_new),
     };
   }
 
@@ -593,13 +619,79 @@ function AppProvider({ children }: { children: ReactNode }) {
     validateAdminSession();
   }, []);
 
-  // --- Carregar produtos automaticamente ao mudar autenticação/admin ---
+  // --- Load products based on authentication status ---
   useEffect(() => {
+    const loadProductsWithStock = async () => {
+      try {
+        // Se for admin, usar API de admin; senão usar API pública
+        if (isAdminAuthenticated) {
+          const adminProducts = await adminApi.getProducts();
+          
+          const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+          
+          if (mappedProducts.length > 0) {
+            setProducts(mappedProducts);
+          }
+          
+        } else {
+          try {
+            // Substituir por chamada válida
+            // const productsWithStock = await Promise.all(products.map(p => api.getProductStock(p.id)));
+            // Ou apenas buscar produtos normalmente
+            const productsWithStock = await api.getPublicProducts();
+            
+            const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+            
+            if (mappedProducts.length > 0) {
+              setProducts(mappedProducts);
+            } else {
+              // Fallback para API básica
+              const basicProducts = await api.getPublicProducts();
+              const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+              
+              if (basicMappedProducts.length > 0) {
+                setProducts(basicMappedProducts);
+              }
+            }
+            
+          } catch (publicApiError) {
+            // Fallback para API básica se with-stock falhar
+            const basicProducts = await api.getPublicProducts();
+            const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
+            
+            if (mappedProducts.length > 0) {
+              setProducts(mappedProducts);
+            }
+          }
+        }
+        
+      } catch (error) {
+        console.error('❌ Erro ao carregar produtos:', error);
+        
+        // Tentar adminApi como último recurso se disponível
+        if (localStorage.getItem('admin_token')) {
+          try {
+            const adminProducts = await adminApi.getProducts();
+            const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+            
+            if (mappedProducts.length > 0) {
+              setProducts(mappedProducts);
+            }
+          } catch (adminError) {
+            console.error('❌ Fallback adminApi também falhou:', adminError);
+            toast.error('Erro ao carregar produtos - verifique se o backend está rodando');
+          }
+        }
+      }
+    };
+
+    // Só carregar produtos se admin foi definido (pode ser null ou objeto)
+    // Isso evita carregar produtos antes da validação terminar
     if (admin !== undefined) {
-      refreshProducts();
+      loadProductsWithStock();
       setLoading(false);
     }
-  }, [admin]);
+  }, [isAdminAuthenticated, admin]);
 
   // Load orders from backend for admin
   useEffect(() => {
@@ -636,17 +728,7 @@ function AppProvider({ children }: { children: ReactNode }) {
           observations: order.observations || '',
           scheduledDate: order.scheduled_date,
           createdAt: order.created_at,
-            pixCode: (() => {
-              if (order.payment?.pix_payload) {
-                try {
-                  const payload = JSON.parse(order.payment.pix_payload);
-                  return payload?.copy_paste || null;
-                } catch {
-                  return null;
-                }
-              }
-              return null;
-            })(),
+          pixCode: order.payment?.pix_payload ? JSON.parse(order.payment.pix_payload || '{}').copy_paste : null,
           pixExpiresAt: order.checkout_expires_at,
         }));
 
@@ -819,7 +901,6 @@ function App() {
                     <Route path="products" element={<ProductsManagement />} />
                     <Route path="orders" element={<OrdersManagement />} />
                     <Route path="clients" element={<ClientsManagement />} />
-                    <Route path="addresses" element={<AddressesManagement />} />
                   </Route>
 
                   <Route path="*" element={<Navigate to="/admin/login" />} />

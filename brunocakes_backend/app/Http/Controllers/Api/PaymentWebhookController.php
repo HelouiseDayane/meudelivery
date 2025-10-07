@@ -20,35 +20,38 @@ class PaymentWebhookController extends Controller
     public function notify(Request $request)
     {
         // Log detalhado de todos os dados recebidos (apenas query string)
-          \Log::info('ENTROU NO NOTIFY');
+        
         Log::info('Webhook notify chamado [' . __FILE__ . ':' . __LINE__ . ']', [
-            'payment_id' => $request->query('payment_id'),
-            'status' => $request->query('status'),
-            'random_key' => $request->query('random_key'),
-            'payload_query' => $request->query(),
-            'random_key_type' => gettype($request->query('random_key')),
-            'random_key_len' => strlen((string)$request->query('random_key')),
+            'payment_id' => $request->get('payment_id'),
+            'status' => $request->get('status'),
+            'random_key' => $request->get('random_key'),
+            'payload_all' => $request->all(),
+            'random_key_type' => gettype($request->get('random_key')),
+            'random_key_len' => strlen((string)$request->get('random_key')),
         ]);
 
-        // Só aceita parâmetros via query string
-        $paymentId = $request->query('payment_id');
-        $status = $request->query('status'); // paid, failed, pending
-        $randomKey = $request->query('random_key');
+        // Exige payment_id e random_key
+        $paymentId = $request->get('payment_id');
+        $randomKey = $request->get('random_key');
+        $status = $request->get('status'); // paid, failed, pending
 
-        if (!$paymentId) {
-            return response()->json(['error' => 'Payment id não informado'], 400);
+        if (!$paymentId || !$randomKey) {
+            return response()->json(['error' => 'payment_id e random_key são obrigatórios'], 400);
         }
 
         $payment = Payment::with('order.items')->find($paymentId);
         if (!$payment) {
-            return response()->json(['error' => 'Payment not found'], 404);
+            return response()->json(['error' => 'Pagamento não encontrado'], 404);
         }
         $order = $payment->order;
+        if (!$order) {
+            return response()->json(['error' => 'Pedido não encontrado'], 404);
+        }
 
         // Log detalhado para depuração da random_key
         \Log::info('DEBUG random_key notify [' . __FILE__ . ':' . __LINE__ . ']', [
             'order_id' => $order->id,
-            'payment_id' => $paymentId,
+            'payment_id' => $payment->id,
             'random_key_recebida' => $randomKey,
             'random_key_recebida_type' => gettype($randomKey),
             'random_key_recebida_len' => strlen((string)$randomKey),
@@ -58,11 +61,11 @@ class PaymentWebhookController extends Controller
             'comparacao' => trim((string)$randomKey) === trim((string)$order->payment_reference)
         ]);
 
-        // Validação da random_key: só confere se bate com o pedido
-        if (!$randomKey || trim((string)$randomKey) !== trim((string)$order->payment_reference)) {
+        // Validação: payment_id e random_key devem bater com o mesmo pedido
+        if (trim((string)$randomKey) !== trim((string)$order->payment_reference)) {
             \Log::warning('Falha na validação da random_key no notify', [
                 'order_id' => $order->id,
-                'payment_id' => $paymentId,
+                'payment_id' => $payment->id,
                 'random_key_recebida' => $randomKey,
                 'random_key_esperada' => $order->payment_reference
             ]);
@@ -142,12 +145,7 @@ class PaymentWebhookController extends Controller
             $numero = $matches[2];
         }
 
-                // Detecta a base da URL pelo APP_URL do .env ou usa localhost como fallback
-                $baseUrl = config('app.url') ?? 'http://localhost:8191';
-                // Remove barra final se houver
-                $baseUrl = rtrim($baseUrl, '/');
-                $url_notificacao = "$baseUrl/api/payment/notify?payment_id={$paymentId}&status=paid&random_key={$randomKey}";
-
+         $url_notificacao = "https://apibrunocakes.zapsrv.com/api/payment/notify?payment_id={$paymentId}&status=paid&random_key={$randomKey}";
         // Gerar SKU único (igual ao exemplo)
         $sku = 'TORA' . $order->id . '-' . strtoupper(\Str::random(12));
 
@@ -269,19 +267,34 @@ class PaymentWebhookController extends Controller
 
         // Reverte estoque (Redis e MySQL)
         foreach ($order->items as $item) {
-            // Adiciona de volta ao estoque no Redis
+            // Remove do reservado no Redis
+            $reservedKey = "product_reserved_{$item->product_id}";
+            $currentReserved = Redis::get($reservedKey) ?? 0;
+            $newReserved = max(0, $currentReserved - $item->quantity);
+            Redis::set($reservedKey, $newReserved);
+
+            // Adiciona de volta ao estoque disponível no Redis
             Redis::incrby("product_stock_{$item->product_id}", $item->quantity);
-            
+
             // Atualiza MySQL
             DB::table('products')
                 ->where('id', $item->product_id)
                 ->increment('quantity', $item->quantity);
-            
+
             // ✅ Dispara evento de atualização de estoque
             broadcast(new StockUpdated($item->product_id, 'stock_increased'));
-            
+
             // Sincroniza Redis com MySQL
             dispatch(new SyncStockJob($item->product_id));
+
+            // Log detalhado
+            \Log::info('Estoque revertido/cancelado', [
+                'order_id' => $order->id,
+                'product_id' => $item->product_id,
+                'quantity_reverted' => $item->quantity,
+                'reserved_before' => $currentReserved,
+                'reserved_after' => $newReserved
+            ]);
         }
 
         \Log::info("Pedido {$order->id} cancelado - Estoque revertido");

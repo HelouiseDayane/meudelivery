@@ -165,4 +165,34 @@ class AnalyticsController extends Controller
             ]
         ]);
     }
+
+    public function customerAnalytics()
+    {
+        // Exemplo básico, adapte conforme sua lógica
+        $topClients = Order::select('customer_name as name', 'customer_email as email')
+            ->selectRaw('COUNT(*) as totalOrders, SUM(total_amount) as totalSpent, MAX(created_at) as lastOrderDate')
+            ->where('status', 'confirmed')
+            ->groupBy('customer_email', 'customer_name')
+            ->orderByDesc('totalSpent')
+            ->limit(20)
+            ->get();
+
+        $totalClients = $topClients->count();
+        $activeClients = $topClients->where('lastOrderDate', '>=', now()->subDays(30))->count();
+        $totalClientsRevenue = $topClients->sum('totalSpent');
+        $averageTicket = $totalClients > 0 ? $totalClientsRevenue / $totalClients : 0;
+        $retentionRate = $totalClients > 0 ? round(($activeClients / $totalClients) * 100, 1) : 0;
+
+        return response()->json([
+            'top_clients' => $topClients,
+            'total_clients' => $totalClients,
+            'active_clients' => $activeClients,
+            'total_clients_revenue' => $totalClientsRevenue,
+            'average_ticket' => $averageTicket,
+            'retention_rate' => $retentionRate,
+            'most_frequent_client' => $topClients->first(),
+            'biggest_spender' => $topClients->sortByDesc('totalSpent')->first(),
+        ]);
+    }
+
 }

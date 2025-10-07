@@ -115,8 +115,8 @@ export const PublicMenu = () => {
   // Padroniza os campos de badge para evitar bugs de exibição
   const normalizedProducts = products.map((product) => ({
     ...product,
-    isNew: product.isNew ?? product.is_new ?? false,
-    isPromotion: product.isPromotion ?? product.is_promo ?? false,
+    isNew: Boolean(product.isNew ?? product.is_new),
+    isPromotion: Boolean(product.isPromotion ?? product.isPromo ?? product.is_promo),
   }));
 
   // Se a loja estiver fechada, todos os produtos ficam indisponíveis para adicionar ao carrinho
@@ -246,13 +246,13 @@ export const PublicMenu = () => {
                 {/* Badges */}
                 <div className="absolute top-2 left-2 flex gap-2">
                   {product.isNew && (
-                    <Badge className="bg-blue-500 text-white">
+                    <Badge style={{backgroundColor: '#3b82f6', color: '#fff', border: 'none'}}>
                       <Sparkles className="w-3 h-3 mr-1" />
                       Novo
                     </Badge>
                   )}
                   {product.isPromotion && (
-                    <Badge className="bg-red-500 text-white">
+                    <Badge style={{backgroundColor: '#ef4444', color: '#fff', border: 'none'}}>
                       <Percent className="w-3 h-3 mr-1" />
                       Promoção
                     </Badge>
@@ -261,8 +261,12 @@ export const PublicMenu = () => {
                 {/* Stock Badge */}
                 <div className="absolute top-2 right-2">
                   <Badge 
-                    variant="destructive"
-                    className={isIndisponivel ? "bg-red-600 text-white" : (isLowStock ? "bg-yellow-500 text-black" : "bg-green-600 text-white")}
+                    style={isIndisponivel
+                      ? {backgroundColor: '#dc2626', color: '#fff', border: 'none'}
+                      : isLowStock
+                        ? {backgroundColor: '#facc15', color: '#000', border: 'none'}
+                        : {backgroundColor: '#16a34a', color: '#fff', border: 'none'}
+                    }
                   >
                     {isIndisponivel ? "Indisponível" : `Estoque: ${availableStock}`}
                   </Badge>
