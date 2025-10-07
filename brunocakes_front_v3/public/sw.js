@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
       event.request.url.includes('@vite') ||
       event.request.url.includes('__vite')) return;
       
-  console.log('SW: Handling request for:', event.request.url);
+  //console.log('SW: Handling request for:', event.request.url);
   
   event.respondWith(
     caches.match(event.request)

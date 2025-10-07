@@ -16,6 +16,8 @@ return new class extends Migration {
             $table->string('estado');
             $table->string('ponto_referencia')->nullable();
             $table->string('horarios')->nullable();
+              $table->decimal('latitude', 10, 7)->nullable();
+              $table->decimal('longitude', 10, 7)->nullable();
             $table->boolean('endereco_entrega')->default(false);
             $table->boolean('ativo')->default(false); // Indica se é o endereço ativo
             $table->timestamps();

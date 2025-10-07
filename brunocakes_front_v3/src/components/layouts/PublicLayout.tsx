@@ -170,7 +170,7 @@ export const PublicLayout = () => {
             </div>
           </div>
           <div className="border-t pt-4 mt-4 text-center text-muted-foreground">
-            <p>&copy; 2024 Bruno Cake. Todos os direitos reservados.</p>
+            <p>© 2025 <a href="https://www.helosworld.com.br/" target="_blank" rel="noopener noreferrer">Helo's World</a>. Todos os direitos reservados.</p>
           </div>
         </div>
       </footer>

@@ -364,7 +364,7 @@ class CheckoutController extends Controller
         $data = $request->validate([
             'session_id' => 'required|string',
             'customer_name' => 'required|string|max:255',
-            'customer_email' => 'required|string|email',
+            'customer_email' => 'nullable|string|email',
             'customer_phone' => 'required|string|max:20',
             'address_street' => 'nullable|string',
             'address_neighborhood' => 'nullable|string',

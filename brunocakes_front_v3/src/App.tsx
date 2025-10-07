@@ -577,7 +577,7 @@ function AppProvider({ children }: { children: ReactNode }) {
           await adminApi.getProducts();
           // Se chegou até aqui, o token é válido
            setAdmin(JSON.parse(savedAdmin) as Admin);
-          console.log('✅ Token validado - sessão restaurada');
+         // console.log('✅ Token validado - sessão restaurada');
         } catch (error) {
           console.warn('🔓 Sessão admin expirada, removendo dados:', error);
           // Token inválido, limpar dados
@@ -707,7 +707,7 @@ function AppProvider({ children }: { children: ReactNode }) {
           pixExpiresAt: order.checkout_expires_at,
         }));
 
-        console.log('✅ Pedidos transformados:', transformedOrders);
+       // console.log('✅ Pedidos transformados:', transformedOrders);
         setOrders(transformedOrders);
       } catch (error) {
         console.error('Erro ao carregar pedidos:', error);

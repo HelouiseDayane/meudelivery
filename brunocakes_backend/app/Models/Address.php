@@ -18,6 +18,8 @@ class Address extends Model
         'ponto_referencia',
         'horarios',
         'endereco_entrega',
+        'latitude',
+        'longitude',
         'ativo',
     ];
 }

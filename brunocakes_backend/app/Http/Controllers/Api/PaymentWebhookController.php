@@ -227,30 +227,28 @@ class PaymentWebhookController extends Controller
     {
         // Atualiza status do pagamento
         $payment->update(['status' => 'paid']);
-        
         // Atualiza status do pedido
         $order->update([
             'status' => 'confirmed',
             'stock_reserved' => false
         ]);
 
+        // Dispara evento de atualização de status do pedido
+        broadcast(new \App\Events\OrderStatusUpdated($order));
+
         // Remove definitivamente do estoque (Redis e MySQL)
         foreach ($order->items as $item) {
             // Remove do estoque no Redis (já estava reservado, agora remove definitivo)
             Redis::decrby("product_stock_{$item->product_id}", $item->quantity);
-            
             // Atualiza MySQL
             DB::table('products')
                 ->where('id', $item->product_id)
                 ->decrement('quantity', $item->quantity);
-            
             // ✅ Dispara evento de atualização de estoque
             broadcast(new StockUpdated($item->product_id, 'stock_decreased'));
-            
             // Sincroniza Redis com MySQL
             dispatch(new SyncStockJob($item->product_id));
         }
-
         \Log::info("Pedido {$order->id} finalizado - Estoque removido definitivamente");
     }
 

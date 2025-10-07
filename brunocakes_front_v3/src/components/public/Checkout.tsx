@@ -279,7 +279,7 @@ export const Checkout = () => {
     }
 
     // Validação básica
-    if (!customerData.name || !customerData.email || !customerData.phone || !customerData.address || !customerData.neighborhood) {
+    if (!customerData.name || !customerData.phone || !customerData.address || !customerData.neighborhood) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
@@ -328,8 +328,8 @@ export const Checkout = () => {
               setShowOrderConfirmationModal(false);
               clearCart();
               if (customerData.phone) {
-                const phone = customerData.phone.replace(/\D/g, '');
-                navigate(`/tracking?phone=${phone}`);
+                // Enviar telefone com máscara para tracking
+                navigate(`/tracking?phone=${encodeURIComponent(customerData.phone)}`);
               } else {
                 navigate('/tracking');
               }
@@ -351,8 +351,8 @@ export const Checkout = () => {
                 setShowOrderConfirmationModal(false);
                 clearCart();
                 if (customerData.phone) {
-                  const phone = customerData.phone.replace(/\D/g, '');
-                  navigate(`/tracking?phone=${phone}`);
+                  // Enviar telefone com máscara para tracking
+                  navigate(`/tracking?phone=${encodeURIComponent(customerData.phone)}`);
                 } else {
                   navigate('/tracking');
                 }
@@ -454,13 +454,13 @@ export const Checkout = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Email *</label>
+                  <label className="text-sm font-medium mb-1 block">Email</label>
                   <Input
                     type="email"
                     placeholder="seu@email.com"
                     value={customerData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
-                    required
+                    
                   />
                 </div>
                 <div>

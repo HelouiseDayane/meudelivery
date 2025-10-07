@@ -32,7 +32,7 @@ export const PublicMenu = () => {
         isOpen = String(isOpen).toLowerCase() === 'true';
       }
       // Log para depuração
-      console.log('[DEBUG] STORE_CONFIG.isOpen:', STORE_CONFIG.isOpen, '| workingHours:', STORE_CONFIG.workingHours);
+      //console.log('[DEBUG] STORE_CONFIG.isOpen:', STORE_CONFIG.isOpen, '| workingHours:', STORE_CONFIG.workingHours);
       setFooterData({
         workingHours: STORE_CONFIG.workingHours,
         isOpen,

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { fetchAndSetActiveAddress, STORE_CONFIG } from '../../api';
+import { useRealTime } from '../../hooks/useRealTime';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,10 +12,72 @@ import { api } from '../../api';
 import { toast } from 'sonner';
 
 export const OrderTracking = () => {
+  const { lastEvent } = useRealTime();
+  const [activeAddress, setActiveAddress] = useState<any>(null);
+  // Buscar endereço ativo
+  const fetchActiveAddress = async () => {
+    try {
+      const address = await fetchAndSetActiveAddress();
+      // STORE_CONFIG.address e STORE_CONFIG.workingHours já são atualizados
+      setActiveAddress({
+        address: STORE_CONFIG.address,
+        workingHours: STORE_CONFIG.workingHours,
+      });
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchActiveAddress();
+  }, []);
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  // Preencher telefone da query string se existir
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const phoneParam = params.get('phone');
+    if (phoneParam) {
+      setPhone(phoneParam);
+    }
+  }, []);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  // Atualiza status do pedido em tempo real
+  useEffect(() => {
+    if (lastEvent && lastEvent.type === 'order_status') {
+      setSearchResults((prev) => {
+        const exists = prev.some(order => order.id === lastEvent.data.order_id);
+        if (exists) {
+          return prev.map(order =>
+            order.id === lastEvent.data.order_id
+              ? { ...order, status: lastEvent.data.status }
+              : order
+          );
+        } else {
+          // Buscar dados completos do pedido na API
+          api.getOrder(lastEvent.data.order_id)
+            .then(orderData => {
+              setSearchResults(current => [
+                ...current,
+                { ...orderData, status: lastEvent.data.status }
+              ]);
+            })
+            .catch(() => {
+              // Se falhar, adiciona só dados mínimos
+              setSearchResults(current => [
+                ...current,
+                {
+                  id: lastEvent.data.order_id,
+                  status: lastEvent.data.status,
+                  items: [],
+                  customer_phone: lastEvent.data.customer_phone || '',
+                }
+              ]);
+            });
+          return prev;
+        }
+      });
+    }
+  }, [lastEvent]);
   const [isSearching, setIsSearching] = useState(false);
 
   const formatPhoneInput = (value: string) => {
@@ -52,9 +116,17 @@ export const OrderTracking = () => {
         phoneFormats.push(phone); // Formato original: (84) 98835-1621
         phoneFormats.push(phone.replace(/\D/g, '')); // Apenas números: 84988351621
         phoneFormats.push('+55' + phone.replace(/\D/g, '')); // Com +55: +5584988351621
+        // Adicionar formato sem espaço, sem parênteses, sem hífen
+        phoneFormats.push(phone.replace(/\D/g, ''));
+        // Adicionar formato com DDD sem máscara
+        if (phone.startsWith('(')) {
+          const ddd = phone.slice(1, 3);
+          const rest = phone.replace(/\D/g, '').slice(2);
+          phoneFormats.push(ddd + rest);
+        }
       }
       
-      console.log('Formatos de telefone a testar:', phoneFormats);
+      //console.log('Formatos de telefone a testar:', phoneFormats);
       
       let results = null;
       let foundWithFormat = null;
@@ -87,8 +159,8 @@ export const OrderTracking = () => {
         }
       }
       
-      console.log('Resposta final da API:', results);
-      console.log('Formato que funcionou:', foundWithFormat);
+     // console.log('Resposta final da API:', results);
+     // console.log('Formato que funcionou:', foundWithFormat);
       
       // Tratar diferentes formatos de resposta da API
       let orders = [];
@@ -108,7 +180,7 @@ export const OrderTracking = () => {
       if (orders.length === 0) {
         toast.info('Nenhum pedido encontrado com esses dados');
       } else {
-        toast.success(`${orders.length} pedido(s) encontrado(s)`);
+       // toast.success(`${orders.length} pedido(s) encontrado(s)`);
         if (foundWithFormat && foundWithFormat !== phone) {
           console.log(`💡 Dica: Pedidos encontrados com formato ${foundWithFormat} em vez de ${phone}`);
         }
@@ -273,6 +345,17 @@ export const OrderTracking = () => {
                         minute: '2-digit',
                       })}
                     </p>
+                    {/* Link para abrir localização no Google Maps */}
+                    {order.latitude && order.longitude && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${order.latitude},${order.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 500, display: 'inline-block', marginTop: 4 }}
+                      >
+                        Ver no mapa
+                      </a>
+                    )}
                   </div>
                   <Badge className={getStatusColor(order.status)}>
                     {getStatusIcon(order.status)}
@@ -319,13 +402,21 @@ export const OrderTracking = () => {
                   </div>
                 </div>
 
-                {order.status === 'ready' && (
+                {(order.status === 'ready' || order.status === 'completed') && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <p className="text-green-800 font-medium">
-                      🎉 Seu pedido está pronto para retirada!
-                    </p>
-                    <p className="text-green-600 text-sm mt-1">
-                      Você pode buscar na nossa loja durante o horário de funcionamento.
+                      🎉 Seu pedido está pronto! Venha buscar em
+                      <br />
+                      {activeAddress && activeAddress.address ? (
+                        <>
+                          <strong>{activeAddress.address}</strong>
+                          <br />
+                          <span>Horário: {activeAddress.workingHours}</span>
+                        </>
+                      ) : (
+                        <>nossa loja durante o horário de funcionamento.</>
+                      )}
+                      <br />Estamos já te aguardando!
                     </p>
                   </div>
                 )}

@@ -29,7 +29,7 @@ return new class extends Migration
             $table->string('payment_method')->default('pix'); // future-proof
             $table->string('payment_reference')->nullable(); // id do provedor
             // status
-            $table->enum('status', ['pending_payment','awaiting_seller_confirmation','confirmed','canceled','completed'])
+              $table->enum('status', ['pending_payment','awaiting_seller_confirmation','confirmed','canceled','completed','delivered'])
                   ->default('pending_payment');
             $table->boolean('pickup_info_visible')->default(false); // quando admin confirmar, set true
             $table->timestamps();

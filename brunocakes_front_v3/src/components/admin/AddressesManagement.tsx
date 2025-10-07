@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 
 interface Address {
   id: string;
@@ -24,6 +26,15 @@ const getHeaders = () => {
 };
 
 export function AddressesManagement() {
+  // Componente para selecionar localização no mapa
+  function LocationPicker({ setLatLng }: { setLatLng: (lat: string, lng: string) => void }) {
+    useMapEvents({
+      click(e) {
+        setLatLng(e.latlng.lat.toString(), e.latlng.lng.toString());
+      },
+    });
+    return null;
+  }
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +45,54 @@ export function AddressesManagement() {
     'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
     'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
   ];
-  const [form, setForm] = useState<Omit<Address, 'id'>>({
-    rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: ''
+  const [form, setForm] = useState<Omit<Address, 'id'> & { latitude?: string; longitude?: string }>({
+    rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '', latitude: '', longitude: ''
   });
+  // Preencher endereço via geolocalização
+  const handleFillAddressByLocation = async () => {
+    if (!form.latitude || !form.longitude) {
+      setError('Informe latitude e longitude');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // Usando Nominatim (OpenStreetMap)
+      const url = `${API_BASE_URL}/geocode/reverse?lat=${form.latitude}&lon=${form.longitude}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Erro ao buscar endereço pela localização');
+      const data = await res.json();
+      const addr = data.address || {};
+      // Mapeamento de estados para siglas
+      const estadosMap: Record<string, string> = {
+        'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM', 'Bahia': 'BA', 'Ceará': 'CE',
+        'Distrito Federal': 'DF', 'Espírito Santo': 'ES', 'Goiás': 'GO', 'Maranhão': 'MA', 'Mato Grosso': 'MT',
+        'Mato Grosso do Sul': 'MS', 'Minas Gerais': 'MG', 'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR',
+        'Pernambuco': 'PE', 'Piauí': 'PI', 'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN',
+        'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC',
+        'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO'
+      };
+      let estado = addr.state_code || addr.state || addr.region || '';
+      // Se vier nome completo, converte para sigla
+      if (estado && estado.length > 2 && estadosMap[estado]) {
+        estado = estadosMap[estado];
+      }
+      // Busca número em mais campos
+      const numero = addr.house_number || addr.number || addr['addr:housenumber'] || '';
+      setForm(f => ({
+        ...f,
+        rua: addr.road || addr.street || addr['addr:street'] || '',
+        numero,
+        bairro: addr.suburb || addr.neighbourhood || addr.village || addr.town || '',
+        cidade: addr.city || addr.town || addr.village || '',
+        estado,
+      }));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Carregar endereços
   const fetchAddresses = async () => {
@@ -109,12 +165,14 @@ export function AddressesManagement() {
       ponto_referencia: address.ponto_referencia || '',
       horario_abertura: address.horario_abertura || '',
       horario_fechamento: address.horario_fechamento || '',
+      latitude: (address as any).latitude || '',
+      longitude: (address as any).longitude || '',
     });
   };
 
   const handleCancel = () => {
     setEditing(null);
-    setForm({ rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '' });
+  setForm({ rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '', latitude: '', longitude: '' });
   };
 
   // Adicionar ou atualizar endereço
@@ -132,6 +190,8 @@ export function AddressesManagement() {
         horarios: form.horario_abertura && form.horario_fechamento
           ? `${form.horario_abertura} até ${form.horario_fechamento}`
           : '',
+        latitude: form.latitude || null,
+        longitude: form.longitude || null,
       };
       const res = await fetch(url, {
         method,
@@ -174,7 +234,49 @@ export function AddressesManagement() {
 
       {/* Formulário de cadastro/edição */}
       <form onSubmit={handleSubmit} className="mb-6 space-y-2 bg-white p-4 rounded shadow">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+    <div style={{ gridColumn: '1 / -1', marginBottom: 12 }}>
+      <label className="block mb-2 font-semibold">Selecione a localização no mapa:</label>
+      <MapContainer
+        center={form.latitude && form.longitude ? [parseFloat(form.latitude), parseFloat(form.longitude)] : [-5.7945, -35.211]}
+        zoom={15}
+        style={{ height: '300px', width: '100%' }}
+      >
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <LocationPicker setLatLng={(lat, lng) => {
+          setForm(f => ({ ...f, latitude: lat, longitude: lng }));
+          setTimeout(() => handleFillAddressByLocation(), 100); // Preencher endereço após selecionar
+        }} />
+        {form.latitude && form.longitude && (
+          <Marker position={[parseFloat(form.latitude), parseFloat(form.longitude)]} />
+        )}
+      </MapContainer>
+      <small className="text-gray-500">Clique no mapa para definir a localização exata.</small>
+    </div>
+          <input
+            name="latitude"
+            value={form.latitude || ''}
+            onChange={handleChange}
+            placeholder="Latitude"
+            style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}}
+            type="text"
+          />
+          <input
+            name="longitude"
+            value={form.longitude || ''}
+            onChange={handleChange}
+            placeholder="Longitude"
+            style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}}
+            type="text"
+          />
+          <button
+            type="button"
+            style={{ background: '#38bdf8', color: '#fff', border: '2px solid #0ea5e9', borderRadius: 6, minWidth: 160, fontWeight: 600, padding: '8px 20px', boxShadow: '0 1px 4px #0ea5e933', transition: 'background 0.2s', marginBottom: 4 }}
+            onClick={handleFillAddressByLocation}
+            disabled={loading}
+          >
+            Preencher endereço pela localização
+          </button>
           <input name="rua" value={form.rua} onChange={handleChange} required placeholder="Rua" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
           <input name="numero" value={form.numero} onChange={handleChange} required placeholder="Número" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
           <input name="bairro" value={form.bairro} onChange={handleChange} required placeholder="Bairro" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />

@@ -12,9 +12,12 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\EngagementController;
+use App\Http\Controllers\Api\GeocodeController;
 
 // ==========================================
 // ROTAS PÚBLICAS
+// Geocodificação reversa
+Route::get('/geocode/reverse', [GeocodeController::class, 'reverse']);
 // ==========================================
 
 // Produtos (existentes)
