@@ -83,11 +83,10 @@ export const ADMIN_API_ENDPOINTS = {
     list: `${API_BASE_URL}/admin/orders`,
     show: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
     update: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
-    updateStatus: (id: string) => `${API_BASE_URL}/admin/orders/${id}/status`,
-    confirmMany: `${API_BASE_URL}/admin/orders/confirm-many`,
-    approvePayment: `${API_BASE_URL}/admin/orders/approve-payment`,
+  updateStatus: (id: string) => `${API_BASE_URL}/admin/orders/${id}/status`,
+  markDelivered: (id: string) => `${API_BASE_URL}/admin/orders/${id}/mark-delivered`,
+
     cancelPayment: `${API_BASE_URL}/admin/orders/cancel-payment`,
-    markCompleted: `${API_BASE_URL}/admin/orders/mark-completed`,
     finish: `${API_BASE_URL}/admin/orders/finish`,
   },
   clients: {
@@ -109,6 +108,15 @@ export const ADMIN_API_ENDPOINTS = {
 
 // API administrativa
 export const adminApi = {
+  markAsDelivered: (orderId: string) => {
+    return adminApiRequest(ADMIN_API_ENDPOINTS.orders.markDelivered(orderId), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAdminAuthHeaders(),
+      },
+    });
+  },
   // === AUTENTICAÇÃO ===
   login: async (email: string, password: string) => {
     const response = await adminApiRequest(ADMIN_API_ENDPOINTS.auth.login, {

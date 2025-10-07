@@ -190,8 +190,8 @@ export function AddressesManagement() {
         horarios: form.horario_abertura && form.horario_fechamento
           ? `${form.horario_abertura} até ${form.horario_fechamento}`
           : '',
-        latitude: form.latitude || null,
-        longitude: form.longitude || null,
+        latitude: typeof form.latitude === 'string' ? form.latitude : (form.latitude ? String(form.latitude) : ''),
+        longitude: typeof form.longitude === 'string' ? form.longitude : (form.longitude ? String(form.longitude) : ''),
       };
       const res = await fetch(url, {
         method,

@@ -14,16 +14,33 @@ import { toast } from 'sonner';
 export const OrderTracking = () => {
   const { lastEvent } = useRealTime();
   const [activeAddress, setActiveAddress] = useState<any>(null);
+  const [activeLatLng, setActiveLatLng] = useState<{ latitude: number, longitude: number } | null>(null);
   // Buscar endereço ativo
   const fetchActiveAddress = async () => {
     try {
-      const address = await fetchAndSetActiveAddress();
-      // STORE_CONFIG.address e STORE_CONFIG.workingHours já são atualizados
-      setActiveAddress({
-        address: STORE_CONFIG.address,
-        workingHours: STORE_CONFIG.workingHours,
-      });
-    } catch {}
+      // Busca o endereço ativo completo do backend
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/addresses/active`);
+      if (res.ok) {
+        const active = await res.json();
+        //nsole.log('Resposta do /api/addresses/active:', active);
+        const addressString = `${active.rua}, ${active.numero} - ${active.bairro}, ${active.cidade} - ${active.estado}`;
+        setActiveAddress({
+          address: addressString,
+          workingHours: active.horarios || '',
+        });
+        if (active.latitude && active.longitude) {
+          setActiveLatLng({ latitude: Number(active.latitude), longitude: Number(active.longitude) });
+          // console.log('activeLatLng definido:', { latitude: Number(active.latitude), longitude: Number(active.longitude) });
+        } else {
+          setActiveLatLng(null);
+          console.log('activeLatLng: null');
+        }
+      } else {
+        console.log('Falha ao buscar /api/addresses/active, status:', res.status);
+      }
+    } catch (err) {
+      console.log('Erro ao buscar /api/addresses/active:', err);
+    }
   };
 
   useEffect(() => {
@@ -113,10 +130,9 @@ export const OrderTracking = () => {
       // Tentar múltiplos formatos de telefone
       const phoneFormats = [];
       if (phone) {
-        phoneFormats.push(phone); // Formato original: (84) 98835-1621
-        phoneFormats.push(phone.replace(/\D/g, '')); // Apenas números: 84988351621
-        phoneFormats.push('+55' + phone.replace(/\D/g, '')); // Com +55: +5584988351621
-        // Adicionar formato sem espaço, sem parênteses, sem hífen
+        phoneFormats.push(phone); 
+        phoneFormats.push(phone.replace(/\D/g, '')); 
+        phoneFormats.push('+55' + phone.replace(/\D/g, '')); 
         phoneFormats.push(phone.replace(/\D/g, ''));
         // Adicionar formato com DDD sem máscara
         if (phone.startsWith('(')) {
@@ -135,7 +151,7 @@ export const OrderTracking = () => {
       try {
         results = await api.getOrdersByContact(email, phone);
         foundWithFormat = phone;
-        console.log('Encontrado com formato original:', phone);
+       //onsole.log('Encontrado com formato original:', phone);
       } catch (error) {
         console.log('Erro com formato original:', error);
       }
@@ -144,13 +160,13 @@ export const OrderTracking = () => {
       if ((!results || (Array.isArray(results) && results.length === 0)) && phoneFormats.length > 1) {
         for (const phoneFormat of phoneFormats.slice(1)) {
           try {
-            console.log('Tentando formato:', phoneFormat);
+          //console.log('Tentando formato:', phoneFormat);
             const testResults = await api.getOrdersByContact(email, phoneFormat);
             if (testResults && ((Array.isArray(testResults) && testResults.length > 0) || 
                               (testResults.data && testResults.data.length > 0))) {
               results = testResults;
               foundWithFormat = phoneFormat;
-              console.log('Encontrado com formato:', phoneFormat);
+           // console.log('Encontrado com formato:', phoneFormat);
               break;
             }
           } catch (error) {
@@ -182,7 +198,7 @@ export const OrderTracking = () => {
       } else {
        // toast.success(`${orders.length} pedido(s) encontrado(s)`);
         if (foundWithFormat && foundWithFormat !== phone) {
-          console.log(`💡 Dica: Pedidos encontrados com formato ${foundWithFormat} em vez de ${phone}`);
+          // console.log(`💡 Dica: Pedidos encontrados com formato ${foundWithFormat} em vez de ${phone}`);
         }
       }
     } catch (error) {
@@ -230,6 +246,8 @@ export const OrderTracking = () => {
         return 'Pronto para retirada';
       case 'completed':
         return 'Concluído';
+      case 'delivered':
+        return 'Pedido entregue';
       case 'cancelled':
       case 'canceled':
         return 'Cancelado';
@@ -345,17 +363,8 @@ export const OrderTracking = () => {
                         minute: '2-digit',
                       })}
                     </p>
-                    {/* Link para abrir localização no Google Maps */}
-                    {order.latitude && order.longitude && (
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${order.latitude},${order.longitude}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 500, display: 'inline-block', marginTop: 4 }}
-                      >
-                        Ver no mapa
-                      </a>
-                    )}
+                    {/* Link para abrir localização no Google Maps sempre usando o endereço ativo se não houver no pedido */}
+
                   </div>
                   <Badge className={getStatusColor(order.status)}>
                     {getStatusIcon(order.status)}
@@ -409,7 +418,19 @@ export const OrderTracking = () => {
                       <br />
                       {activeAddress && activeAddress.address ? (
                         <>
-                          <strong>{activeAddress.address}</strong>
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                            <strong>{activeAddress.address}</strong>
+                            {activeLatLng && (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${activeLatLng.latitude},${activeLatLng.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#2563eb', textDecoration: 'underline', fontWeight: 500 }}
+                              >
+                              Ver localização de retirada do produto
+                              </a>
+                            )}
+                          </div>
                           <br />
                           <span>Horário: {activeAddress.workingHours}</span>
                         </>

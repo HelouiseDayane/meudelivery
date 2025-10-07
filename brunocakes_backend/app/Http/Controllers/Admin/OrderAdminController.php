@@ -76,11 +76,11 @@ class OrderAdminController extends Controller {
             'retention_rate' => $retentionRate,
         ]);
     }
-    public function index()
-    {
-        return response()->json(Order::with('items', 'payment')->latest()->get());
-    }
-                    
+    
+        public function index()
+        {
+            return response()->json(Order::with('items', 'payment')->latest()->get());
+        }
                 
      public function approvePayment(Request $request)
     {
@@ -225,4 +225,24 @@ class OrderAdminController extends Controller {
 
         return response()->json($customers);
     }
+
+
+     public function markAsDelivered($id)
+    {
+        $order = Order::findOrFail($id);
+        if ($order->status !== 'completed') {
+            return response()->json([
+                'message' => 'Só é possível marcar como entregue pedidos com status completed.',
+                'current_status' => $order->status
+            ], 400);
+        }
+        $order->status = 'delivered';
+        $order->save();
+        return response()->json([
+            'message' => 'Pedido marcado como entregue.',
+            'order_id' => $order->id,
+            'new_status' => $order->status
+        ]);
     }
+
+}
