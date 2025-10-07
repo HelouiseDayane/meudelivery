@@ -266,17 +266,27 @@ class CheckoutController extends Controller
         
         if ($cartData) {
             $cart = json_decode($cartData, true);
-            
-            // Liberar todas as reservas
+            // Liberar todas as reservas e recalcular reservado total
             foreach ($cart as $productId => $item) {
-                $this->registrarAtualizacaoEstoque($productId, 'stock_change');
                 $reserveKey = "reserve:{$sessionId}:{$productId}";
                 $reservedQuantity = Redis::get($reserveKey) ?? 0;
-                
                 if ($reservedQuantity > 0) {
                     Redis::decrby("product_reserved_{$productId}", $reservedQuantity);
                     Redis::del($reserveKey);
                 }
+                // Recalcula o reservado total considerando apenas reservas ativas
+                $pattern = "reserve:*:{$productId}";
+                $keys = Redis::keys($pattern);
+                $totalActive = 0;
+                foreach ($keys as $key) {
+                    $ttl = Redis::ttl($key);
+                    $qty = Redis::get($key);
+                    if ($ttl > 0 && $qty > 0) {
+                        $totalActive += $qty;
+                    }
+                }
+                Redis::set("product_reserved_{$productId}", $totalActive);
+                $this->registrarAtualizacaoEstoque($productId, 'stock_change');
             }
         }
         

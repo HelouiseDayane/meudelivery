@@ -21,6 +21,7 @@ import { PublicMenu } from './components/public/PublicMenu';
 import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
 import { OrderTracking } from './components/public/OrderTracking';
+import { AddressesManagement } from './components/admin/AddressesManagement';
 
 // Types
 interface Admin {
@@ -901,6 +902,7 @@ function App() {
                     <Route path="products" element={<ProductsManagement />} />
                     <Route path="orders" element={<OrdersManagement />} />
                     <Route path="clients" element={<ClientsManagement />} />
+                    <Route path="addresses" element={<AddressesManagement />} />
                   </Route>
 
                   <Route path="*" element={<Navigate to="/admin/login" />} />
