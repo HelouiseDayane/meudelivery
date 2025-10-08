@@ -1,3 +1,10 @@
+  // Marcar pedido como entregue
+  const handleMarkAsDelivered = async (orderId: string) => {
+    try {
+      await adminApi.markAsDelivered(orderId);
+      updateOrder(orderId, { status: 'delivered' as any });
+    } catch (error) {}
+  };
 import { Checkbox } from '../ui/checkbox';
 import { useState } from 'react';
 import { Button } from '../ui/button';
@@ -190,6 +197,8 @@ export const OrdersManagement = () => {
         return 'Pronto';
       case 'completed':
         return 'Concluído';
+      case 'delivered':
+        return 'Entregue';
       case 'canceled':
         return 'Cancelado';
       case 'cancelled': // Compatibilidade com dados antigos
@@ -368,6 +377,7 @@ export const OrdersManagement = () => {
                         onCheckedChange={handleSelectAll}
                         aria-label="Selecionar todos"
                         disabled={selectableIds.length === 0}
+                        className="border-gray-400 bg-white data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 focus:ring-2 focus:ring-blue-500"
                       />
                     </TableHead>
                     <TableHead>ID</TableHead>
@@ -387,6 +397,7 @@ export const OrdersManagement = () => {
                             checked={selectedIds.includes(order.id)}
                             onCheckedChange={() => handleSelectOne(order.id)}
                             aria-label={`Selecionar pedido ${order.id}`}
+                            className="border-gray-400 bg-white data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 focus:ring-2 focus:ring-blue-500"
                           />
                         )}
                       </TableCell>
@@ -463,7 +474,7 @@ export const OrdersManagement = () => {
                                 className="gap-1"
                               >
                                 <CheckCircle className="w-4 h-4" />
-                                Confirmar
+                                Entregue
                               </Button>
                             )}
 
@@ -489,6 +500,18 @@ export const OrdersManagement = () => {
                                   Cancelar
                                 </Button>
                               </>
+                            )}
+                            {/* Botão para marcar como entregue, só aparece se status for 'completed' */}
+                            {order.status === 'completed' && (
+                              <Button
+                                size="sm"
+                                variant="success"
+                                onClick={() => handleMarkAsDelivered(order.id)}
+                                className="gap-1 bg-green-600 hover:bg-green-700"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                Marcar como Entregue
+                              </Button>
                             )}
                             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                               <DialogHeader>
@@ -542,6 +565,17 @@ export const OrdersManagement = () => {
                                             Cancelar
                                           </Button>
                                         </>
+                                      )}
+                                      {/* Botão para marcar como entregue, só aparece se status for 'completed' */}
+                                      {selectedOrder.status === 'completed' && (
+                                        <Button
+                                          onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                                          size="sm"
+                                          className="bg-green-600 hover:bg-green-700 text-white"
+                                        >
+                                          <CheckCircle className="w-4 h-4 mr-1" />
+                                          Marcar como Entregue
+                                        </Button>
                                       )}
                                       {selectedOrder.whatsapp && (
                                         <Button
