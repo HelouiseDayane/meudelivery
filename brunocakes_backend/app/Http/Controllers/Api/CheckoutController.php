@@ -424,8 +424,6 @@ class CheckoutController extends Controller
                 'customer_phone' => $data['customer_phone'],
                 'address_street' => $data['address_street'] ?? null,
                 'address_neighborhood' => $data['address_neighborhood'] ?? null,
-                'latitude' => $data['latitude'] ?? null,
-                'longitude' => $data['longitude'] ?? null,
                 'total_amount' => $totalAmount,
                 'status' => 'pending_payment',
                 'checkout_expires_at' => now()->addMinutes(15),
@@ -519,9 +517,6 @@ class CheckoutController extends Controller
                 return (float) $item->total_price;
             });
             $order->payment_status = $order->payment ? $order->payment->status : null;
-            // Garante que latitude/longitude estejam presentes no array
-            $order->latitude = $order->latitude;
-            $order->longitude = $order->longitude;
             return $order;
         });
 
@@ -549,11 +544,9 @@ class CheckoutController extends Controller
      */
     public function trackOrder($id)
     {
-    $order = Order::with(['items', 'payment'])->findOrFail($id);
-    $orderArray = $order->toArray();
-    $orderArray['latitude'] = $order->latitude;
-    $orderArray['longitude'] = $order->longitude;
-    return response()->json($orderArray);
+        $order = Order::with(['items', 'payment'])->findOrFail($id);
+        
+        return response()->json($order);
     }
 
     /**
@@ -579,7 +572,7 @@ class CheckoutController extends Controller
         return response()->json($lastOrder);
     }
 
-    public function registrarAtualizacaoEstoque($productId, $tipo = 'stock_change') {
+        private function registrarAtualizacaoEstoque($productId, $tipo = 'stock_change') {
         $totalStock = Redis::get("product_stock_{$productId}") ?? 0;
         $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
         $availableStock = max(0, $totalStock - $reservedStock);
@@ -595,10 +588,4 @@ class CheckoutController extends Controller
         ];
         Redis::lpush('stock_updates', json_encode($evento));
     }
-
-
-        /**
-     * Marcar pedido como entregue (delivered)
-     */
-   
 }

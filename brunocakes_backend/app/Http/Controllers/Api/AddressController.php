@@ -27,8 +27,6 @@ class AddressController extends Controller
             'ponto_referencia' => 'nullable|string',
             'horarios' => 'nullable|string',
             'endereco_entrega' => 'boolean',
-            'latitude' => 'nullable|string',
-            'longitude' => 'nullable|string',
         ]);
         $address = Address::create($data);
         return response()->json($address, 201);
@@ -52,8 +50,6 @@ class AddressController extends Controller
             'ponto_referencia' => 'nullable|string',
             'horarios' => 'nullable|string',
             'endereco_entrega' => 'boolean',
-            'latitude' => 'nullable|string',
-            'longitude' => 'nullable|string',
         ]);
         $address->update($data);
         return response()->json($address);

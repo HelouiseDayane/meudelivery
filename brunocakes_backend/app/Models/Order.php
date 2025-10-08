@@ -17,13 +17,12 @@ class Order extends Model
         'address_city',
         'address_state',
         'address_zip',
-        'latitude',
-        'longitude',
         'total_amount',
         'payment_method',
         'payment_reference',
         'status',
         'pickup_info_visible',
+        
         // ✅ NOVAS COLUNAS ADICIONADAS
         'cart_expires_at',
         'checkout_expires_at',
@@ -33,8 +32,7 @@ class Order extends Model
     protected $casts = [
         'total_amount' => 'decimal:2',
         'pickup_info_visible' => 'boolean',
-        'latitude' => 'decimal:10,7',
-        'longitude' => 'decimal:10,7',
+        
         // ✅ NOVOS CASTS ADICIONADOS
         'cart_expires_at' => 'datetime',
         'checkout_expires_at' => 'datetime',

@@ -29,7 +29,30 @@ class SyncExpiredOrdersStock extends Command
             return;
         }
 
-        // Apenas remove dos reservados as quantidades de produtos de reservas expiradas (carrinhos abandonados >10min)
+        $orders = Order::with('items')
+            ->where(function($query) {
+                $query->whereNull('status')
+                    ->orWhere('status', '')
+                    ->orWhereIn('status', ['pending_payment', 'canceled', 'failed', 'expired']);
+            })
+            ->get();
+
+        $count = 0;
+        $reservedKeys = [];
+        // Processa pedidos pendentes/cancelados normalmente
+        foreach ($orders as $order) {
+            foreach ($order->items as $item) {
+                $reservedKeys[$item->product_id] = true;
+            }
+            if ($order->items->count() > 0) {
+                $this->info("Liberando estoque do pedido #{$order->id} (status: {$order->status})");
+                dispatch(new ExpireCheckoutJob($order->id));
+                $count++;
+            }
+        }
+        $this->info("Total de pedidos processados: {$count}");
+
+        // Recalcula o reservado de cada produto somando apenas reservas individuais ativas (TTL > 0)
         $allProductIds = \DB::table('products')->pluck('id');
         foreach ($allProductIds as $productId) {
             $reservedKey = "product_reserved_{$productId}";
@@ -40,36 +63,21 @@ class SyncExpiredOrdersStock extends Command
             foreach ($keys as $key) {
                 $ttl = Redis::ttl($key);
                 $qty = Redis::get($key);
-                // Tenta extrair o orderId da chave (reserve:{orderId}:{productId})
-                $parts = explode(':', $key);
-                $orderId = isset($parts[1]) ? $parts[1] : null;
-                $orderStatus = null;
-                if ($orderId) {
-                    $order = \DB::table('orders')->where('id', $orderId)->first();
-                    $orderStatus = $order ? $order->status : null;
-                }
-                // Só exclui reservas expiradas de pedidos que NÃO são delivered, confirmed ou completed
-                if ($ttl > 0) {
+                if ($ttl > 0) { // reserva ainda ativa
                     if ($qty > 0) {
                         $totalActive += $qty;
                     }
-                } else {
-                    if (!in_array($orderStatus, ['delivered', 'confirmed', 'completed'])) {
-                        Redis::del($key);
-                        if ($qty > 0) {
-                            $totalExpired += $qty;
-                        }
-                    } else {
-                        // Reserva expirada mas pedido está em status final, mantém
-                        if ($qty > 0) {
-                            $totalActive += $qty;
-                        }
+                } else if ($ttl === -2) { // reserva expirada
+                    if ($qty > 0) {
+                        $totalExpired += $qty;
                     }
                 }
             }
-            // Atualiza o reservado para refletir apenas reservas ativas
-            Redis::set($reservedKey, $totalActive);
-            $this->info("Reserva ajustada do produto #{$productId}: {$totalActive} ativo, removido dos expirados: {$totalExpired}");
+            // Diminui apenas o valor expirado do reservado
+            $reservedAtual = Redis::get($reservedKey) ?? 0;
+            $novoReserved = max(0, $reservedAtual - $totalExpired);
+            Redis::set($reservedKey, $novoReserved);
+            $this->info("Reserva recalculada do produto #{$productId}: {$novoReserved} ainda ativa (expiradas removidas: {$totalExpired})");
             // Emite evento SSE para o frontend
             if (class_exists('App\\Http\\Controllers\\Api\\CheckoutController')) {
                 $controller = new \App\Http\Controllers\Api\CheckoutController();

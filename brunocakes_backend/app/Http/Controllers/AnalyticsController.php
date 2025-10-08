@@ -169,10 +169,9 @@ class AnalyticsController extends Controller
     public function customerAnalytics()
     {
         // Exemplo básico, adapte conforme sua lógica
-        $validStatuses = ['confirmed', 'completed', 'delivered'];
         $topClients = Order::select('customer_name as name', 'customer_email as email')
             ->selectRaw('COUNT(*) as totalOrders, SUM(total_amount) as totalSpent, MAX(created_at) as lastOrderDate')
-            ->whereIn('status', $validStatuses)
+            ->where('status', 'confirmed')
             ->groupBy('customer_email', 'customer_name')
             ->orderByDesc('totalSpent')
             ->limit(20)

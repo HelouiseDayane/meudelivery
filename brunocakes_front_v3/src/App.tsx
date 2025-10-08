@@ -183,35 +183,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function AppProvider({ children }: { children: ReactNode }) {
-  // Função para mapear os dados do backend para camelCase
-  function mapProductFromBackend(p: any): Product {
-    // Log do produto bruto para depuração
-    /* console.log('[DEBUG] Produto bruto recebido do backend:', {
-      id: p.id,
-      name: p.name,
-      available_stock_raw: p.available_stock,
-      available_stock_converted: p.available_stock !== undefined ? Number(p.available_stock) : 0
-    }); */
-    return {
-      id: String(p.id),
-      name: p.name || '',
-      description: p.description || '',
-      price: Number(p.price || 0),
-      promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
-      category: p.category || '',
-      image: p.image || '',
-      imageUrl: getProductImageUrl(p.image_url || p.image),
-      available: Boolean(p.is_active),
-      available_stock: p.available_stock !== undefined ? Number(p.available_stock) : 0,
-      stock: 0, // Não usar mais stock para exibição
-      quantity: p.quantity !== undefined ? (typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity)) : 0,
-      expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
-      expiresAt: p.expires_at || null,
-      isPromo: Boolean(p.is_promo),
-      isNew: Boolean(p.is_new),
-    };
-  }
-
   // States
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -219,9 +190,9 @@ function AppProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [admin, setAdmin] = useState<Admin | null>(() => {
-    const savedAdmin = localStorage.getItem('bruno_admin');
-    return savedAdmin ? (JSON.parse(savedAdmin) as Admin) : null;
-  });
+  const savedAdmin = localStorage.getItem('bruno_admin');
+  return savedAdmin ? (JSON.parse(savedAdmin) as Admin) : null;
+});
   
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   
@@ -236,6 +207,7 @@ function AppProvider({ children }: { children: ReactNode }) {
   });
 
   const isAdminAuthenticated = admin?.role === 'staff';
+
   // Load cart from localStorage
   useEffect(() => {
     const savedCart = localStorage.getItem('bruno_cart');
@@ -436,15 +408,19 @@ function AppProvider({ children }: { children: ReactNode }) {
   // Refresh products with stock from API
   const refreshProducts = async () => {
     try {
-      let productsWithStock = [];
       if (isAdminAuthenticated) {
-        // Admin: pode usar adminApi, mas priorize o endpoint com estoque
-        productsWithStock = await api.getPublicProducts();
+        const adminProducts = await adminApi.getProducts();
+        const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+        if (mappedProducts.length > 0) {
+          setProducts(mappedProducts);
+        }
       } else {
-        productsWithStock = await api.getPublicProducts();
+        const productsWithStock = await api.getPublicProducts();
+        const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+        if (mappedProducts.length > 0) {
+          setProducts(mappedProducts);
+        }
       }
-      const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-      setProducts(mappedProducts);
     } catch (error) {
       console.error('❌ Erro ao atualizar produtos:', error);
     }
@@ -558,6 +534,65 @@ function AppProvider({ children }: { children: ReactNode }) {
   const deleteClient = (id: string) => {
     setClients(prev => prev.filter(c => c.id !== id));
   };
+
+  // Função para mapear os dados do backend para camelCase
+  function mapProductFromBackend(p: any): Product {
+    // Log do produto bruto para depuração
+    //console.log('[DEBUG] Produto bruto do backend:', p);
+    let stockValue = 0;
+    if (p.available_stock !== undefined && p.available_stock !== null && p.available_stock !== '') {
+      stockValue = typeof p.available_stock === 'string' ? parseInt(p.available_stock, 10) : Number(p.available_stock);
+    } else if (p.quantity !== undefined && p.quantity !== null && p.quantity !== '') {
+      stockValue = typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity);
+    }
+    return {
+      id: String(p.id),
+      name: p.name || '',
+      description: p.description || '',
+      price: Number(p.price || 0),
+      promotionPrice: p.promotion_price ? Number(p.promotion_price) : undefined,
+      category: p.category || '',
+      image: p.image || '',
+      imageUrl: getProductImageUrl(p.image_url || p.image),
+      available: Boolean(p.is_active),
+      stock: stockValue,
+      quantity: p.quantity !== undefined ? (typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity)) : 0,
+      expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
+      expiresAt: p.expires_at || null,
+      isPromo: Boolean(p.is_promo),
+      isNew: Boolean(p.is_new),
+    };
+  }
+
+  // --- Validate admin session on startup ---
+  useEffect(() => {
+    const validateAdminSession = async () => {
+      const savedAdmin = localStorage.getItem('bruno_admin');
+      const savedToken = localStorage.getItem('admin_token');
+
+      if (savedAdmin && savedToken) {
+        try {
+          // Ao invés de verificar /admin/me, vamos usar uma rota que sabemos que existe
+          // Por exemplo, tentar carregar produtos (que é uma operação comum)
+          await adminApi.getProducts();
+          // Se chegou até aqui, o token é válido
+           setAdmin(JSON.parse(savedAdmin) as Admin);
+         // console.log('✅ Token validado - sessão restaurada');
+        } catch (error) {
+          console.warn('🔓 Sessão admin expirada, removendo dados:', error);
+          // Token inválido, limpar dados
+          localStorage.removeItem('bruno_admin');
+          localStorage.removeItem('admin_token');
+          setAdmin(null);
+        }
+      } else {
+        // Não há dados salvos, definir como null para continuar
+        setAdmin(null);
+      }
+    };
+
+    validateAdminSession();
+  }, []);
 
   // --- Load products based on authentication status ---
   useEffect(() => {

@@ -84,10 +84,11 @@ export const ADMIN_API_ENDPOINTS = {
     show: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
     update: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
     updateStatus: (id: string) => `${API_BASE_URL}/admin/orders/${id}/status`,
-    markDelivered: (id: string) => `${API_BASE_URL}/admin/orders/${id}/mark-delivered`,
+    confirmMany: `${API_BASE_URL}/admin/orders/confirm-many`,
+    approvePayment: `${API_BASE_URL}/admin/orders/approve-payment`,
     cancelPayment: `${API_BASE_URL}/admin/orders/cancel-payment`,
+    markCompleted: `${API_BASE_URL}/admin/orders/mark-completed`,
     finish: `${API_BASE_URL}/admin/orders/finish`,
-    approvePayment: `${API_BASE_URL}/admin/orders/finish`,
   },
   clients: {
     list: `${API_BASE_URL}/admin/clients`,
@@ -108,15 +109,6 @@ export const ADMIN_API_ENDPOINTS = {
 
 // API administrativa
 export const adminApi = {
-  markAsDelivered: (orderId: string) => {
-    return adminApiRequest(ADMIN_API_ENDPOINTS.orders.markDelivered(orderId), {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAdminAuthHeaders(),
-      },
-    });
-  },
   // === AUTENTICAÇÃO ===
   login: async (email: string, password: string) => {
     const response = await adminApiRequest(ADMIN_API_ENDPOINTS.auth.login, {
@@ -365,16 +357,17 @@ export const adminApi = {
   },
 
   markAsCompleted: (orderIds: string[] | number[]) => {
-    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    if (orderIds.length === 0) {
       throw new Error('A lista de IDs de pedidos está vazia.');
     }
+    
+ 
+    
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.finish, {
       method: 'PATCH',
       body: JSON.stringify({ order_ids: orderIds }),
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...getAdminAuthHeaders(),
       },
     });
   },

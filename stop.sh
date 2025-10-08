@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 echo "🛑 Parando sistema BrunoCakes..."
 
@@ -6,16 +6,15 @@ echo "🛑 Parando sistema BrunoCakes..."
 docker-compose down
 
 echo "🧹 Limpando recursos Docker (opcional)..."
-printf "Deseja limpar volumes e imagens não utilizadas? (s/N): "
-read REPLY
+read -p "Deseja limpar volumes e imagens não utilizadas? (s/N): " -n 1 -r
 echo
-if [ "$REPLY" = "s" ] || [ "$REPLY" = "S" ]; then
+if [[ $REPLY =~ ^[Ss]$ ]]; then
     echo "🗑️ Removendo volumes..."
     docker-compose down -v
-
+    
     echo "🗑️ Limpando imagens não utilizadas..."
     docker system prune -f
-
+    
     echo "✅ Limpeza concluída!"
 else
     echo "✅ Sistema parado (volumes preservados)"

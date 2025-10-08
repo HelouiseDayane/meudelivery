@@ -162,18 +162,18 @@ class PaymentWebhookController extends Controller
             "titulo" => "Pagamento PIX",
             "descricao" => (string)$descricao,
             "produtos" => $produtos,
-                "referencia_externa" => (string)$order->id,
+            "referencia_externa" => (string)"REF-{$order->id}",
             "SKU" => $sku,
             "NomeCliente" => (string)$order->customer_name,
             "UltNomeCliente" => $ultNome,
-            "email_cliente" => "BRUNO_CAKE-DELIVERY@system.com",
+            "email_cliente" => $emailCliente,
             "DDD_Cliente" => (string)$ddd,
             "Tel_Cliente" => (string)$numero,
             "tipo_notificacao" => "JSON",
             "url_notificacao" => (string)$url_notificacao,
             "texto" => "Pagamento realizado com sucesso!",
         "access_token_plataforma" => "APP_USR-2954630391946213-092217-6b5cdbe01a967e4debb13f09bac7b210-672482120",
-        "access_token_vendedor" => "APP_USR-2954630391946213-100808-3cc96bc7814ac50e51d51b762436ffab-2695368729"
+        "access_token_vendedor" => "APP_USR-2954630391946213-092218-3c911573cc885ff46d176fd1e56b3a10-41047718"
         ];
 
 

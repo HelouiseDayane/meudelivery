@@ -44,7 +44,6 @@ Route::prefix('cart')->group(function () {
 Route::prefix('orders')->group(function () {
     Route::get('/{id}/status', [CheckoutController::class, 'getOrderStatus']);
     Route::get('/{id}/track', [CheckoutController::class, 'trackOrder']);
-    Route::patch('/{id}/mark-delivered', [CheckoutController::class, 'markAsDelivered']);
 });
 
 // Payment
@@ -103,13 +102,11 @@ Route::prefix('admin')->group(function () {
             Route::get('/', [OrderAdminController::class, 'index']);
             Route::get('/{id}', [OrderAdminController::class, 'show']);
             Route::patch('/{id}/force-expire', [OrderAdminController::class, 'forceExpire']);
-            Route::patch('/{id}/mark-delivered', [OrderAdminController::class, 'markAsDelivered']);
     // ✅ AÇÕES EM LOTE (sem /orders/ duplicado)
+            Route::patch('/confirm-many', [OrderAdminController::class, 'confirmMany']);
+            Route::patch('/approve-payment', [OrderAdminController::class, 'approvePayment']);
             Route::patch('/cancel-payment', [OrderAdminController::class, 'cancelPayment']);
-            // Finalizar pedidos em lote (completed)
-            Route::patch('/finish', [OrderAdminController::class, 'markAsCompleted']);
-            Route::get('/{id}', [OrderAdminController::class, 'show']);
-
+            Route::patch('/mark-completed', [OrderAdminController::class, 'markAsCompleted']);
         });
         
         // System
