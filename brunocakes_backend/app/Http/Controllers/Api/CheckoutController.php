@@ -579,7 +579,7 @@ class CheckoutController extends Controller
         return response()->json($lastOrder);
     }
 
-        private function registrarAtualizacaoEstoque($productId, $tipo = 'stock_change') {
+    public function registrarAtualizacaoEstoque($productId, $tipo = 'stock_change') {
         $totalStock = Redis::get("product_stock_{$productId}") ?? 0;
         $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
         $availableStock = max(0, $totalStock - $reservedStock);

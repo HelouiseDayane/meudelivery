@@ -13,7 +13,7 @@ export function AdminDashboard() {
   const { analytics, loadAnalytics, orders, products } = useApp();
 
   useEffect(() => {
-    loadAnalytics(true); // true = admin, busca dados filtrados do dashboard
+    loadAnalytics(); // busca dados filtrados do dashboard
   }, []);
 
   // Debug logs
@@ -34,17 +34,20 @@ export function AdminDashboard() {
     );
   }
 
+  // Corrigir tipagem dos dados de engajamento (após garantir que analytics existe)
+  const engagement = (analytics as any).engagement || {};
 
 
-// Usar os campos do backend do dashboard admin (forçar any para evitar erro de tipagem)
-const analyticsAny = analytics as any;
-const todaySales = analyticsAny.sales_today || 0;
-const todayOrders = analyticsAny.orders_today || 0;
-const thisMonthSales = analyticsAny.sales_month || 0;
-const thisYearSales = analyticsAny.sales_year || 0;
-const totalRevenue = analyticsAny.total_revenue || 0;
-const pendingOrders = analyticsAny.ticket_statistics?.pending_payment || 0;
-const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
+
+// Usar os campos do backend do dashboard admin (mapeando corretamente de analytics.statistics)
+
+const todaySales = Number(analytics.statistics?.todaySales) || 0;
+const todayOrders = Number(analytics.statistics?.totalOrders) || 0;
+const thisMonthSales = Number(analytics.statistics?.monthSales) || 0;
+const thisYearSales = Number(analytics.statistics?.yearSales) || 0;
+const totalRevenue = Number(analytics.statistics?.monthSales) || 0; // Usando monthSales para faturamento total
+const pendingOrders = Number(analytics.statistics?.pendingOrders) || 0;
+const totalProducts = Number(analytics.statistics?.totalProducts) || products?.length || 0;
 const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length || 0;
 const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length || 0;
 const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
@@ -291,15 +294,15 @@ const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
           {/* Se houver dados de engajamento, exiba-os. Caso contrário, mostre zero. */}
           <div className="grid gap-4 md:grid-cols-3">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{analyticsAny.engagement?.unique_visitors ?? 0}</div>
+              <div className="text-2xl font-bold text-blue-600">{engagement.unique_visitors ?? 0}</div>
               <p className="text-sm text-muted-foreground">Visitantes Únicos</p>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-700">{analyticsAny.engagement?.pwa_installs ?? 0}</div>
+              <div className="text-2xl font-bold text-green-700">{engagement.pwa_installs ?? 0}</div>
               <p className="text-sm text-muted-foreground">Instalações PWA</p>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-purple-700">{analyticsAny.engagement?.carts_with_products ?? 0}</div>
+              <div className="text-2xl font-bold text-purple-700">{engagement.carts_with_products ?? 0}</div>
               <p className="text-sm text-muted-foreground">Carrinhos com Produto</p>
             </div>
           </div>

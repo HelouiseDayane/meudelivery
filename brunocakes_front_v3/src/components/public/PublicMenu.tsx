@@ -15,11 +15,28 @@ import { usePWA } from '../../hooks/usePWA';
 import { toast } from 'sonner';
 
 export const PublicMenu = () => {
-  // Dados do footer para horário/status
   const [footerData, setFooterData] = useState({
     workingHours: '',
     isOpen: true,
   });
+  // Log de depuração para status da loja
+  useEffect(() => {
+    console.log('[DEBUG] Status da loja:', { isOpen: footerData.isOpen, workingHours: footerData.workingHours });
+  }, [footerData]);
+  const { products, addToCart, getAvailableStock, hasStock, refreshProducts } = useApp();
+  // Log de depuração para verificar produtos e estoque
+  useEffect(() => {
+    if (products && products.length > 0) {
+      //console.log('[DEBUG] Produtos recebidos:', products.map(p => ({ id: p.id, nome: p.name, estoque: p.available_stock })));
+    } else {
+      console.log('[DEBUG] Nenhum produto recebido ou array vazio');
+    }
+  }, [products]);
+
+  // Log de depuração para status da loja
+  useEffect(() => {
+  //  console.log('[DEBUG] Status da loja:', { isOpen: footerData.isOpen, workingHours: footerData.workingHours });
+  }, [footerData]);
   // Não usar mais isStoreOpen, usar sempre footerData.isOpen para garantir alinhamento com o footer
   useEffect(() => {
     const updateStoreStatus = async () => {
@@ -42,7 +59,6 @@ export const PublicMenu = () => {
     const interval = setInterval(updateStoreStatus, 30000);
     return () => clearInterval(interval);
   }, []);
-  const { products, addToCart, getAvailableStock, hasStock, refreshProducts } = useApp();
   const { isMobile } = usePWA();
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');

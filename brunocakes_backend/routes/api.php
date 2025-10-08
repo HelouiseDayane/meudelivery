@@ -106,6 +106,10 @@ Route::prefix('admin')->group(function () {
             Route::patch('/{id}/mark-delivered', [OrderAdminController::class, 'markAsDelivered']);
     // ✅ AÇÕES EM LOTE (sem /orders/ duplicado)
             Route::patch('/cancel-payment', [OrderAdminController::class, 'cancelPayment']);
+            // Finalizar pedidos em lote (completed)
+            Route::patch('/finish', [OrderAdminController::class, 'markAsCompleted']);
+            Route::get('/{id}', [OrderAdminController::class, 'show']);
+
         });
         
         // System

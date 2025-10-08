@@ -13,7 +13,15 @@ class UserSeeder extends Seeder
         DB::table('users')->insert([
             'name' => 'Admin Teste',
             'email' => 'admin@admin.com',
-            'password' => Hash::make('123456'),
+            'password' => Hash::make('Gatopreto11.'),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+          DB::table('users')->insert([
+            'name' => 'Bruno Cakes',
+            'email' => 'brunocakes@zapsrv.com',
+            'password' => Hash::make('BrunoC2k3.s#@.'),
             'created_at' => now(),
             'updated_at' => now(),
         ]);

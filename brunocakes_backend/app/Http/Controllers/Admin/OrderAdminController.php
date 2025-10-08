@@ -4,13 +4,23 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
-use App\Models\Payment;  
+use App\Models\Payment; 
+use App\Models\Address; 
 use Illuminate\Http\Request;  
 use App\Jobs\ProcessOrderJob;  
 use Illuminate\Support\Facades\Log; // Adicione esta linha no início do arquivo
 
 
 class OrderAdminController extends Controller {
+    // Retorna os dados completos de um pedido pelo ID
+    public function show($id)
+    {
+        $order = Order::with(['items', 'payment'])->find($id);
+        if (!$order) {
+            return response()->json(['message' => 'Pedido não encontrado'], 404);
+        }
+        return response()->json($order);
+    }
 
     // Retorna estatísticas de clientes baseadas em orders com status 'confirmed' OU 'completed'
     public function getCustomerAnalytics()
@@ -164,14 +174,74 @@ class OrderAdminController extends Controller {
         $updatedCount = 0;
 
         foreach ($orders as $order) {
-            $order->update(['status' => 'completed']);
-            $updatedCount++;
-            
-            Log::info('Pedido marcado como completo', [
-                'order_id' => $order->id,
-                'customer' => $order->customer_name,
-                'total' => $order->total_amount
-            ]);
+                    $order->update(['status' => 'completed']);
+                    $updatedCount++;
+                    Log::info('Pedido marcado como completo', [
+                        'order_id' => $order->id,
+                        'customer' => $order->customer_name,
+                        'total' => $order->total_amount
+                    ]);
+
+                    // Enviar mensagem via Zap usando endereço ativo
+                    if (!empty($order->customer_phone)) {
+                        try {
+                            // Extrai apenas os dígitos do telefone
+                            $number = preg_replace('/\D/', '', $order->customer_phone);
+                            if (strlen($number) === 11) {
+                                $number = '55' . $number;
+                            }
+                            if (strlen($number) === 9) {
+                                $number = '5584' . $number;
+                            }
+                            if (strlen($number) === 13 && strpos($number, '55') === 0) {
+                                // já está correto
+                            }
+                            if (strlen($number) === 12 && strpos($number, '55') !== 0) {
+                                $number = '55' . $number;
+                            }
+
+                            // Buscar endereço ativo
+                            $activeAddress = Address::where('ativo', 1)->first();
+                            $address = $activeAddress ? ($activeAddress->rua . ', ' . $activeAddress->numero . ' - ' . $activeAddress->bairro . ', ' . $activeAddress->cidade . ' - ' . $activeAddress->estado) : 'Endereço não informado';
+                            $horario = $activeAddress->horarios ?? '';
+                            $latitude = $activeAddress->latitude ?? null;
+                            $longitude = $activeAddress->longitude ?? null;
+
+                            $msg = "🎉 Seu pedido está pronto! Venha buscar em\n\n";
+                            $msg .= "Endereço: {$address}\n";
+                            if ($horario) $msg .= "Horário: {$horario}\n";
+                            if ($latitude && $longitude) {
+                                $mapsUrl = "https://www.google.com/maps/search/?api=1&query={$latitude},{$longitude}";
+                                $msg .= "Localização: {$mapsUrl}\n";
+                            }
+                            $msg .= "\nEstamos já te aguardando!";
+
+                            $zapBody = [
+                                "number" => $number,
+                                "text" => $msg,
+                                "options" => [
+                                    "server" => "https://evo01.zapsrv.com/message/sendText/BRUNO-CAKE",
+                                    "wait" => 500,
+                                    "delay" => 1000,
+                                    "presence" => "composing"
+                                ]
+                            ];
+
+                            $client = new \GuzzleHttp\Client();
+                            $client->post('https://01.zapsrv.com/zap_request/', [
+                                'headers' => [
+                                    'apikey' => '695D24189F61-408A-8E03-9917CE36FA1C',
+                                    'Content-Type' => 'application/json',
+                                ],
+                                'json' => $zapBody
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error('Erro ao enviar mensagem Zap', [
+                                'order_id' => $order->id,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+                    }
         }
 
         Log::info('Pedidos marcados como completos', [

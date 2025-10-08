@@ -38,8 +38,8 @@ class ExpireCheckoutJob implements ShouldQueue
             return;
         }
 
-        // Se o pedido está confirmado ou completado, não faz nada
-        if (in_array($order->status, ['awaiting_seller_confirmation', 'confirmed', 'completed'])) {
+        // Se o pedido está confirmado, completado ou entregue, não faz nada
+        if (in_array($order->status, ['awaiting_seller_confirmation', 'confirmed', 'completed', 'delivered'])) {
             Log::info('✅ Ordem já processada, não precisa expirar', [
                 'order_id' => $this->orderId,
                 'status' => $order->status

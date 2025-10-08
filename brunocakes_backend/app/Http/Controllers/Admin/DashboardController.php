@@ -54,7 +54,7 @@ class DashboardController extends Controller
 
     // Considera apenas pedidos não cancelados e pagamento confirmado ou pago
 
-    $validOrderStatus = ['confirmed', 'completed'];
+    $validOrderStatus = ['confirmed', 'completed', 'delivered'];
 
     $salesByDay = Order::whereDate('created_at', $today)
         ->whereIn('status', $validOrderStatus)

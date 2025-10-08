@@ -1,10 +1,4 @@
-  // Marcar pedido como entregue
-  const handleMarkAsDelivered = async (orderId: string) => {
-    try {
-      await adminApi.markAsDelivered(orderId);
-      updateOrder(orderId, { status: 'delivered' as any });
-    } catch (error) {}
-  };
+
 import { Checkbox } from '../ui/checkbox';
 import { useState } from 'react';
 import { Button } from '../ui/button';
@@ -46,6 +40,12 @@ interface Order {
   scheduled_date?: string;
 }
 
+// ...imports e definição do componente...
+
+
+
+
+
 export const OrdersManagement = () => {
 
   const { orders, updateOrder, admin } = useApp();
@@ -65,9 +65,10 @@ export const OrdersManagement = () => {
   const filteredOrders = orders
     .filter(order => !!order)
     .filter(order => {
-      const matchesSearch = (order.id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                           (order.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-                           (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
+      const idStr = order.id ? String(order.id) : '';
+      const matchesSearch = idStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.clientName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (order.email && order.email.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -97,6 +98,22 @@ export const OrdersManagement = () => {
     }
     setIsBulkLoading(false);
   };
+
+  // Função correta para marcar como entregue
+  const markOrderAsDelivered = async (orderId: string) => {
+    try {
+      await adminApi.markAsDelivered(orderId);
+      const updatedOrderData = await adminApi.getOrder(orderId);
+      if (updatedOrderData) {
+        updateOrder(orderId, updatedOrderData);
+      } else {
+        updateOrder(orderId, { status: 'delivered' as any });
+      }
+    } catch (error) {
+      updateOrder(orderId, { status: 'delivered' as any });
+    }
+  };
+
 
 
   // Funções auxiliares para atualizar pedidos
@@ -377,7 +394,8 @@ export const OrdersManagement = () => {
                         onCheckedChange={handleSelectAll}
                         aria-label="Selecionar todos"
                         disabled={selectableIds.length === 0}
-                        className="border-gray-400 bg-white data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 focus:ring-2 focus:ring-blue-500"
+                        className="font-bold bg-white data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 data-[state=checked]:text-white focus:ring-2 focus:ring-green-500"
+                        style={{ border: '2px solid #000' }}
                       />
                     </TableHead>
                     <TableHead>ID</TableHead>
@@ -397,7 +415,8 @@ export const OrdersManagement = () => {
                             checked={selectedIds.includes(order.id)}
                             onCheckedChange={() => handleSelectOne(order.id)}
                             aria-label={`Selecionar pedido ${order.id}`}
-                            className="border-gray-400 bg-white data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 focus:ring-2 focus:ring-blue-500"
+                            className="font-bold bg-white data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 data-[state=checked]:text-white focus:ring-2 focus:ring-green-500"
+                            style={{ border: '2px solid #000' }}
                           />
                         )}
                       </TableCell>
@@ -506,7 +525,7 @@ export const OrdersManagement = () => {
                               <Button
                                 size="sm"
                                 variant="success"
-                                onClick={() => handleMarkAsDelivered(order.id)}
+                                onClick={() => markOrderAsDelivered(order.id)}
                                 className="gap-1 bg-green-600 hover:bg-green-700"
                               >
                                 <CheckCircle className="w-4 h-4" />
@@ -569,7 +588,7 @@ export const OrdersManagement = () => {
                                       {/* Botão para marcar como entregue, só aparece se status for 'completed' */}
                                       {selectedOrder.status === 'completed' && (
                                         <Button
-                                          onClick={() => handleMarkAsDelivered(selectedOrder.id)}
+                                          onClick={() => markOrderAsDelivered(selectedOrder.id)}
                                           size="sm"
                                           className="bg-green-600 hover:bg-green-700 text-white"
                                         >
