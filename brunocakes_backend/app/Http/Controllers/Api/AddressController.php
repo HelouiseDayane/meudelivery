@@ -70,31 +70,25 @@ class AddressController extends Controller
      */
    public function activate($id)
     {
-        // Desativa todos
-        Address::query()->update(['ativo' => false]);
-        // Ativa o selecionado
         $address = Address::findOrFail($id);
-        $address->ativo = true;
-        $address->save();
-
-        $data = [
-            'message' => 'Endereço ativado com sucesso',
+        if ($address->ativo) {
+            // Se já está ativo, inativa apenas ele
+            $address->ativo = false;
+            $address->save();
+            $message = 'Endereço inativado com sucesso';
+        } else {
+            // Se está inativo, desativa todos e ativa este
+            Address::query()->update(['ativo' => false]);
+            $address->ativo = true;
+            $address->save();
+            $message = 'Endereço ativado com sucesso';
+        }
+        return response()->json([
+            'message' => $message,
             'id' => $id,
-            // Ao invés de toArray, inclua o modelo diretamente no array
-            // para que o Laravel cuide da serialização com as opções corretas.
-            'address' => $address, 
-        ];
-
-        // O terceiro parâmetro de response()->json() é para cabeçalhos,
-        // e o quarto é para as opções json_encode.
-        return response()
-            ->json(
-                $data, 
-                200, 
-                ['Content-Type' => 'application/json; charset=UTF-8'], 
-                JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
-        );
-}
+            'address' => $address,
+        ], 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    }
         /**
      * Retorna o endereço ativo (público)
      */
@@ -108,4 +102,5 @@ class AddressController extends Controller
         // Retorna o modelo diretamente, Laravel cuida da serialização
         return response()->json($active, 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
+
 }

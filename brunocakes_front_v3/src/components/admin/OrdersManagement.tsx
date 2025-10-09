@@ -12,7 +12,6 @@ import { Search, Eye, CheckCircle, Clock, Package, XCircle, MessageCircle, Dolla
 import { toast } from 'sonner';
 import { useApp } from '../../App';
 import { adminApi } from '../../api_admin';
-import { OrderActiveToggle } from './OrderActiveToggle';
 
 import { Order, OrderUpdate, OrderStatus } from '../../types/orders';
 
@@ -26,7 +25,23 @@ export const OrdersManagement = () => {
 
   const isAdminAuthenticated = admin?.role === 'staff';
 
-  // Aprovar pagamento
+  // Marcar pedidos como concluídos em lote
+  const handleBulkComplete = async () => {
+    setIsBulkLoading(true);
+    try {
+      const promises = selectedIds.map(id => updateOrder(id, { status: 'completed' }));
+      await Promise.all(promises);
+      toast.success('Pedidos marcados como concluídos com sucesso!');
+      setSelectedIds([]);
+    } catch (error) {
+      toast.error('Erro ao concluir pedidos em lote');
+      console.error(error);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
+
+  // Aprovar pagamento individual
   const handleApprovePayment = async (orderId: string) => {
     try {
       await adminApi.approvePayments([orderId]);
@@ -92,35 +107,34 @@ export const OrdersManagement = () => {
     }
   };
 
-  const handleSelectOne = (id: string) => {
-    setSelectedIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
+  const handleSelectOne = (orderId: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(orderId)) {
+        return prev.filter((id) => id !== orderId);
+      }
+      return [...prev, orderId];
+    });
   };
 
-  const handleBulkComplete = async () => {
+  const handleBulkApprove = async () => {
     if (selectedIds.length === 0) return;
+    
     setIsBulkLoading(true);
     try {
-      await adminApi.markAsCompleted(selectedIds);
-      selectedIds.forEach(id => {
-        updateOrder(id, { status: 'completed' } as OrderUpdate);
-      });
+      for (const id of selectedIds) {
+        await updateOrder(id, { status: 'confirmed' });
+      }
+      toast.success(`${selectedIds.length} pedidos aprovados com sucesso!`);
       setSelectedIds([]);
-      toast.success('Pedidos marcados como completados!');
     } catch (error) {
-      toast.error('Erro ao completar pedidos');
+      toast.error('Erro ao aprovar pedidos em lote');
+      console.error(error);
     } finally {
       setIsBulkLoading(false);
     }
   };
 
-  const toggleOrderActive = async (orderId: string, active: boolean) => {
-    try {
-      updateOrder(orderId, { active } as OrderUpdate);
-      toast.success(active ? 'Pedido ativado!' : 'Pedido desativado!');
-    } catch (error) {
-      toast.error('Erro ao atualizar status do pedido');
-    }
-  };
+
 
   if (!isAdminAuthenticated) {
     return (
@@ -131,22 +145,48 @@ export const OrdersManagement = () => {
     );
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusInfo = (status: string) => {
     switch (status) {
       case 'pending':
+        return {
+          color: 'bg-yellow-100 text-yellow-800',
+          label: 'Pendente'
+        };
       case 'awaiting_seller_confirmation':
-        return 'bg-yellow-100 text-yellow-800';
+        return {
+          color: 'bg-yellow-100 text-yellow-800',
+          label: 'Aguardando Confirmação'
+        };
       case 'confirmed':
+        return {
+          color: 'bg-blue-100 text-blue-800',
+          label: 'Confirmado'
+        };
       case 'preparing':
-        return 'bg-blue-100 text-blue-800';
+        return {
+          color: 'bg-blue-100 text-blue-800',
+          label: 'Em Preparação'
+        };
       case 'completed':
-        return 'bg-green-100 text-green-800';
+        return {
+          color: 'bg-green-100 text-green-800',
+          label: 'Concluído'
+        };
       case 'delivered':
-        return 'bg-purple-100 text-purple-800';
+        return {
+          color: 'bg-purple-100 text-purple-800',
+          label: 'Entregue'
+        };
       case 'canceled':
-        return 'bg-red-100 text-red-800';
+        return {
+          color: 'bg-red-100 text-red-800',
+          label: 'Cancelado'
+        };
       default:
-        return 'bg-gray-100 text-gray-800';
+        return {
+          color: 'bg-gray-100 text-gray-800',
+          label: status
+        };
     }
   };
 
@@ -184,6 +224,7 @@ export const OrdersManagement = () => {
               <SelectItem value="ready">Pronto</SelectItem>
               <SelectItem value="completed">Concluído</SelectItem>
               <SelectItem value="canceled">Cancelado</SelectItem>
+               <SelectItem value="delivered">Entregue</SelectItem>
             </SelectContent>
           </Select>
           {selectedIds.length > 0 && (
@@ -208,6 +249,7 @@ export const OrdersManagement = () => {
           <CardTitle>Pedidos ({filteredOrders.length})</CardTitle>
         </CardHeader>
         <CardContent>
+
           {filteredOrders.length === 0 ? (
             <div className="text-center py-8">
               <Package className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
@@ -230,7 +272,6 @@ export const OrdersManagement = () => {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Ativo</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
@@ -239,7 +280,7 @@ export const OrdersManagement = () => {
                   {filteredOrders.map((order) => (
                     <TableRow key={order.id}>
                       <TableCell>
-                        {(order.status === 'awaiting_seller_confirmation' || order.status === 'confirmed') && (
+                        {order.status === 'confirmed' && (
                           <Checkbox
                             checked={selectedIds.includes(order.id)}
                             onCheckedChange={() => handleSelectOne(order.id)}
@@ -256,44 +297,16 @@ export const OrdersManagement = () => {
                       </TableCell>
                       <TableCell className="font-medium">R$ {order.total.toFixed(2)}</TableCell>
                       <TableCell>
-                        <Badge className={getStatusColor(order.status)}>
-                          {order.status}
+                        <Badge className={getStatusInfo(order.status).color}>
+                          {getStatusInfo(order.status).label}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <OrderActiveToggle
-                          orderId={order.id}
-                          isActive={order.active ?? true}
-                          onToggle={toggleOrderActive}
-                        />
-                      </TableCell>
+
                       <TableCell>
                         {order.createdAt ? new Date(order.createdAt).toLocaleDateString('pt-BR') : '-'}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          {order.status === 'awaiting_seller_confirmation' && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleApprovePayment(order.id)}
-                              className="gap-1 bg-green-600 hover:bg-green-700 text-white"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              Aprovar
-                            </Button>
-                          )}
-                          {order.status === 'confirmed' && (
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={() => handleMarkAsCompleted(order.id)}
-                              className="gap-1 bg-blue-600 hover:bg-blue-700 text-white"
-                            >
-                              <Flag className="w-4 h-4" />
-                              Completar
-                            </Button>
-                          )}
                           {order.status === 'completed' && (
                             <Button
                               size="sm"
@@ -302,7 +315,7 @@ export const OrdersManagement = () => {
                               className="gap-1 bg-green-600 hover:bg-green-700 text-white"
                             >
                               <Package className="w-4 h-4" />
-                              Entregue
+                              Entregar
                             </Button>
                           )}
                           <Dialog>

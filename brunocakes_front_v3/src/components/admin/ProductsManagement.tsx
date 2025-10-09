@@ -8,6 +8,28 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
+
+interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  stock?: number;
+  quantity?: number;
+  is_active: boolean | number | string;
+  is_promo?: boolean;
+  is_new?: boolean;
+  image_url?: string;
+  image?: string;
+  promotionPrice?: number;
+  promotion_price?: number;
+  expiryDate?: string;
+  expires_at?: string;
+  available?: boolean;
+  isPromotion?: boolean;
+  isNew?: boolean;
+}
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -224,22 +246,46 @@ export function ProductsManagement() {
 
   const handleToggleAvailability = async (productId: string, currentStatus: boolean) => {
     try {
-  // ...
+      const newStatus = !currentStatus;
       
+      // Atualiza o estado local imediatamente para feedback instantâneo
+      const updatedProducts = adminProducts.map(product => {
+        if (product.id === productId) {
+          return {
+            ...product,
+            is_active: newStatus
+          };
+        }
+        return product;
+      });
+      setAdminProducts(updatedProducts);
+
       // Tentar primeiro o endpoint específico de toggle
       try {
         await adminApi.toggleProduct(productId);
-  // ...
+        console.log('✅ Toggle realizado via endpoint específico');
       } catch (toggleError) {
-  // ...
         // Fallback para update manual
-        await adminApi.updateProduct(productId, { is_active: !currentStatus });
+        await adminApi.updateProduct(productId, { is_active: newStatus });
         console.log('✅ Toggle realizado via update manual');
       }
       
+      // Atualiza novamente para garantir sincronização com o backend
       await refreshProducts();
-      toast.success(`Produto ${!currentStatus ? 'ativado' : 'desativado'} com sucesso!`);
+      toast.success(`Produto ${newStatus ? 'ativado' : 'desativado'} com sucesso!`);
     } catch (error) {
+      // Em caso de erro, reverte a alteração local
+      const revertedProducts = adminProducts.map(product => {
+        if (product.id === productId) {
+          return {
+            ...product,
+            is_active: currentStatus
+          };
+        }
+        return product;
+      });
+      setAdminProducts(revertedProducts);
+      
       console.error('❌ Erro ao atualizar disponibilidade:', error);
       toast.error(`Erro ao ${!currentStatus ? 'ativar' : 'desativar'} produto: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
@@ -630,7 +676,7 @@ export function ProductsManagement() {
                         <div className="flex items-center gap-1">
                           <Input
                             type="number"
-                            value={editingStock.value}
+                            value={editingStock?.value || ''}
                             onChange={(e) => setEditingStock({ 
                               productId: product.id, 
                               value: e.target.value 
@@ -638,7 +684,7 @@ export function ProductsManagement() {
                             className="w-16 h-6 text-xs"
                             min="0"
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
+                              if (e.key === 'Enter' && editingStock) {
                                 handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
                                 setEditingStock(null);
                               } else if (e.key === 'Escape') {
@@ -651,8 +697,10 @@ export function ProductsManagement() {
                             size="sm"
                             variant="ghost"
                             onClick={() => {
-                              handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
-                              setEditingStock(null);
+                              if (editingStock) {
+                                handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
+                                setEditingStock(null);
+                              }
                             }}
                             className="h-6 w-6 p-0"
                           >
@@ -677,16 +725,19 @@ export function ProductsManagement() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Checkbox
-                        checked={!!(product.is_active === true || product.is_active === '1' || product.is_active === 1)}
-                        onCheckedChange={() => handleToggleAvailability(product.id, !!(product.is_active === true || product.is_active === '1' || product.is_active === 1))}
-                        aria-label={`${(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'Desativar' : 'Ativar'} produto`}
+                        checked={Boolean(product.is_active)}
+                        onCheckedChange={() => handleToggleAvailability(product.id, Boolean(product.is_active))}
+                        aria-label={`${Boolean(product.is_active) ? 'Desativar' : 'Ativar'} produto`}
                       />
                       <Badge 
-                        variant={(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'default' : 'secondary'}
-                        className={(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
+                        variant={Boolean(product.is_active) ? 'default' : 'secondary'}
+                        className={Boolean(product.is_active) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
                       >
-                        {(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'Ativo' : 'Inativo'}
+                        {Boolean(product.is_active) ? 'Ativo' : 'Inativo'}
                       </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        (Clique para {Boolean(product.is_active) ? 'desativar' : 'ativar'})
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell>

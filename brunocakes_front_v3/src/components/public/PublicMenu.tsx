@@ -133,10 +133,14 @@ const PublicMenu = () => {
   // Efeito para atualizar o status da loja (aberto/fechado)
   useEffect(() => {
     const updateStoreStatus = async () => {
-      await fetchAndSetActiveAddress();
+      const address = await fetchAndSetActiveAddress();
       const apiModule = await import('../../api');
       const { STORE_CONFIG } = apiModule;
       let isOpen = STORE_CONFIG.isOpen;
+      if (!address || address === '') {
+        isOpen = false;
+        STORE_CONFIG.isOpen = false;
+      }
       if (typeof isOpen !== 'boolean') {
         isOpen = String(isOpen).toLowerCase() === 'true';
       }
@@ -260,6 +264,13 @@ const PublicMenu = () => {
             )}
           </div>
         )}
+        {!footerData.isOpen && (
+          <Alert className="mb-6 border-2 border-red-500 bg-red-50">
+            <AlertDescription className="font-medium text-red-800">
+              <strong>Loja Fechada:</strong> Não é possível comprar no momento.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {/* Alerta sobre tempo limite do carrinho */}
@@ -305,8 +316,9 @@ const PublicMenu = () => {
           const isLowStock = availableStock <= 5 && availableStock > 0;
           // Um produto está indisponível apenas se não tiver estoque
           const isIndisponivel = availableStock <= 0;
+          const lojaFechada = !footerData.isOpen;
           return (
-            <Card key={product.id} className={`overflow-hidden transition-shadow ${isIndisponivel ? 'opacity-80 grayscale' : 'hover:shadow-lg'}`}>
+            <Card key={product.id} className={`overflow-hidden transition-shadow ${isIndisponivel || lojaFechada ? 'opacity-80 grayscale' : 'hover:shadow-lg'}`}>
               <div className="relative">
                 {product.imageUrl && (
                   <img
@@ -330,7 +342,7 @@ const PublicMenu = () => {
                   )}
                 </div>
                 <div className="absolute top-2 right-2 flex flex-col gap-1">
-                  {!footerData.isOpen && (
+                  {lojaFechada && (
                     <Badge style={{ backgroundColor: '#f97316', color: '#fff', border: 'none' }}>
                       Loja Fechada
                     </Badge>
@@ -377,8 +389,8 @@ const PublicMenu = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
-                          disabled={!footerData.isOpen || isIndisponivel || getLocalQuantity(product.id) <= 1}
-                          className={(!footerData.isOpen || isIndisponivel || getLocalQuantity(product.id) <= 1) ? "opacity-50 cursor-not-allowed" : ""}
+                          disabled={lojaFechada || isIndisponivel || getLocalQuantity(product.id) <= 1}
+                          className={(lojaFechada || isIndisponivel || getLocalQuantity(product.id) <= 1) ? "opacity-50 cursor-not-allowed" : ""}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
@@ -387,8 +399,8 @@ const PublicMenu = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
-                          disabled={!footerData.isOpen || isIndisponivel || getLocalQuantity(product.id) >= availableStock}
-                          className={(!footerData.isOpen || isIndisponivel || getLocalQuantity(product.id) >= availableStock) ? "opacity-50 cursor-not-allowed" : ""}
+                          disabled={lojaFechada || isIndisponivel || getLocalQuantity(product.id) >= availableStock}
+                          className={(lojaFechada || isIndisponivel || getLocalQuantity(product.id) >= availableStock) ? "opacity-50 cursor-not-allowed" : ""}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
@@ -398,8 +410,8 @@ const PublicMenu = () => {
                       <Dialog>
                         <DialogTrigger asChild>
                           <button
-                            className={`flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md ${isIndisponivel ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60' : 'bg-white text-gray-900 hover:bg-gray-100'}`}
-                            disabled={isIndisponivel}
+                            className={`flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md ${lojaFechada || isIndisponivel ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60' : 'bg-white text-gray-900 hover:bg-gray-100'}`}
+                            disabled={lojaFechada || isIndisponivel}
                           >
                             Ver detalhes
                           </button>
@@ -444,8 +456,8 @@ const PublicMenu = () => {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  disabled={isIndisponivel || getLocalQuantity(product.id) <= 1}
-                                  className={isIndisponivel || getLocalQuantity(product.id) <= 1 ? "opacity-50 cursor-not-allowed" : ""}
+                                  disabled={lojaFechada || isIndisponivel || getLocalQuantity(product.id) <= 1}
+                                  className={lojaFechada || isIndisponivel || getLocalQuantity(product.id) <= 1 ? "opacity-50 cursor-not-allowed" : ""}
                                   onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) - 1)}
                                 >
                                   <Minus className="h-3 w-3" />
@@ -454,8 +466,8 @@ const PublicMenu = () => {
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  disabled={isIndisponivel || getLocalQuantity(product.id) >= availableStock}
-                                  className={isIndisponivel || getLocalQuantity(product.id) >= availableStock ? "opacity-50 cursor-not-allowed" : ""}
+                                  disabled={lojaFechada || isIndisponivel || getLocalQuantity(product.id) >= availableStock}
+                                  className={lojaFechada || isIndisponivel || getLocalQuantity(product.id) >= availableStock ? "opacity-50 cursor-not-allowed" : ""}
                                   onClick={() => setLocalQuantity(product.id, getLocalQuantity(product.id) + 1)}
                                 >
                                   <Plus className="h-3 w-3" />
@@ -463,25 +475,25 @@ const PublicMenu = () => {
                               </div>
                             </div>
                             <Button
-                              disabled={isIndisponivel}
-                              className={`w-full ${isIndisponivel ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed opacity-70' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
-                              onClick={() => !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
+                              disabled={lojaFechada || isIndisponivel}
+                              className={`w-full ${lojaFechada || isIndisponivel ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed opacity-70' : 'bg-orange-500 hover:bg-orange-600 text-white'}`}
+                              onClick={() => !lojaFechada && !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
                             >
                               <ShoppingCart className="w-4 h-4 mr-2" />
-                              {isIndisponivel ? 'Indisponível' : 'Adicionar ao carrinho'}
+                              {lojaFechada ? 'Loja Fechada' : isIndisponivel ? 'Indisponível' : 'Adicionar ao carrinho'}
                             </Button>
                           </div>
                         </DialogContent>
                       </Dialog>
                       <Button
-                        disabled={isIndisponivel}
+                        disabled={lojaFechada || isIndisponivel}
                         size="sm"
                         variant="secondary"
-                        className={isIndisponivel ? "opacity-50 cursor-not-allowed" : ""}
-                        onClick={() => !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
+                        className={lojaFechada || isIndisponivel ? "opacity-50 cursor-not-allowed" : ""}
+                        onClick={() => !lojaFechada && !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
                       >
-                        <span className="w-4 h-4 mr-1">{isIndisponivel ? '❌' : <ShoppingCart className="w-4 h-4" />}</span>
-                        {isIndisponivel ? 'Indisponível' : 'Adicionar'}
+                        <span className="w-4 h-4 mr-1">{lojaFechada ? '🔒' : isIndisponivel ? '❌' : <ShoppingCart className="w-4 h-4" />}</span>
+                        {lojaFechada ? 'Loja Fechada' : isIndisponivel ? 'Indisponível' : 'Adicionar'}
                       </Button>
                     </div>
                   </div>

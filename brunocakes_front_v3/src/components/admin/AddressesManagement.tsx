@@ -145,6 +145,37 @@ export function AddressesManagement() {
     }
   };
 
+  // Alternar status ativo/inativo (checkout) do endereço
+  const handleToggleActive = async (addr: Address) => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (addr.ativo) {
+        // Desativar endereço atual
+        const res = await fetch(`${API_BASE_URL}/admin/addresses/${addr.id}`, {
+          method: 'PUT',
+          headers: getHeaders(),
+          body: JSON.stringify({ ativo: false }),
+        });
+        if (!res.ok) throw new Error('Erro ao desativar endereço');
+        if (activeId === addr.id) setActiveId(null);
+      } else {
+        // Ativar endereço selecionado
+        const res = await fetch(`${API_BASE_URL}/admin/addresses/${addr.id}/activate`, {
+          method: 'PATCH',
+          headers: getHeaders(),
+        });
+        if (!res.ok) throw new Error('Erro ao ativar endereço');
+        setActiveId(addr.id);
+      }
+      await fetchAddresses();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => { fetchAddresses(); }, []);
 
   // Handlers de formulário
@@ -390,18 +421,53 @@ export function AddressesManagement() {
                     </button>
                   </td>
                   <td className="px-3 py-2 text-center">
-                    {isActive ? (
-                      <span className="inline-block bg-green-500 text-white rounded px-2 py-1 text-xs font-semibold">Ativo</span>
-                    ) : (
-                      <button
-                        style={{ background: '#22d3ee', color: '#222', border: '1px solid #0891b2', borderRadius: 4, padding: '4px 12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        onClick={() => handleActivate(address.id)}
-                        disabled={loading}
-                        title="Ativar este endereço"
+                    <div className="flex flex-col items-center gap-2">
+                      <span
+                        className={
+                          `inline-block rounded-full px-3 py-1 text-xs font-semibold border ` +
+                          (address.ativo
+                            ? 'bg-green-100 text-green-800 border-green-200'
+                            : 'bg-gray-100 text-gray-700 border-gray-200')
+                        }
                       >
-                        Checkout
+                        {address.ativo ? 'Checkout' : 'Inativo'}
+                      </span>
+                      <button
+                        style={{
+                          background: address.ativo ? '#22c55e' : '#e5e7eb',
+                          color: address.ativo ? '#fff' : '#222',
+                          border: address.ativo ? '1px solid #16a34a' : '1px solid #9ca3af',
+                          borderRadius: 20,
+                          padding: '6px 24px',
+                          fontWeight: 600,
+                          minWidth: 120,
+                          boxShadow: address.ativo ? '0 1px 4px #16a34a33' : '0 1px 4px #9ca3af33',
+                          transition: 'background 0.2s',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8
+                        }}
+                        disabled={loading}
+                        onClick={async () => {
+                          setLoading(true);
+                          await fetch(`${API_BASE_URL}/admin/addresses/${address.id}/activate`, { method: 'PATCH', headers: getHeaders() });
+                          await fetchAddresses();
+                          setLoading(false);
+                        }}
+                        title={address.ativo ? 'Desligar checkout' : 'Ligar checkout'}
+                      >
+                        <span style={{
+                          display: 'inline-block',
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          background: address.ativo ? '#16a34a' : '#9ca3af',
+                          marginRight: 8,
+                          transition: 'background 0.2s'
+                        }} />
+                        {address.ativo ? 'Checkout Ligado' : 'Checkout Desligado'}
                       </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               );

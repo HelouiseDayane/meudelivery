@@ -116,7 +116,7 @@ Route::prefix('admin')->group(function () {
         
             Route::patch('addresses/{id}/activate', [AddressController::class, 'activate']);
             Route::apiResource('addresses', AddressController::class);
-           
-      
     });
+
+    
 });
