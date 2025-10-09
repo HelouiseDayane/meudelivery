@@ -7,24 +7,7 @@ import { Badge } from '../ui/badge';
 import { Search, Users, ShoppingBag, Calendar, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface Order {
-  id: string;
-  clientName?: string;
-  email?: string;
-  whatsapp?: string;
-  address?: string;
-  neighborhood?: string;
-  total: number;
-  createdAt: string;
-  status?: string;
-  paymentStatus?: string;
-  payment_status?: string;
-  paymentMethod?: string;
-  payment_method?: string;
-
-  scheduledDate?: string;
-  scheduled_date?: string;
-}
+import { Order } from '../../types/orders';
 
 interface UniqueClient {
   name: string;

@@ -83,11 +83,11 @@ export const ADMIN_API_ENDPOINTS = {
     list: `${API_BASE_URL}/admin/orders`,
     show: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
     update: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
-  updateStatus: (id: string) => `${API_BASE_URL}/admin/orders/${id}/status`,
-  markDelivered: (id: string) => `${API_BASE_URL}/admin/orders/${id}/mark-delivered`,
-
+    updateStatus: (id: string) => `${API_BASE_URL}/admin/orders/${id}/status`,
+    markDelivered: (id: string) => `${API_BASE_URL}/admin/orders/${id}/mark-delivered`,
     cancelPayment: `${API_BASE_URL}/admin/orders/cancel-payment`,
     finish: `${API_BASE_URL}/admin/orders/finish`,
+    approvePayment: `${API_BASE_URL}/admin/orders/finish`,
   },
   clients: {
     list: `${API_BASE_URL}/admin/clients`,
@@ -365,17 +365,16 @@ export const adminApi = {
   },
 
   markAsCompleted: (orderIds: string[] | number[]) => {
-    if (orderIds.length === 0) {
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
       throw new Error('A lista de IDs de pedidos está vazia.');
     }
-    
- 
-    
     return adminApiRequest(ADMIN_API_ENDPOINTS.orders.finish, {
       method: 'PATCH',
       body: JSON.stringify({ order_ids: orderIds }),
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...getAdminAuthHeaders(),
       },
     });
   },

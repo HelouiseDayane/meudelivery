@@ -225,45 +225,120 @@ class ProductAdminController extends Controller
         'product' => $product
     ]);
 }
-    // ✅ CORRIGIDO: Método privado para sincronizar um produto específico
+    // ✅ CORRIGIDO: Método privado para sincronizar um produto específico com debug
     private function syncProductStock(Product $product)
     {
         try {
-            // ✅ USAR Facade Redis corretamente
-            Redis::set("product_stock_{$product->id}", $product->quantity);
+            // Tenta conectar ao Redis primeiro
+            if (!Redis::ping()) {
+                \Log::error("Redis não está respondendo ao PING");
+                return;
+            }
+
+            // ✅ USAR Facade Redis corretamente com log detalhado
+            $key = "product_stock_{$product->id}";
+            $oldValue = Redis::get($key);
+            Redis::set($key, $product->quantity);
+            $newValue = Redis::get($key);
+
             \Log::info("Produto {$product->id} sincronizado com Redis", [
                 'product_name' => $product->name,
-                'quantity' => $product->quantity
+                'quantity' => $product->quantity,
+                'redis_key' => $key,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'redis_info' => Redis::info()
             ]);
         } catch (\Exception $e) {
-            \Log::warning("Erro ao sincronizar produto {$product->id} com Redis: " . $e->getMessage());
+            \Log::error("Erro ao sincronizar produto {$product->id} com Redis: " . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString()
+            ]);
             // ✅ Não falhar se Redis não estiver disponível
         }
     }
 
-    // ✅ CORRIGIDO: Método para sincronizar todos os produtos (manual)
+    // ✅ CORRIGIDO: Método para sincronizar todos os produtos (manual) com validação e debug
     public function syncStock()
     {
+        // Validar conexão Redis primeiro
+        try {
+            if (!Redis::ping()) {
+                \Log::error("Redis não está respondendo ao PING durante syncStock");
+                return response()->json([
+                    'message' => 'Erro: Redis não está respondendo',
+                    'error' => 'REDIS_NOT_RESPONDING'
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            \Log::error("Erro ao tentar PING no Redis: " . $e->getMessage());
+            return response()->json([
+                'message' => 'Erro na conexão com Redis',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+
         $products = Product::all();
         $synced = 0;
         $errors = 0;
+        $syncDetails = [];
 
         foreach ($products as $product) {
             try {
-                // ✅ USAR Facade Redis corretamente
-                Redis::set("product_stock_{$product->id}", $product->quantity);
-                $synced++;
+                $key = "product_stock_{$product->id}";
+                $oldValue = Redis::get($key);
+                Redis::set($key, $product->quantity);
+                $newValue = Redis::get($key);
+
+                if ($newValue !== null && (string)$newValue === (string)$product->quantity) {
+                    $synced++;
+                    $syncDetails[$product->id] = [
+                        'success' => true,
+                        'name' => $product->name,
+                        'old_value' => $oldValue,
+                        'new_value' => $newValue,
+                        'expected' => $product->quantity
+                    ];
+                } else {
+                    $errors++;
+                    $syncDetails[$product->id] = [
+                        'success' => false,
+                        'name' => $product->name,
+                        'error' => 'Valor não sincronizado corretamente',
+                        'old_value' => $oldValue,
+                        'new_value' => $newValue,
+                        'expected' => $product->quantity
+                    ];
+                }
             } catch (\Exception $e) {
                 $errors++;
-                \Log::error("Erro ao sincronizar produto {$product->id}: " . $e->getMessage());
+                $syncDetails[$product->id] = [
+                    'success' => false,
+                    'name' => $product->name,
+                    'error' => $e->getMessage()
+                ];
+                \Log::error("Erro ao sincronizar produto {$product->id}: " . $e->getMessage(), [
+                    'exception' => get_class($e),
+                    'trace' => $e->getTraceAsString()
+                ]);
             }
         }
 
+        // Log detalhado do resultado
+        \Log::info("Resultado da sincronização de estoque", [
+            'total_products' => $products->count(),
+            'synced' => $synced,
+            'errors' => $errors,
+            'details' => $syncDetails,
+            'redis_info' => Redis::info()
+        ]);
+
         return response()->json([
-            'message' => 'Sincronização completa',
+            'message' => $errors > 0 ? 'Sincronização parcial' : 'Sincronização completa',
             'products_synced' => $synced,
             'errors' => $errors,
-            'total_products' => $products->count()
+            'total_products' => $products->count(),
+            'details' => $syncDetails
         ]);
     }
 }

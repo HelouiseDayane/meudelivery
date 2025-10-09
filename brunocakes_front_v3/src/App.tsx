@@ -44,6 +44,8 @@ interface Product {
   available: boolean;
   stock: number;
   available_stock?: number;
+  total_stock?: number; // Estoque total no Redis
+  reserved_stock?: number; // Estoque reservado no Redis
   quantity?: number; // Campo alternativo do backend
   expiryDate?: string;
   expires_at?: string; // Campo do backend
@@ -58,38 +60,13 @@ interface Product {
   is_active?: boolean;
 }
 
-interface CartItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image?: string;
-  product: Product; // Referência completa ao produto
-}
+import { Order, CartItem } from './types/orders';
 
 interface Client {
   id: string;
   name: string;
   whatsapp: string;
   email?: string;
-}
-
-interface Order {
-  id: string;
-  clientName: string;
-  whatsapp: string;
-  email: string;
-  items: CartItem[];
-  total: number;
-  status: 'pending' | 'pending_payment' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'completed' | 'canceled' | 'awaiting_seller_confirmation';
-  paymentMethod: 'pix' | 'card' | 'cash';
-  address?: string;
-  neighborhood?: string;
-  observations?: string;
-  scheduledDate?: string;
-  createdAt: string;
-  pixCode?: string;
-  pixExpiresAt?: string;
 }
 
 interface Analytics {
@@ -130,6 +107,10 @@ interface AppContextType {
   addProduct: (product: Product) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
+  publicProducts: Product[];
+  setPublicProducts: (products: Product[]) => void;
+  adminProducts: Product[];
+  setAdminProducts: (products: Product[]) => void;
   
   // Cart
   cart: CartItem[];
@@ -188,6 +169,8 @@ function AppProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [publicProducts, setPublicProducts] = useState<Product[]>([]);
+  const [adminProducts, setAdminProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [admin, setAdmin] = useState<Admin | null>(() => {
   const savedAdmin = localStorage.getItem('bruno_admin');
@@ -268,16 +251,68 @@ function AppProvider({ children }: { children: ReactNode }) {
 
   // Utility functions for stock
   const getAvailableStock = (productId: string): number => {
-    const product = products.find(p => p.id === productId);
+    console.log('[DEBUG] App.tsx - getAvailableStock chamado para produto:', productId);
+    // Primeiro procura nos produtos públicos, que têm o estoque mais atualizado do Redis
+    const publicProduct = publicProducts.find(p => String(p.id) === String(productId));
+    if (publicProduct) {
+      console.log('[DEBUG] App.tsx - Produto encontrado em publicProducts:', publicProduct);
+      
+      // Se tem available_stock, usa ele
+      if (publicProduct.available_stock !== undefined && publicProduct.available_stock !== null) {
+        const stock = Number(publicProduct.available_stock);
+        if (!isNaN(stock)) {
+          console.log('[DEBUG] App.tsx - Usando available_stock:', stock);
+          return stock;
+        }
+      }
+      
+      // Se não tem available_stock mas tem total e reserved, calcula
+      if (publicProduct.total_stock !== undefined && publicProduct.reserved_stock !== undefined) {
+        const total = Number(publicProduct.total_stock);
+        const reserved = Number(publicProduct.reserved_stock);
+        if (!isNaN(total) && !isNaN(reserved)) {
+          const available = Math.max(0, total - reserved);
+          console.log('[DEBUG] App.tsx - Calculando estoque (total - reserved):', available);
+          return available;
+        }
+      }
+
+      // Se tem stock, usa ele como fallback
+      if (publicProduct.stock !== undefined && publicProduct.stock !== null) {
+        const stock = Number(publicProduct.stock);
+        if (!isNaN(stock)) {
+          console.log('[DEBUG] App.tsx - Usando stock como fallback:', stock);
+          return stock;
+        }
+      }
+    }
+    
+    // Se não achou nos produtos públicos, procura nos produtos normais
+    const product = products.find(p => String(p.id) === String(productId));
     if (!product) {
-      console.warn(`[DEBUG] Produto não encontrado para id: ${productId}`);
+      console.warn(`[DEBUG] App.tsx - Produto não encontrado em nenhuma lista para id: ${productId}`);
       return 0;
     }
-    // Se vier o campo available_stock da API, priorize ele
-    if (typeof product.available_stock === 'number') {
-      return product.available_stock;
+    
+    // Mesma lógica para produtos normais
+    if (product.available_stock !== undefined && product.available_stock !== null) {
+      const stock = Number(product.available_stock);
+      if (!isNaN(stock)) {
+        console.log('[DEBUG] App.tsx - Usando available_stock de products:', stock);
+        return stock;
+      }
     }
-    return product.stock || 0;
+    
+    if (product.stock !== undefined && product.stock !== null) {
+      const stock = Number(product.stock);
+      if (!isNaN(stock)) {
+        console.log('[DEBUG] App.tsx - Usando stock de products:', stock);
+        return stock;
+      }
+    }
+
+    console.log('[DEBUG] App.tsx - Nenhum campo de estoque válido encontrado, retornando 0');
+    return 0;
   };
 
   const hasStock = (productId: string): boolean => {
@@ -286,19 +321,29 @@ function AppProvider({ children }: { children: ReactNode }) {
 
     // Cart functions
   const addToCart = async (product: Product, quantity: number = 1) => {
+    console.log('[DEBUG] App.tsx - addToCart chamado com:', { product, quantity });
+    
     const availableStock = getAvailableStock(product.id);
+    console.log('[DEBUG] App.tsx - availableStock obtido:', availableStock);
     
     // Check stock availability
+    if (availableStock === 0) {
+      toast.error('Produto indisponível! Estoque esgotado.');
+      return;
+    }
+    
     if (availableStock < quantity) {
       toast.error(`Estoque insuficiente. Disponível: ${availableStock}`);
       return;
     }
 
     setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.id === product.id);
+      const existingItem = prevCart.find(item => String(item.id) === String(product.id));
+      console.log('[DEBUG] App.tsx - Item existente no carrinho:', existingItem);
       
       if (existingItem) {
         const newQuantity = existingItem.quantity + quantity;
+        console.log('[DEBUG] App.tsx - Nova quantidade calculada:', newQuantity);
         
         // Check if new quantity exceeds stock
         if (newQuantity > availableStock) {
@@ -307,18 +352,24 @@ function AppProvider({ children }: { children: ReactNode }) {
         }
         
         return prevCart.map(item =>
-          item.id === product.id
+          String(item.id) === String(product.id)
             ? { ...item, quantity: newQuantity }
             : item
         );
       } else {
+        // Garantindo que o produto tem o campo available_stock
+        const productWithStock = {
+          ...product,
+          available_stock: product.available_stock || availableStock
+        };
+        
         return [...prevCart, {
           id: product.id,
           name: product.name,
           price: product.promotionPrice || product.price,
           quantity,
           image: product.image,
-          product: product
+          product: productWithStock
         }];
       }
     });
@@ -425,13 +476,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       console.error('❌ Erro ao atualizar produtos:', error);
     }
   };
-  // Atualização automática do estoque a cada segundo
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      refreshProducts();
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, []);
+  // Atualização manual do estoque apenas quando necessário
 
   // Load analytics data
   const loadAnalytics = async () => {
@@ -594,79 +639,21 @@ function AppProvider({ children }: { children: ReactNode }) {
     validateAdminSession();
   }, []);
 
-  // --- Load products based on authentication status ---
+  // --- Load products for public menu ---
   useEffect(() => {
-    const loadProductsWithStock = async () => {
+    const loadPublicProducts = async () => {
       try {
-        // Se for admin, usar API de admin; senão usar API pública
-        if (isAdminAuthenticated) {
-          const adminProducts = await adminApi.getProducts();
-          
-          const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-          
-          if (mappedProducts.length > 0) {
-            setProducts(mappedProducts);
-          }
-          
-        } else {
-          try {
-            // Substituir por chamada válida
-            // const productsWithStock = await Promise.all(products.map(p => api.getProductStock(p.id)));
-            // Ou apenas buscar produtos normalmente
-            const productsWithStock = await api.getPublicProducts();
-            
-            const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
-            
-            if (mappedProducts.length > 0) {
-              setProducts(mappedProducts);
-            } else {
-              // Fallback para API básica
-              const basicProducts = await api.getPublicProducts();
-              const basicMappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-              
-              if (basicMappedProducts.length > 0) {
-                setProducts(basicMappedProducts);
-              }
-            }
-            
-          } catch (publicApiError) {
-            // Fallback para API básica se with-stock falhar
-            const basicProducts = await api.getPublicProducts();
-            const mappedProducts = Array.isArray(basicProducts) ? basicProducts.map(mapProductFromBackend) : [];
-            
-            if (mappedProducts.length > 0) {
-              setProducts(mappedProducts);
-            }
-          }
-        }
-        
+        const productsWithStock = await api.getPublicProducts();
+        const mappedProducts = Array.isArray(productsWithStock) ? productsWithStock.map(mapProductFromBackend) : [];
+        setPublicProducts(mappedProducts);
       } catch (error) {
-        console.error('❌ Erro ao carregar produtos:', error);
-        
-        // Tentar adminApi como último recurso se disponível
-        if (localStorage.getItem('admin_token')) {
-          try {
-            const adminProducts = await adminApi.getProducts();
-            const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
-            
-            if (mappedProducts.length > 0) {
-              setProducts(mappedProducts);
-            }
-          } catch (adminError) {
-            console.error('❌ Fallback adminApi também falhou:', adminError);
-            toast.error('Erro ao carregar produtos - verifique se o backend está rodando');
-          }
-        }
+        console.error('❌ Erro ao carregar produtos públicos:', error);
+        setPublicProducts([]);
       }
-    };
-
-    // Só carregar produtos se admin foi definido (pode ser null ou objeto)
-    // Isso evita carregar produtos antes da validação terminar
-    if (admin !== undefined) {
-      loadProductsWithStock();
       setLoading(false);
-    }
-  }, [isAdminAuthenticated, admin]);
+    };
+    loadPublicProducts();
+  }, []);
 
   // Load orders from backend for admin
   useEffect(() => {
@@ -806,41 +793,45 @@ function AppProvider({ children }: { children: ReactNode }) {
     user: admin, // Alias para compatibilidade
     login,
     logout,
-    
+
     // Products
-    products,
+    products: products || [],
     setProducts,
     addProduct,
     updateProduct,
     deleteProduct,
-    
+    publicProducts: publicProducts || [],
+    setPublicProducts,
+    adminProducts: adminProducts || [],
+    setAdminProducts,
+
     // Cart
-    cart,
+    cart: cart || [],
     addToCart,
     removeFromCart,
     updateCartItemQuantity,
     updateCartQuantity: updateCartItemQuantity, // Alias
     clearCart,
-    
+
     // Orders
-    orders,
+    orders: orders || [],
     setOrders,
     addOrder,
     updateOrder,
-    
+
     // Clients
-    clients,
+    clients: clients || [],
     setClients,
     addClient,
     updateClient,
     deleteClient,
-    
+
     // Utils
     loading,
     getAvailableStock,
     hasStock,
     refreshProducts,
-    
+
     // Analytics
     analytics,
     loadAnalytics,

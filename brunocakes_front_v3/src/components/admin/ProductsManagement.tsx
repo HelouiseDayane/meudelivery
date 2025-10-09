@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../../App';
 import { adminApi } from '../../api_admin';
 import { getProductImageUrl } from '../../api';
@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { Plus, Edit, Search, Package, Calendar, Star, Percent, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export function ProductsManagement() {
-  const { products, refreshProducts } = useApp();
+  const { adminProducts, setAdminProducts, refreshProducts } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -38,7 +38,7 @@ export function ProductsManagement() {
     isNew: false,
   });
 
-  const categories = [...new Set(products.map(p => p.category).filter(cat => cat && cat.trim() !== ''))];
+  const categories = [...new Set(adminProducts.map((p: any) => p.category).filter((cat: string) => cat && cat.trim() !== ''))];
 
   // Função para formatar valor monetário brasileiro
   const formatCurrency = (value: string) => {
@@ -60,9 +60,18 @@ export function ProductsManagement() {
     return value.replace(/[^\d,]/g, '').replace(',', '.');
   };
 
-  const filteredProducts = products.filter(product => {
+  // Admin deve ver todos os produtos, inclusive inativos
+  useEffect(() => {
+    import('../../api_admin').then(({ adminApi }) => {
+      adminApi.getProducts().then((products) => {
+        setAdminProducts(products);
+      });
+    });
+  }, [setAdminProducts]);
+  const filteredProducts = adminProducts.filter((product: any) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+    // Não filtra por status, sempre mostra todos
     return matchesSearch && matchesCategory;
   });
 
@@ -277,8 +286,8 @@ export function ProductsManagement() {
     }
   };
 
-  const lowStockCount = products.filter(p => p.stock <= 5 && p.stock > 0).length;
-  const outOfStockCount = products.filter(p => p.stock === 0).length;
+  const lowStockCount = adminProducts.filter((p: any) => p.stock <= 5 && p.stock > 0).length;
+  const outOfStockCount = adminProducts.filter((p: any) => p.stock === 0).length;
 
   return (
     <div className="space-y-6">
@@ -560,7 +569,7 @@ export function ProductsManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product) => (
+              {filteredProducts.map((product: any) => (
                 <TableRow key={product.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -668,15 +677,15 @@ export function ProductsManagement() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Checkbox
-                        checked={product.available || product.is_active || false}
-                        onCheckedChange={() => handleToggleAvailability(product.id, (product.available || product.is_active) ?? false)}
-                        aria-label={`${(product.available || product.is_active) ? 'Desativar' : 'Ativar'} produto`}
+                        checked={!!(product.is_active === true || product.is_active === '1' || product.is_active === 1)}
+                        onCheckedChange={() => handleToggleAvailability(product.id, !!(product.is_active === true || product.is_active === '1' || product.is_active === 1))}
+                        aria-label={`${(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'Desativar' : 'Ativar'} produto`}
                       />
                       <Badge 
-                        variant={(product.available || product.is_active) ? 'default' : 'secondary'}
-                        className={(product.available || product.is_active) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
+                        variant={(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'default' : 'secondary'}
+                        className={(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
                       >
-                        {(product.available || product.is_active) ? 'Ativo' : 'Inativo'}
+                        {(product.is_active === true || product.is_active === '1' || product.is_active === 1) ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </div>
                   </TableCell>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { fetchAndSetActiveAddress, STORE_CONFIG } from '../../api';
+import { fetchAndSetActiveAddress, STORE_CONFIG, API_BASE_URL } from '../../api';
 import { useRealTime } from '../../hooks/useRealTime';
+import { Order } from '../../types/orders';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -19,7 +20,7 @@ export const OrderTracking = () => {
   const fetchActiveAddress = async () => {
     try {
       // Busca o endereço ativo completo do backend
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/addresses/active`);
+  const res = await fetch(`${API_BASE_URL}/addresses/active`);
       if (res.ok) {
         const active = await res.json();
         //nsole.log('Resposta do /api/addresses/active:', active);
@@ -66,7 +67,7 @@ export const OrderTracking = () => {
         if (exists) {
           return prev.map(order =>
             order.id === lastEvent.data.order_id
-              ? { ...order, status: lastEvent.data.status }
+              ? { ...order, status: lastEvent.data.status as Order['status'] }
               : order
           );
         } else {

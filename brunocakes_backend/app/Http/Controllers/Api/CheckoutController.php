@@ -18,6 +18,18 @@ use App\Http\Controllers\Api\PaymentWebhookController;
 
 class CheckoutController extends Controller
 {
+    protected function getRedisConnection()
+    {
+        $redis = new \Redis();
+        try {
+            $redis->connect(config('database.redis.default.host'), 6379);
+            $redis->auth(config('database.redis.default.password'));
+            return $redis;
+        } catch (\Exception $e) {
+            \Log::error("Erro ao conectar com Redis: " . $e->getMessage());
+            throw $e;
+        }
+    }
     /**
      * ✅ Adiciona item ao carrinho com expiração automática
      */
@@ -33,20 +45,76 @@ class CheckoutController extends Controller
         $productId = $data['product_id'];
         $quantity = $data['quantity'];
 
-        // Buscar produto
-        $product = Product::findOrFail($productId);
+        try {
+            // Testar conexão Redis primeiro e logar configurações
+            \Log::info("[AddToCart] Configuração Redis", [
+                'host' => config('database.redis.default.host'),
+                'port' => config('database.redis.default.port'),
+                'password_set' => !empty(config('database.redis.default.password'))
+            ]);
+            
+            if (!Redis::ping()) {
+                \Log::error("[AddToCart] Redis não está respondendo ao PING");
+                throw new \Exception("Redis connection failed");
+            }
 
-        // Verificar estoque disponível
-        $currentStock = Redis::get("product_stock_{$productId}") ?? $product->quantity;
-        $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
-        $availableStock = $currentStock - $reservedStock;
+            // Buscar produto
+            $product = Product::findOrFail($productId);
+            \Log::info("[AddToCart] Produto encontrado", [
+                'product_id' => $productId,
+                'mysql_quantity' => $product->quantity
+            ]);
 
-        if ($availableStock < $quantity) {
-            return response()->json([
-                'message' => 'Estoque insuficiente',
+            // Verificar e sincronizar estoque se necessário
+            $currentStock = Redis::get("product_stock_{$productId}");
+            \Log::info("[AddToCart] Estoque atual no Redis", [
+                'product_id' => $productId,
+                'redis_stock' => $currentStock
+            ]);
+
+            // Se não tem no Redis ou é null/zero, sincroniza do MySQL
+            if ($currentStock === null || $currentStock == 0) {
+                $currentStock = $product->quantity;
+                Redis::set("product_stock_{$productId}", $currentStock);
+                \Log::info("[AddToCart] Estoque sincronizado do MySQL para Redis", [
+                    'product_id' => $productId,
+                    'quantity' => $currentStock
+                ]);
+            }
+
+            // Verificar estoque disponível
+            $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
+            $availableStock = (int)$currentStock - (int)$reservedStock;
+            
+            \Log::info("[AddToCart] Cálculo de estoque disponível", [
+                'product_id' => $productId,
+                'current_stock' => $currentStock,
+                'reserved_stock' => $reservedStock,
                 'available_stock' => $availableStock,
                 'requested_quantity' => $quantity
-            ], 400);
+            ]);
+
+            if ($availableStock < $quantity) {
+                \Log::warning("[AddToCart] Tentativa de adicionar quantidade maior que estoque disponível", [
+                    'product_id' => $productId,
+                    'available_stock' => $availableStock,
+                    'requested_quantity' => $quantity
+                ]);
+                return response()->json([
+                    'message' => 'Estoque insuficiente',
+                    'available_stock' => $availableStock,
+                    'requested_quantity' => $quantity
+                ], 400);
+            }
+        } catch (\Exception $e) {
+            \Log::error("[AddToCart] Erro ao verificar estoque", [
+                'product_id' => $productId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'message' => 'Erro ao verificar estoque. Por favor, tente novamente.'
+            ], 500);
         }
 
         // Reservar estoque
@@ -297,42 +365,78 @@ class CheckoutController extends Controller
     }
 
     /**
-     * ✅ Obter estoque de todos os produtos
+     * ✅ Obter estoque de todos os produtos com tratamento de erros
      */
     public function getAllProductsStock()
     {
-        $products = Product::where('is_active', true)->get();
-        $productsWithStock = [];
+        try {
+            $products = Product::where('is_active', true)->get();
+            $productsWithStock = [];
+            $redisAvailable = true;
 
-        // Removido: sincronização do estoque do MySQL para o Redis
+            // Testar conexão Redis
+            try {
+                if (!Redis::ping()) {
+                    throw new \Exception("Redis ping failed");
+                }
+            } catch (\Exception $e) {
+                \Log::error("Redis não disponível em getAllProductsStock: " . $e->getMessage());
+                $redisAvailable = false;
+            }
 
-        // Agora monta a resposta já com o Redis atualizado
-        foreach ($products as $product) {
-            $redisStock = Redis::get("product_stock_{$product->id}") ?? $product->quantity;
-            $reservedStock = Redis::get("product_reserved_{$product->id}") ?? 0;
-            $availableStock = $redisStock - $reservedStock;
+            foreach ($products as $product) {
+                try {
+                    if ($redisAvailable) {
+                        $redisStock = Redis::get("product_stock_{$product->id}");
+                        $reservedStock = Redis::get("product_reserved_{$product->id}") ?? 0;
+                        
+                        // Se não tem no Redis, sincroniza do MySQL
+                        if ($redisStock === null) {
+                            $redisStock = $product->quantity;
+                            Redis::set("product_stock_{$product->id}", $redisStock);
+                            \Log::info("Estoque sincronizado do MySQL para Redis em getAllProductsStock", [
+                                'product_id' => $product->id,
+                                'quantity' => $redisStock
+                            ]);
+                        }
+                    } else {
+                        $redisStock = $product->quantity;
+                        $reservedStock = 0;
+                    }
+                    
+                    $availableStock = $redisStock - $reservedStock;
 
-            $productsWithStock[] = [
-                'id' => $product->id,
-                'name' => $product->name,
-                'slug' => $product->slug,
-                'price' => $product->price,
-                'promotion_price' => $product->promotion_price,
-                'category' => $product->category,
-                'description' => $product->description,
-                'image' => $product->image ? asset('storage/' . $product->image) : null,
-                'is_promo' => $product->is_promo,
-                'is_new' => $product->is_new,
-                'total_stock' => (int)$redisStock,
-                'reserved_stock' => (int)$reservedStock,
-                'available_stock' => max(0, $availableStock),
-                'in_stock' => $availableStock > 0,
-                'created_at' => $product->created_at,
-                'updated_at' => $product->updated_at
-            ];
+                    $productsWithStock[] = [
+                        'id' => $product->id,
+                        'name' => $product->name,
+                        'slug' => $product->slug,
+                        'price' => $product->price,
+                        'promotion_price' => $product->promotion_price,
+                        'category' => $product->category,
+                        'description' => $product->description,
+                        'image' => $product->image ? asset('storage/' . $product->image) : null,
+                        'is_promo' => $product->is_promo,
+                        'is_new' => $product->is_new,
+                        'total_stock' => (int)$redisStock,
+                        'reserved_stock' => (int)$reservedStock,
+                        'available_stock' => max(0, $availableStock),
+                        'in_stock' => $availableStock > 0,
+                        'created_at' => $product->created_at,
+                        'updated_at' => $product->updated_at
+                    ];
+                } catch (\Exception $e) {
+                    \Log::error("Erro ao processar produto em getAllProductsStock", [
+                        'product_id' => $product->id,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            return response()->json($productsWithStock);
+        } catch (\Exception $e) {
+            \Log::error("Erro crítico em getAllProductsStock: " . $e->getMessage());
+            return response()->json(['error' => 'Erro ao buscar produtos'], 500);
         }
-
-        return response()->json($productsWithStock);
     }
 
     /**
@@ -340,18 +444,41 @@ class CheckoutController extends Controller
      */
     public function getProductStock($id)
     {
-        $product = Product::findOrFail($id);
-        $redisStock = Redis::get("product_stock_{$id}") ?? $product->quantity;
-        $reservedStock = Redis::get("product_reserved_{$id}") ?? 0;
-        $availableStock = $redisStock - $reservedStock;
+        try {
+            $redis = $this->getRedisConnection();
+            $product = Product::findOrFail($id);
+            
+            \Log::info("Verificando estoque do produto", [
+                'product_id' => $id,
+                'redis_connected' => $redis->ping() ? 'yes' : 'no'
+            ]);
+            
+            $redisStock = $redis->get("product_stock_{$id}");
+            if ($redisStock === false) {
+                $redisStock = $product->quantity;
+                $redis->set("product_stock_{$id}", $redisStock);
+            }
+            
+            $reservedStock = $redis->get("product_reserved_{$id}") ?? 0;
+            $availableStock = (int)$redisStock - (int)$reservedStock;
 
-        return response()->json([
-            'product_id' => $id,
-            'total_stock' => (int)$redisStock,
-            'reserved_stock' => (int)$reservedStock,
-            'available_stock' => max(0, $availableStock),
-            'in_stock' => $availableStock > 0
-        ]);
+            return response()->json([
+                'product_id' => $id,
+                'total_stock' => (int)$redisStock,
+                'reserved_stock' => (int)$reservedStock,
+                'available_stock' => max(0, $availableStock),
+                'in_stock' => $availableStock > 0
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("Erro ao verificar estoque do produto", [
+                'product_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'message' => 'Erro ao verificar estoque do produto',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
 
@@ -599,6 +726,12 @@ class CheckoutController extends Controller
 
         /**
      * Marcar pedido como entregue (delivered)
-     */
-   
+     */ 
+    public function markOrderAsDelivered($id)
+    {
+        $order = Order::findOrFail($id);
+        $order->update(['status' => 'delivered']);
+
+        return response()->json(['message' => 'Pedido marcado como entregue']);
+    }
 }

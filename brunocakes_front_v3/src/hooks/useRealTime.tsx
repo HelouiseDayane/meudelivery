@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { API_BASE_URL } from '../api';
 import { toast } from 'sonner';
+import { OrderStatus } from '../types/orders';
 
 interface StockUpdateEvent {
   type: 'stock_update';
@@ -24,7 +25,7 @@ interface OrderStatusEvent {
   type: 'order_status';
   data: {
     order_id: string;
-    status: string;
+    status: OrderStatus;
     customer_phone?: string;
   };
 }
@@ -118,7 +119,7 @@ export const RealTimeProvider = ({
               // Notificar sobre mudanças importantes de status
               if (eventData.data.status === 'confirmed') {
                 toast.success('Pedido confirmado!');
-              } else if (eventData.data.status === 'cancelled') {
+              } else if (eventData.data.status === 'canceled') {
                 toast.error('Pedido cancelado');
               }
               break;
