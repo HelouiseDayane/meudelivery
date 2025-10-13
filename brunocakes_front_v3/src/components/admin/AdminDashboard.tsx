@@ -36,18 +36,14 @@ export function AdminDashboard() {
 
 
 
-// Usar os campos do backend do dashboard admin (forçar any para evitar erro de tipagem)
-const analyticsAny = analytics as any;
-const todaySales = analyticsAny.sales_today || 0;
-const todayOrders = analyticsAny.orders_today || 0;
-const thisMonthSales = analyticsAny.sales_month || 0;
-const thisYearSales = analyticsAny.sales_year || 0;
-const totalRevenue = analyticsAny.total_revenue || 0;
-const pendingOrders = analyticsAny.ticket_statistics?.pending_payment || 0;
-const totalProducts = analytics.statistics?.totalProducts || products?.length || 0;
-const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length || 0;
-const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length || 0;
-const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
+// KPIs superiores usando os campos do JSON real
+const todaySales = Number(analytics.sales_today ?? 0);
+const todayOrders = Number(analytics.orders_today ?? 0);
+const thisMonthSales = Number(analytics.sales_month ?? 0);
+const thisMonthOrders = Number(analytics.orders_month ?? 0);
+const thisYearSales = Number(analytics.sales_year ?? 0);
+const totalRevenue = Number(analytics.total_revenue ?? 0);
+const pendingOrders = Number(analytics.ticket_statistics?.pending_payment ?? 0);
   
 
 
@@ -61,7 +57,7 @@ const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
         </p>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards corrigidos */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -75,7 +71,6 @@ const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
             </p>
           </CardContent>
         </Card>
-        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Vendas Mês</CardTitle>
@@ -84,11 +79,10 @@ const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
           <CardContent>
             <div className="text-2xl font-bold">R$ {thisMonthSales.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground">
-              Meta: R$ 25.000
+              {thisMonthOrders} pedidos este mês
             </p>
           </CardContent>
         </Card>
-        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Faturamento Total</CardTitle>
@@ -101,7 +95,6 @@ const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
             </p>
           </CardContent>
         </Card>
-        
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pedidos Pendentes</CardTitle>
@@ -110,7 +103,7 @@ const outOfStockProducts = products?.filter(p => p.stock === 0)?.length || 0;
           <CardContent>
             <div className="text-2xl font-bold">{pendingOrders}</div>
             <p className="text-xs text-muted-foreground">
-              Aguardando confirmação
+              Pagamento pendente
             </p>
           </CardContent>
         </Card>
