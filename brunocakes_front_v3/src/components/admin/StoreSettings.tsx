@@ -82,8 +82,8 @@ export const StoreSettings: React.FC = () => {
         mercado_pago_key: data.mercado_pago_key || '',
         logo_horizontal: data.logo_horizontal || '',
         logo_icon: data.logo_icon || '',
-        logo_horizontal_url: data.logo_horizontal, // URL da imagem horizontal
-        logo_icon_url: data.logo_icon, // URL da imagem ícone
+        logo_horizontal_url: data.logo_horizontal_url || '', // URL completa vinda do backend
+        logo_icon_url: data.logo_icon_url || '', // URL completa vinda do backend
       });
       
       // Verificar se já existe configurações salvas (tem ID)
@@ -316,7 +316,7 @@ export const StoreSettings: React.FC = () => {
                 id="store_name"
                 value={settings.store_name}
                 onChange={(e) => handleInputChange('store_name', e.target.value)}
-                placeholder="Ex: Bruno Cakes"
+                placeholder={settings.store_name || 'Nome da loja'}
               />
             </div>
 
@@ -326,7 +326,7 @@ export const StoreSettings: React.FC = () => {
                 id="store_slogan"
                 value={settings.store_slogan}
                 onChange={(e) => handleInputChange('store_slogan', e.target.value)}
-                placeholder="Ex: Aqui não é fatia nem pedaço, aqui é tora!"
+                placeholder={settings.store_slogan || 'Slogan da loja'}
                 rows={3}
               />
             </div>

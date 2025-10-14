@@ -77,7 +77,7 @@ export const applyPrimaryColor = (primaryColor: string) => {
     const darkerColor = `rgb(${Math.max(0, r - 40)}, ${Math.max(0, g - 40)}, ${Math.max(0, b - 40)})`;
     const accentColor = `rgba(${r}, ${g}, ${b}, 0.1)`;
     
-    // Remove estilos anteriores do Bruno Cake se existirem
+    // Remove estilos anteriores 
     const existingStyle = document.getElementById('bruno-dynamic-styles');
     if (existingStyle) {
       existingStyle.remove();
@@ -298,7 +298,7 @@ export const updateLogoElements = (type: 'horizontal' | 'icon', logoUrl: string)
           (currentSrc.includes('Logo horizontal') || 
            currentSrc.includes('Logo%20horizontal') ||
            element.className.includes('hidden sm:block') ||
-           altText.includes('Bruno') ||
+           altText.includes('Meu Delivery') ||
            altText.includes('Logo Horizontal'))) {
         element.src = logoUrl;
         alternativeUpdates++;

@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 /**
  * @OA\Info(
  *      version="1.0.0",
- *      title="Bruno Cakes API Documentation",
+ *      title="Meu Delivery API Documentation",
  *      description="API para sistema de pedidos de bolos e doces",
  *      @OA\Contact(
- *          email="contato@brunocakes.com"
+ *          email="contato@meudelivey.com"
  *      ),
  *      @OA\License(
  *          name="Apache 2.0",
@@ -18,7 +18,7 @@ namespace App\Http\Controllers;
  *
  * @OA\Server(
  *      url=L5_SWAGGER_CONST_HOST,
- *      description="Bruno Cakes API Server"
+ *      description="Meu Delivey API Server"
  * )
  *
  * @OA\SecurityScheme(

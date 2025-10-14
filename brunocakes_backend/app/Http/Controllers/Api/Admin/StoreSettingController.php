@@ -205,9 +205,9 @@ class StoreSettingController extends Controller
         
         // Reset to default values
         $settings->update([
-            'store_name' => 'Bruno Cakes',
-            'store_slogan' => 'Aqui não é fatia nem pedaço, aqui é tora!', // Corrigido para store_slogan
-            'instagram' => 'brunocakee',
+            'store_name' => 'Meu Delivery',
+            'store_slogan' => 'Aniche aqui seu slogan',
+            'instagram' => 'meudelivey',
             'primary_color' => '#8B4513',
             'mercado_pago_key' => null,
             'logo_horizontal' => null,

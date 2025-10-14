@@ -12,8 +12,8 @@ interface StoreConfigState {
 
 // Estado inicial
 const initialState: StoreConfigState = {
-  storeName: 'Bruno Miranda Cake',
-  slogan: 'Aqui não é fatia nem pedaço, aqui é tora!',
+  storeName: '', // será preenchido dinamicamente
+  slogan: '', // será preenchido dinamicamente
   instagram: '@brunocakee',
   logoHorizontal: '/Logo horizontal.png',
   logoIcon: '/icone-selobrunocakes.ico',

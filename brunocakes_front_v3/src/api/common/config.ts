@@ -4,8 +4,8 @@ export const DOMAIN_BASE_URL = (import.meta as any).env.VITE_DOMAIN_BASE_URL;
 
 
 export const STORE_CONFIG = {
-  name: 'Bruno Miranda Cake',
-  slogan: 'Aqui não é fatia nem pedaço, aqui é tora!',
+  name: '', // será preenchido dinamicamente
+  slogan: '', // será preenchido dinamicamente
   address: '', // será preenchido dinamicamente
   phone: '(84) 99127-7973',
   instagram: '@brunocakee',

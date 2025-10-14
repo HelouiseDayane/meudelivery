@@ -24,32 +24,17 @@ export const PublicLayout = () => {
   // Hook reativo para configurações da loja
   const storeConfigState = useStoreConfigState();
 
-  // Estado local para dados do rodapé
-  const [footerData, setFooterData] = useState({
-    address: '',
-    workingHours: '',
-    isOpen: false,
-  });
+  // Estado local removido, tudo via storeConfigState
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [allAddresses, setAllAddresses] = useState<any[]>([]);
 
-  // Busca endereço/horário dinâmico ao montar o layout público
+  // Busca todos os endereços públicos ao montar ou quando storeConfigState muda
   useEffect(() => {
     setLoadingAddress(true);
-    
-    fetchAndSetActiveAddress(apiRequest).then(() => {
-      setFooterData({
-        address: STORE_CONFIG.address,
-        workingHours: STORE_CONFIG.workingHours,
-        isOpen: STORE_CONFIG.isOpen,
-      });
-      setLoadingAddress(false);
-    }).catch(() => {
-      setLoadingAddress(false);
-    });
-    // Busca todos os endereços públicos
-    fetchAllAddresses(apiRequest).then(setAllAddresses);
-  }, []);
+    fetchAllAddresses(apiRequest)
+      .then(setAllAddresses)
+      .finally(() => setLoadingAddress(false));
+  }, [storeConfigState]);
 
   const cartItemsCount = cart.reduce((total, item) => total + item.quantity, 0);
 
@@ -164,9 +149,7 @@ export const PublicLayout = () => {
               <p className="text-muted-foreground">
                 <span role="img" aria-label="whatsapp">🟢</span> <a href={`https://wa.me/5584991277973`} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline hover:opacity-80">WhatsApp</a><br />
                 <span role="img" aria-label="instagram">📸</span> <a href={`https://instagram.com/${storeConfigState.instagram}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 font-semibold underline hover:opacity-80">@{storeConfigState.instagram}</a><br />
-                {loadingAddress ? (
-                  'Carregando endereço...'
-                ) : allAddresses.length > 0 ? (
+                {allAddresses.length > 0 ? (
                   <span>
                     {allAddresses.map((addr, idx) => (
                       <span key={addr.id || idx}>
@@ -174,22 +157,18 @@ export const PublicLayout = () => {
                       </span>
                     ))}
                   </span>
+                ) : loadingAddress ? (
+                  'Carregando endereço...'
                 ) : (
-                  footerData.address || 'Endereço não disponível'
+                  'Endereço não disponível'
                 )}
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-2">Horário de Funcionamento</h4>
               <p className="text-muted-foreground">
-                {footerData.workingHours
-                  ? <>
-                      {footerData.workingHours}
-                      {footerData.isOpen === false && (
-                        <span style={{ color: '#dc2626', fontWeight: 600, marginLeft: 8 }}>(Fechado)</span>
-                      )}
-                    </>
-                  : 'Horário não disponível'}
+                {/* Se quiser mostrar horário, precisa buscar de outro local ou adicionar ao StoreConfigState */}
+                {'Horário não disponível'}
               </p>
             </div>
           </div>

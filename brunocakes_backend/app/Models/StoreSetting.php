@@ -31,9 +31,9 @@ class StoreSetting extends Model
         if (!$settings) {
             // Criar configurações padrão se não existirem
             $settings = self::create([
-                'store_name' => 'Bruno Cakes',
-                'store_slogan' => 'Aqui não é fatia nem pedaço, aqui é tora!',
-                'instagram' => 'brunocakee',
+                'store_name' => 'Meu Delivey',
+                'store_slogan' => 'Aniche aqui seu slogan',
+                'instagram' => 'meudelivey',
                 'primary_color' => '#8B4513',
                 'mercado_pago_key' => null,
                 'logo_horizontal' => null,
