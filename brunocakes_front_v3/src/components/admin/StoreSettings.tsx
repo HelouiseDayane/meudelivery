@@ -11,6 +11,8 @@ interface StoreSettingsData {
   store_name: string;
   store_slogan: string; // Corrigido de 'slogan' para 'store_slogan'
   instagram: string;
+  phone: string;
+  whatsapp: string;
   primary_color: string;
   mercado_pago_key: string;
   logo_horizontal: string;
@@ -24,7 +26,9 @@ export const StoreSettings: React.FC = () => {
     store_name: '',
     store_slogan: '',
     instagram: '',
-    primary_color: '#8B4513',
+    phone: '',
+    whatsapp: '',
+    primary_color: '#FFFF',
     mercado_pago_key: '',
     logo_horizontal: '',
     logo_icon: '',
@@ -79,6 +83,8 @@ export const StoreSettings: React.FC = () => {
         ...data,
         store_slogan: data.store_slogan || '',
         instagram: data.instagram || '',
+        phone: data.phone || '',
+        whatsapp: data.whatsapp || '',
         mercado_pago_key: data.mercado_pago_key || '',
         logo_horizontal: data.logo_horizontal || '',
         logo_icon: data.logo_icon || '',
@@ -386,6 +392,25 @@ export const StoreSettings: React.FC = () => {
             <CardTitle>Logos e Imagens</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                value={settings.phone}
+                onChange={(e) => handleInputChange('phone', e.target.value)}
+                placeholder="Ex: (84) 99999-9999"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="whatsapp">WhatsApp</Label>
+              <Input
+                id="whatsapp"
+                value={settings.whatsapp}
+                onChange={(e) => handleInputChange('whatsapp', e.target.value)}
+                placeholder="Ex: (84) 99999-9999"
+              />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="logo_horizontal">Logo Horizontal</Label>

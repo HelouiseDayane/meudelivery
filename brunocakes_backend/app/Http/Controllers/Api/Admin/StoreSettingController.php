@@ -97,6 +97,8 @@ class StoreSettingController extends Controller
         $validated = $request->validate([
             'store_name'        => 'sometimes|string|max:255',
             'store_slogan'      => 'sometimes|string|max:500|nullable', // Corrigido para store_slogan
+            'phone'             => 'sometimes|string|max:500|nullable',
+            'whatsapp'          => 'sometimes|string|max:500|nullable',
             'instagram'         => 'sometimes|string|max:100|nullable',
             'primary_color'     => 'sometimes|string|regex:/^#[0-9A-Fa-f]{6}$/',
             'mercado_pago_key'  => 'sometimes|string|nullable',

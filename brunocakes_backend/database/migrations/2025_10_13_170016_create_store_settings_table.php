@@ -14,12 +14,14 @@ return new class extends Migration
         Schema::create('store_settings', function (Blueprint $table) {
             $table->id();
             $table->string('store_name');
-            $table->string('slogan')->nullable(); // Slogan da loja
-            $table->string('instagram')->nullable(); // Handle do Instagram
+            $table->string('store_slogan')->nullable(); // Slogan da loja
+            $table->string('instagram')->nullable();
+            $table->string('phone')->nullable(); // Handle do Instagram
             $table->string('logo_horizontal')->nullable(); // Logo horizontal
             $table->string('logo_icon')->nullable(); // Ícone/selo da loja
             $table->string('primary_color')->default('#8B4513'); // Cor primária em hex
             $table->text('mercado_pago_key')->nullable(); // Chave do Mercado Pago
+            $table->text('whatsapp')->nullable(); 
             $table->timestamps();
         });
     }

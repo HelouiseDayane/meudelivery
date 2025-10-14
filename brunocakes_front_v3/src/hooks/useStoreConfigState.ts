@@ -5,6 +5,8 @@ interface StoreConfigState {
   storeName: string;
   slogan: string;
   instagram: string;
+  phone: string;
+  whatsapp: string;
   logoHorizontal: string;
   logoIcon: string;
   primaryColor: string;
@@ -15,6 +17,8 @@ const initialState: StoreConfigState = {
   storeName: '', // será preenchido dinamicamente
   slogan: '', // será preenchido dinamicamente
   instagram: '@brunocakee',
+  phone: '',
+  whatsapp: '',
   logoHorizontal: '/Logo horizontal.png',
   logoIcon: '/icone-selobrunocakes.ico',
   primaryColor: '#005ef5',

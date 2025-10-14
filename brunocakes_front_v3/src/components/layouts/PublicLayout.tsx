@@ -24,15 +24,15 @@ export const PublicLayout = () => {
   // Hook reativo para configurações da loja
   const storeConfigState = useStoreConfigState();
 
-  // Estado local removido, tudo via storeConfigState
-  const [loadingAddress, setLoadingAddress] = useState(true);
+  // Estado local para endereços, sem travar renderização global
+  const [loadingAddress, setLoadingAddress] = useState(false);
   const [allAddresses, setAllAddresses] = useState<any[]>([]);
 
-  // Busca todos os endereços públicos ao montar ou quando storeConfigState muda
   useEffect(() => {
     setLoadingAddress(true);
     fetchAllAddresses(apiRequest)
       .then(setAllAddresses)
+      .catch(() => setAllAddresses([]))
       .finally(() => setLoadingAddress(false));
   }, [storeConfigState]);
 
@@ -54,7 +54,7 @@ export const PublicLayout = () => {
               <Link to="/" className="flex items-center space-x-3">
                 {/* Mobile: só ícone, Desktop: logo + texto */}
                 <img
-                  src={storeConfigState.logoIcon || "/icone-selobrunocakes.ico"}
+                  src={storeConfigState.logoIcon}
                   alt={storeConfigState.storeName}
                   className="h-16 w-16 block sm:hidden"
                 />
@@ -147,8 +147,21 @@ export const PublicLayout = () => {
             <div>
               <h4 className="font-semibold mb-2">Contato</h4>
               <p className="text-muted-foreground">
-                <span role="img" aria-label="whatsapp">🟢</span> <a href={`https://wa.me/5584991277973`} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline hover:opacity-80">WhatsApp</a><br />
-                <span role="img" aria-label="instagram">📸</span> <a href={`https://instagram.com/${storeConfigState.instagram}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 font-semibold underline hover:opacity-80">@{storeConfigState.instagram}</a><br />
+                {storeConfigState.phone && (
+                  <span>
+                    <span role="img" aria-label="telefone">📞</span> <span className="font-semibold">{storeConfigState.phone}</span><br />
+                  </span>
+                )}
+                {storeConfigState.whatsapp && (
+                  <span>
+                    <span role="img" aria-label="whatsapp">🟢</span> <a href={`https://wa.me/${storeConfigState.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline hover:opacity-80">WhatsApp: {storeConfigState.whatsapp}</a><br />
+                  </span>
+                )}
+                {storeConfigState.instagram && (
+                  <span>
+                    <span role="img" aria-label="instagram">📸</span> <a href={`https://instagram.com/${storeConfigState.instagram}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 font-semibold underline hover:opacity-80">{storeConfigState.instagram}</a><br />
+                  </span>
+                )}
                 {allAddresses.length > 0 ? (
                   <span>
                     {allAddresses.map((addr, idx) => (

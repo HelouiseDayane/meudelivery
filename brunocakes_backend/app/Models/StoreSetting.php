@@ -10,6 +10,8 @@ class StoreSetting extends Model
         'store_name',
         'store_slogan', // Corrigido para 'store_slogan'
         'instagram',
+        'phone',
+        'whatsapp',
         'logo_horizontal',
         'logo_icon',
         'primary_color',
