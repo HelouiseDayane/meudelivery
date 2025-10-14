@@ -10,6 +10,39 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductAdminController extends Controller
 {
+    /**
+     * @OA\Get(
+     *      path="/api/admin/products",
+     *      operationId="getProductsList",
+     *      tags={"Admin Products"},
+     *      summary="Listar produtos (Admin)",
+     *      description="Retorna lista de todos os produtos para administradores",
+     *      security={{"sanctum": {}}},
+     *      @OA\Response(
+     *          response=200,
+     *          description="Lista de produtos",
+     *          @OA\JsonContent(
+     *              type="array",
+     *              @OA\Items(
+     *                  @OA\Property(property="id", type="integer", example=1),
+     *                  @OA\Property(property="name", type="string", example="Bolo de Chocolate"),
+     *                  @OA\Property(property="description", type="string", example="Delicioso bolo de chocolate"),
+     *                  @OA\Property(property="price", type="number", format="float", example=25.99),
+     *                  @OA\Property(property="stock", type="integer", example=10),
+     *                  @OA\Property(property="image", type="string", example="products/bolo.jpg"),
+     *                  @OA\Property(property="image_url", type="string", example="http://localhost:8191/storage/products/bolo.jpg"),
+     *                  @OA\Property(property="category", type="string", example="bolos"),
+     *                  @OA\Property(property="created_at", type="string", format="date-time"),
+     *                  @OA\Property(property="updated_at", type="string", format="date-time")
+     *              )
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function index()
     {
         $products = Product::all();
@@ -32,6 +65,50 @@ class ProductAdminController extends Controller
         return response()->json($products);
     }
 
+    /**
+     * @OA\Post(
+     *      path="/api/admin/products",
+     *      operationId="createProduct",
+     *      tags={"Admin Products"},
+     *      summary="Criar novo produto",
+     *      description="Cria um novo produto com imagem opcional",
+     *      security={{"sanctum": {}}},
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\MediaType(
+     *              mediaType="multipart/form-data",
+     *              @OA\Schema(
+     *                  required={"name","description","price","stock","category"},
+     *                  @OA\Property(property="name", type="string", example="Bolo Red Velvet"),
+     *                  @OA\Property(property="description", type="string", example="Delicioso bolo red velvet com cream cheese"),
+     *                  @OA\Property(property="price", type="number", format="float", example=35.99),
+     *                  @OA\Property(property="stock", type="integer", example=15),
+     *                  @OA\Property(property="category", type="string", example="bolos"),
+     *                  @OA\Property(property="is_promo", type="boolean", example=false),
+     *                  @OA\Property(property="is_new", type="boolean", example=true),
+     *                  @OA\Property(property="is_active", type="boolean", example=true),
+     *                  @OA\Property(property="image", type="string", format="binary", description="Arquivo de imagem do produto")
+     *              )
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=201,
+     *          description="Produto criado com sucesso",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="message", type="string", example="Produto criado com sucesso!"),
+     *              @OA\Property(property="product", ref="#/components/schemas/Product")
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=400,
+     *          description="Dados inválidos"
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function store(Request $request)
     {
         \Log::info('ProductAdminController@store chamado', $request->all());
@@ -101,6 +178,38 @@ class ProductAdminController extends Controller
         return response()->json($product, 201);
     }
 
+    /**
+     * @OA\Get(
+     *      path="/api/admin/products/{id}",
+     *      operationId="getProductById",
+     *      tags={"Admin Products"},
+     *      summary="Buscar produto por ID",
+     *      description="Retorna detalhes de um produto específico",
+     *      security={{"sanctum": {}}},
+     *      @OA\Parameter(
+     *          name="id",
+     *          description="ID do produto",
+     *          required=true,
+     *          in="path",
+     *          @OA\Schema(
+     *              type="integer"
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Dados do produto",
+     *          @OA\JsonContent(ref="#/components/schemas/Product")
+     *      ),
+     *      @OA\Response(
+     *          response=404,
+     *          description="Produto não encontrado"
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function show($id)
     {
         $product = Product::findOrFail($id);
@@ -120,6 +229,53 @@ class ProductAdminController extends Controller
         return response()->json($product);
     }
 
+    /**
+     * @OA\Put(
+     *      path="/api/admin/products/{id}",
+     *      operationId="updateProduct",
+     *      tags={"Admin Products"},
+     *      summary="Atualizar produto",
+     *      description="Atualiza dados de um produto existente",
+     *      security={{"sanctum": {}}},
+     *      @OA\Parameter(
+     *          name="id",
+     *          description="ID do produto",
+     *          required=true,
+     *          in="path",
+     *          @OA\Schema(type="integer")
+     *      ),
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\MediaType(
+     *              mediaType="multipart/form-data",
+     *              @OA\Schema(
+     *                  @OA\Property(property="name", type="string", example="Bolo Red Velvet Atualizado"),
+     *                  @OA\Property(property="description", type="string", example="Descrição atualizada"),
+     *                  @OA\Property(property="price", type="number", format="float", example=39.99),
+     *                  @OA\Property(property="stock", type="integer", example=20),
+     *                  @OA\Property(property="category", type="string", example="bolos"),
+     *                  @OA\Property(property="is_promo", type="boolean", example=true),
+     *                  @OA\Property(property="is_new", type="boolean", example=false),
+     *                  @OA\Property(property="is_active", type="boolean", example=true),
+     *                  @OA\Property(property="image", type="string", format="binary", description="Nova imagem do produto")
+     *              )
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Produto atualizado com sucesso",
+     *          @OA\JsonContent(ref="#/components/schemas/Product")
+     *      ),
+     *      @OA\Response(
+     *          response=404,
+     *          description="Produto não encontrado"
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function update(Request $request, $id)
     {
         $product = Product::findOrFail($id);
@@ -187,6 +343,47 @@ class ProductAdminController extends Controller
         return response()->json($updatedProduct);
     }
 
+    /**
+     * @OA\Patch(
+     *      path="/api/admin/products/{id}/stock",
+     *      operationId="updateProductStock",
+     *      tags={"Admin Products"},
+     *      summary="Atualizar estoque do produto",
+     *      description="Atualiza apenas a quantidade em estoque de um produto",
+     *      security={{"sanctum": {}}},
+     *      @OA\Parameter(
+     *          name="id",
+     *          description="ID do produto",
+     *          required=true,
+     *          in="path",
+     *          @OA\Schema(type="integer")
+     *      ),
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\JsonContent(
+     *              required={"quantity"},
+     *              @OA\Property(property="quantity", type="integer", minimum=0, example=25)
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Estoque atualizado com sucesso",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="message", type="string", example="Stock updated successfully"),
+     *              @OA\Property(property="old_stock", type="integer", example=10),
+     *              @OA\Property(property="new_stock", type="integer", example=25)
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=404,
+     *          description="Produto não encontrado"
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function updateStock(Request $request, $id)
     {
         $data = $request->validate([

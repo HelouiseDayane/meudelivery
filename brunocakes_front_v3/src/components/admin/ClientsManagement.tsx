@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCustomerAnalytics } from '../../api_admin';
+import adminApi from '../../api/admin';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -28,7 +28,7 @@ function ClientsManagement() {
       setLoading(true);
       try {
         // Busca todos os dados de clientes do novo endpoint centralizado
-        const response = await getCustomerAnalytics();
+        const response = await adminApi.getCustomerAnalytics();
         if (response) {
           setClientsStats(response);
           setFilteredClients(response.top_clients || []);

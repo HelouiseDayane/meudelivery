@@ -12,9 +12,8 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { ArrowLeft, MessageCircle, User, Mail, Phone, MapPin, Users, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { useApp } from '../../App';
 import { toast } from 'sonner';
-import api from '../../api';
+import { api } from '../../api';
 import { useCartExpiration } from '../../hooks/useCartExpiration';
-import refreshProducts from '../../api'; // Adicione esta linha, ajuste o caminho se necessário
 
 interface CustomerData {
   id: number
@@ -289,7 +288,6 @@ export const Checkout = () => {
     try {
       const orderId = await createOrder(customerData, cart, total);
       setShowOrderConfirmationModal(true);
-      console.log('Modal de confirmação aberto!');
       // Limpeza do carrinho e redirecionamento só após o usuário clicar no botão do modal
     } catch (error) {
       if (error instanceof Error && error.message.includes('Carrinho expirado')) {

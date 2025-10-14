@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../App';
 import { getProductImageUrl } from '../../api';
+import { useStoreConfig } from '../../hooks/useStoreConfig';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -20,63 +21,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Mock products data
-const mockProducts = [
-  {
-    id: '1',
-    name: 'Brigadeiro Premium',
-    description: 'Brigadeiro artesanal com chocolate belga e granulado especial',
-    price: 15.00,
-    image: 'https://images.unsplash.com/photo-1729875751095-71c051759eed?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmF6aWxpYW4lMjBicmlnYWRlaXJvJTIwY2hvY29sYXRlJTIwdHJ1ZmZsZXN8ZW58MXx8fHwxNzU3NjE2MjQxfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-    category: 'trufas',
-    inStock: true,
-    rating: 4.9,
-    reviews: 127,
-    isNew: false,
-    isPromotion: true,
-    originalPrice: 18.00
-  },
-  {
-    id: '2',
-    name: 'Bolo Red Velvet',
-    description: 'Bolo aveludado com cream cheese e cobertura especial',
-    price: 89.90,
-    image: 'https://images.unsplash.com/photo-1607257882338-70f7dd2ae344?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZWxpY2lvdXMlMjBjaG9jb2xhdGUlMjBkZXNzZXJ0JTIwY2FrZXxlbnwxfHx8fDE3NTc2MTYyMzN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-    category: 'bolos',
-    inStock: true,
-    rating: 4.8,
-    reviews: 89,
-    isNew: true,
-    isPromotion: false
-  },
-  {
-    id: '3',
-    name: 'Cupcakes Coloridos',
-    description: 'Kit com 6 cupcakes de sabores variados e decoração especial',
-    price: 48.00,
-    image: 'https://images.unsplash.com/photo-1615557509870-98972c5e1396?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzd2VldCUyMGNvbG9yZnVsJTIwY3VwY2FrZXMlMjBkZXNzZXJ0fGVufDF8fHx8MTc1NzYxNjIzN3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-    category: 'cupcakes',
-    inStock: true,
-    rating: 4.7,
-    reviews: 203,
-    isNew: false,
-    isPromotion: false
-  },
-  {
-    id: '4',
-    name: 'Cheesecake de Morango',
-    description: 'Cheesecake cremoso com calda de morango e base de biscoito',
-    price: 65.00,
-    image: 'https://images.unsplash.com/photo-1641424795123-9f12d697219d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHJhd2JlcnJ5JTIwY2hlZXNlY2FrZSUyMGRlc3NlcnR8ZW58MXx8fHwxNzU3NjE2MjQ0fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-    category: 'tortas',
-    inStock: false,
-    rating: 4.9,
-    reviews: 156,
-    isNew: true,
-    isPromotion: false
-  }
-];
-
 const categories = [
   { value: 'all', label: 'Todos os Produtos' },
   { value: 'bolos', label: 'Bolos' },
@@ -86,15 +30,26 @@ const categories = [
 ];
 
 export function ProductsPage() {
-  const { products, addToCart, admin } = useApp();
+  const { products, publicProducts, adminProducts, addToCart, admin } = useApp();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [favorites, setFavorites] = useState<string[]>(['1', '3']);
 
-  const isAdmin = admin !== null;
+  // Hook para aplicar configurações de tema dinâmico
+  useStoreConfig();
 
-  const filteredProducts = products.filter(product => {
+  const isAdmin = admin !== null;
+  
+  // Usar apenas publicProducts para usuário público, evitando duplicação
+  const productsList = isAdmin ? products : publicProducts;
+
+  // Remover duplicatas baseado no nome + categoria (mais seguro que apenas nome)
+  const uniqueProducts = productsList.filter((product, index, self) => 
+    index === self.findIndex(p => p.name === product.name && p.category === product.category)
+  );
+
+  const filteredProducts = uniqueProducts.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          product.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
@@ -134,7 +89,7 @@ export function ProductsPage() {
         {isAdmin && (
           <Button 
             onClick={() => navigate('/products/new')}
-            className="bg-orange-500 hover:bg-orange-600"
+            className="bg-orange-500 hover:bg-orange-600 force-orange-bg force-white-text"
           >
             <Plus className="h-4 w-4 mr-2" />
             Novo Produto
@@ -174,7 +129,7 @@ export function ProductsPage() {
         {filteredProducts.map(product => {
           // Usar apenas o campo available_stock para exibir e validar estoque
           let estoque = 0;
-          if (product.available_stock !== undefined && product.available_stock !== null && product.available_stock !== '') {
+          if (product.available_stock !== undefined && product.available_stock !== null) {
             estoque = typeof product.available_stock === 'string' ? parseInt(product.available_stock, 10) : Number(product.available_stock);
           }
           const isAvailable = estoque > 0;
@@ -187,19 +142,44 @@ export function ProductsPage() {
                   className="w-full h-48 object-cover rounded-t-lg"
                 />
                 {/* Badges */}
-                <div className="absolute top-2 left-2 flex flex-col gap-1">
-                  {product.isNew && (
-                    <Badge className="bg-green-500 text-white">Novo</Badge>
-                  )}
-                  {product.isPromotion && (
-                    <Badge className="bg-red-500 text-white">Promoção</Badge>
-                  )}
-                  {isAvailable ? (
-                    <Badge className="bg-yellow-400 text-black">Estoque: {estoque}</Badge>
-                  ) : (
-                    <Badge variant="secondary">Esgotado</Badge>
-                  )}
-                </div>
+              <div className="absolute top-2 left-2 flex flex-col gap-1">
+                {(product.isNew || product.is_new) && (
+                  <Badge 
+                    variant="outline" 
+                    className="product-badge-novo force-green-bg !bg-green-500 !text-white !border-green-500"
+                    data-badge="novo"
+                    style={{ 
+                      backgroundColor: '#22c55e !important', 
+                      color: 'white !important', 
+                      borderColor: '#22c55e !important',
+                      border: '1px solid #22c55e !important'
+                    }}
+                  >
+                    Novo
+                  </Badge>
+                )}
+                {(product.isPromotion || product.is_promo) && (
+                  <Badge 
+                    variant="outline" 
+                    className="product-badge-promocao force-red-bg !bg-red-500 !text-white !border-red-500"
+                    data-badge="promocao"
+                    style={{ 
+                      backgroundColor: '#ef4444 !important', 
+                      color: 'white !important', 
+                      borderColor: '#ef4444 !important',
+                      border: '1px solid #ef4444 !important'
+                    }}
+                  >
+                    Promoção
+                  </Badge>
+                )}
+                {isAvailable ? (
+                  <Badge className="bg-yellow-400 text-black">Estoque: {estoque}</Badge>
+                ) : (
+                  <Badge variant="secondary">Esgotado</Badge>
+                )}
+              </div>
+
 
               {/* Favorite Button (Client only) */}
               {!isAdmin && (
@@ -257,23 +237,24 @@ export function ProductsPage() {
                     <span className="text-lg text-orange-600">
                       R$ {product.price.toFixed(2)}
                     </span>
-                    {product.isPromotion && product.promotionPrice && (
+                    {(product.isPromotion || product.is_promo) && (product.promotionPrice || product.promotion_price) && (
                       <span className="text-sm text-muted-foreground line-through">
-                        R$ {product.promotionPrice.toFixed(2)}
+                        R$ {Number(product.promotionPrice || product.promotion_price || 0).toFixed(2)}
                       </span>
                     )}
                   </div>
                   
                   {!isAdmin && (
                     <Button
-                      size="sm"
-                      onClick={() => handleAddToCart(product)}
-                      disabled={!isAvailable}
-                      className="bg-orange-500 hover:bg-orange-600"
-                    >
-                      <ShoppingCart className="h-4 w-4 mr-1" />
-                      Adicionar
-                    </Button>
+                        size="sm"
+                        onClick={() => handleAddToCart(product)}
+                        disabled={!isAvailable}
+                        className="bg-orange-500 hover:bg-orange-600 force-orange-bg force-white-text !text-white"
+                        style={{ backgroundColor: '#f97316', color: 'white' }}
+                      >
+                        <ShoppingCart className="h-4 w-4 mr-1" style={{ color: 'white' }} />
+                        <span style={{ color: 'white' }}>Adicionar</span>
+                      </Button>
                   )}
                 </div>
               </div>

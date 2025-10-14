@@ -34,13 +34,13 @@ export const OrderTracking = () => {
           // console.log('activeLatLng definido:', { latitude: Number(active.latitude), longitude: Number(active.longitude) });
         } else {
           setActiveLatLng(null);
-          console.log('activeLatLng: null');
+
         }
       } else {
-        console.log('Falha ao buscar /api/addresses/active, status:', res.status);
+
       }
     } catch (err) {
-      console.log('Erro ao buscar /api/addresses/active:', err);
+
     }
   };
 
@@ -154,7 +154,7 @@ export const OrderTracking = () => {
         foundWithFormat = phone;
        //onsole.log('Encontrado com formato original:', phone);
       } catch (error) {
-        console.log('Erro com formato original:', error);
+
       }
       
       // Se não encontrou e tem telefone, tentar outros formatos
@@ -171,7 +171,7 @@ export const OrderTracking = () => {
               break;
             }
           } catch (error) {
-            console.log('Erro com formato', phoneFormat, ':', error);
+
           }
         }
       }

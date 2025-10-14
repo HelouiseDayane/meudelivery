@@ -1,3 +1,7 @@
+import L from 'leaflet';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -26,6 +30,16 @@ const getHeaders = () => {
 };
 
 export function AddressesManagement() {
+  // Corrige ícone padrão do marcador do Leaflet
+  const defaultIcon = L.icon({
+    iconUrl: markerIcon,
+    iconRetinaUrl: markerIcon2x,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
   // Componente para selecionar localização no mapa
   function LocationPicker({ setLatLng }: { setLatLng: (lat: string, lng: string) => void }) {
     useMapEvents({
@@ -279,7 +293,7 @@ export function AddressesManagement() {
           setTimeout(() => handleFillAddressByLocation(), 100); // Preencher endereço após selecionar
         }} />
         {form.latitude && form.longitude && (
-          <Marker position={[parseFloat(form.latitude), parseFloat(form.longitude)]} />
+          <Marker position={[parseFloat(form.latitude), parseFloat(form.longitude)]} icon={defaultIcon} />
         )}
       </MapContainer>
       <small className="text-gray-500">Clique no mapa para definir a localização exata.</small>

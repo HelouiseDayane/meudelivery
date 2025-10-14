@@ -80,7 +80,6 @@ export const RealTimeProvider = ({
       const sse = new EventSource(`${API_BASE_URL}/stream/updates`);
       
       sse.onopen = () => {
-        console.log('🔗 Conexão SSE estabelecida');
         setIsConnected(true);
         setConnectionError(null);
       };
@@ -88,14 +87,12 @@ export const RealTimeProvider = ({
       sse.onmessage = (event) => {
         try {
           const eventData: RealTimeEvent = JSON.parse(event.data);
-          console.log('📨 Evento recebido:', eventData);
           
           setLastEvent(eventData);
 
           // Processar diferentes tipos de eventos
           switch (eventData.type) {
             case 'stock_update':
-              console.log('📊 Atualização de estoque:', eventData.data);
               onStockUpdate?.(eventData.data);
               
               // Mostrar notificação se estoque ficou baixo
@@ -107,13 +104,11 @@ export const RealTimeProvider = ({
               break;
 
             case 'cart_expired':
-              console.log('⏰ Carrinho expirado:', eventData.data);
               onCartExpired?.(eventData.data);
               toast.info('Um carrinho expirou e o estoque foi liberado');
               break;
 
             case 'order_status':
-              console.log('📋 Status do pedido atualizado:', eventData.data);
               onOrderStatusUpdate?.(eventData.data);
               
               // Notificar sobre mudanças importantes de status
@@ -137,7 +132,6 @@ export const RealTimeProvider = ({
         // Tentar reconectar após 5 segundos
         setTimeout(() => {
           if (sse.readyState === EventSource.CLOSED) {
-            console.log('🔄 Tentando reconectar SSE...');
             connect();
           }
         }, 5000);
@@ -157,7 +151,6 @@ export const RealTimeProvider = ({
     }
     setIsConnected(false);
     setConnectionError(null);
-    console.log('🔌 Desconectado do SSE');
   };
 
   useEffect(() => {

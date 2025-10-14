@@ -32,6 +32,7 @@ export function AdminLayout() {
     { name: 'Pedidos', href: '/admin/orders', icon: ShoppingCart },
     { name: 'Clientes', href: '/admin/clients', icon: Users },
     { name: 'Endereços', href: '/admin/addresses', icon: Package },
+    { name: 'Configurações', href: '/admin/settings', icon: Shield },
   ];
 
   const isActive = (path: string) => {

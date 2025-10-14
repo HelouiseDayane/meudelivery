@@ -65,6 +65,9 @@ Route::prefix('stream')->group(function () {
 
 Route::get('/addresses/active', [AddressController::class, 'getActive']);
 
+// Store Settings (public - apenas dados não sensíveis)
+Route::get('/store/settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'public']);
+
 // Engajamento (registro de eventos)
 Route::post('/engagement/visitor', [EngagementController::class, 'registerVisitor']);
 Route::post('/engagement/pwa-install', [EngagementController::class, 'registerPwaInstall']);
@@ -100,12 +103,13 @@ Route::prefix('admin')->group(function () {
         
         // Orders
         Route::prefix('orders')->group(function () {
-            Route::get('/', [OrderAdminController::class, 'index']);
-            Route::get('/{id}', [OrderAdminController::class, 'show']);
-            Route::patch('/{id}/force-expire', [OrderAdminController::class, 'forceExpire']);
-            Route::patch('/{id}/mark-delivered', [OrderAdminController::class, 'markAsDelivered']);
-    // ✅ AÇÕES EM LOTE (sem /orders/ duplicado)
-            Route::patch('/cancel-payment', [OrderAdminController::class, 'cancelPayment']);
+        Route::get('/', [OrderAdminController::class, 'index']);
+        Route::get('/{id}', [OrderAdminController::class, 'show']);
+        Route::patch('/{id}/force-expire', [OrderAdminController::class, 'forceExpire']);
+        Route::patch('/{id}/mark-delivered', [OrderAdminController::class, 'markAsDelivered']);
+        // ✅ AÇÕES EM LOTE (sem /orders/ duplicado)
+        Route::patch('/finish', [OrderAdminController::class, 'markAsCompleted']);
+        Route::patch('/cancel-payment', [OrderAdminController::class, 'cancelPayment']);
         });
         
         // System
@@ -116,7 +120,33 @@ Route::prefix('admin')->group(function () {
         
             Route::patch('addresses/{id}/activate', [AddressController::class, 'activate']);
             Route::apiResource('addresses', AddressController::class);
+            
+            // Store Settings
+            Route::get('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'index']);
+            Route::post('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'update']);
+            Route::put('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'update']);
+            Route::delete('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'destroy']);
+            
+            // Courses Management
+            Route::apiResource('courses', App\Http\Controllers\Api\Admin\CourseController::class);
+            
+            // Students Management
+            Route::apiResource('students', App\Http\Controllers\Api\Admin\StudentController::class);
+            Route::post('students/{student}/enroll', [App\Http\Controllers\Api\Admin\StudentController::class, 'enrollInCourse']);
+            Route::patch('students/{student}/courses/{course}/payment', [App\Http\Controllers\Api\Admin\StudentController::class, 'updateEnrollmentPayment']);
+            Route::delete('students/{student}/courses/{course}', [App\Http\Controllers\Api\Admin\StudentController::class, 'removeFromCourse']);
     });
 
     
+});
+
+// ==========================================
+// ROTAS PÚBLICAS PARA CURSOS
+// ==========================================
+
+// Courses (public) - Qualquer pessoa pode ver os cursos e se inscrever
+Route::prefix('courses')->group(function () {
+    Route::get('/', [App\Http\Controllers\Api\Public\CourseController::class, 'index']); // Listar cursos ativos
+    Route::get('/{course}', [App\Http\Controllers\Api\Public\CourseController::class, 'show']); // Ver detalhes do curso
+    Route::post('/{course}/enroll', [App\Http\Controllers\Api\Public\CourseController::class, 'enroll']); // Inscrever-se no curso
 });

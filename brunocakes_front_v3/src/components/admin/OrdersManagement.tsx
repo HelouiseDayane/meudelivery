@@ -11,11 +11,27 @@ import { Separator } from '../ui/separator';
 import { Search, Eye, CheckCircle, Clock, Package, XCircle, MessageCircle, DollarSign, Ban, Flag } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../App';
-import { adminApi } from '../../api_admin';
+import adminApi from '../../api/admin';
 
 import { Order, OrderUpdate, OrderStatus } from '../../types/orders';
 
 export const OrdersManagement = () => {
+  // Marcar pedidos como entregues em lote (chama API)
+  const handleBulkDelivered = async () => {
+    setIsBulkLoading(true);
+    try {
+      const promises = selectedIds.map(id => adminApi.markAsDelivered(id));
+      await Promise.all(promises);
+      selectedIds.forEach(id => updateOrder(id, { status: 'delivered' }));
+      toast.success('Pedidos marcados como entregues com sucesso!');
+      setSelectedIds([]);
+    } catch (error) {
+      toast.error('Erro ao marcar pedidos como entregues em lote');
+  console.error(error);
+    } finally {
+      setIsBulkLoading(false);
+    }
+  };
   const { orders = [], updateOrder, admin } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -29,8 +45,9 @@ export const OrdersManagement = () => {
   const handleBulkComplete = async () => {
     setIsBulkLoading(true);
     try {
-      const promises = selectedIds.map(id => updateOrder(id, { status: 'completed' }));
-      await Promise.all(promises);
+      await adminApi.markAsCompleted(selectedIds);
+      // Atualiza localmente o status dos pedidos marcados
+      selectedIds.forEach(id => updateOrder(id, { status: 'completed' }));
       toast.success('Pedidos marcados como concluídos com sucesso!');
       setSelectedIds([]);
     } catch (error) {
@@ -93,8 +110,9 @@ export const OrdersManagement = () => {
     });
 
   // IDs selecionáveis
+  // Permite seleção para pedidos aguardando confirmação, confirmados, concluídos e entregues
   const selectableIds = filteredOrders
-    .filter(o => o.status === 'awaiting_seller_confirmation' || o.status === 'confirmed')
+    .filter(o => o.status === 'awaiting_seller_confirmation' || o.status === 'confirmed' || o.status === 'completed' || o.status === 'delivered')
     .map(o => o.id);
 
   const isAllSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.includes(id));
@@ -170,12 +188,12 @@ export const OrdersManagement = () => {
       case 'completed':
         return {
           color: 'bg-green-100 text-green-800',
-          label: 'Concluído'
+          label: 'Pronto pra retirada'
         };
       case 'delivered':
         return {
           color: 'bg-purple-100 text-purple-800',
-          label: 'Entregue'
+          label: 'Pedido entregue'
         };
       case 'canceled':
         return {
@@ -192,6 +210,10 @@ export const OrdersManagement = () => {
 
   return (
     <div className="space-y-6">
+      {/* Log visual para depuração dos IDs selecionados */}
+      <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+        <strong>Pedidos selecionados:</strong> {JSON.stringify(selectedIds)}
+      </div>
       <div>
         <h1 className="bruno-text-gradient mb-2">Gestão de Pedidos</h1>
         <p className="text-muted-foreground">Gerencie todos os pedidos da loja</p>
@@ -227,20 +249,31 @@ export const OrdersManagement = () => {
                <SelectItem value="delivered">Entregue</SelectItem>
             </SelectContent>
           </Select>
-          {selectedIds.length > 0 && (
-            <div className="flex gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                disabled={isBulkLoading}
-                onClick={handleBulkComplete}
-                className="gap-1 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Marcar ({selectedIds.length}) como Concluídos
-              </Button>
-            </div>
-          )}
+          {/* Botões de ação em lote sempre visíveis, desabilitados individualmente */}
+          <div className="flex gap-2">
+            {/* Botão para marcar como concluído */}
+            <Button
+              variant="default"
+              size="sm"
+              disabled={isBulkLoading || selectedIds.length === 0}
+              onClick={handleBulkComplete}
+              className="gap-1"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Marcar ({selectedIds.length}) como Concluídos
+            </Button>
+            {/* Botão para marcar como entregue */}
+            <Button
+              variant="default"
+              size="sm"
+              disabled={isBulkLoading || selectedIds.length === 0}
+              onClick={handleBulkDelivered}
+              className="gap-1"
+            >
+              <Package className="w-4 h-4" />
+              Marcar ({selectedIds.length}) como Entregues
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -280,7 +313,7 @@ export const OrdersManagement = () => {
                   {filteredOrders.map((order) => (
                     <TableRow key={order.id}>
                       <TableCell>
-                        {order.status === 'confirmed' && (
+                        {(order.status === 'confirmed' || order.status === 'completed' || order.status === 'delivered') && (
                           <Checkbox
                             checked={selectedIds.includes(order.id)}
                             onCheckedChange={() => handleSelectOne(order.id)}

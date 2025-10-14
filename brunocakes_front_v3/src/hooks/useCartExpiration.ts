@@ -70,12 +70,7 @@ export const useCartExpiration = () => {
       return [...filtered, newItem];
     });
 
-    console.log(`🕐 Adicionado item para rastreamento de expiração:`, {
-      id: newItem.id,
-      type: newItem.type,
-      expiresAt: newItem.expiresAt.toLocaleTimeString(),
-      productId: newItem.productId
-    });
+
   }, []);
 
   // Remover item do rastreamento
@@ -88,8 +83,6 @@ export const useCartExpiration = () => {
       clearInterval(interval);
       intervalsRef.current.delete(itemId);
     }
-
-    console.log(`🗑️ Removido item do rastreamento de expiração: ${itemId}`);
   }, []);
 
   // Limpar todos os itens de expiração
@@ -100,8 +93,6 @@ export const useCartExpiration = () => {
     // Limpar todos os intervals
     intervalsRef.current.forEach(interval => clearInterval(interval));
     intervalsRef.current.clear();
-    
-    console.log('🧹 Todos os itens de expiração foram limpos');
   }, []);
 
   // Obter o item que expira mais cedo
@@ -137,8 +128,6 @@ export const useCartExpiration = () => {
 
   // Callback chamado quando um item expira
   const handleItemExpired = useCallback((item: ExpirationItem, onCartExpired?: () => void, onCheckoutExpired?: () => void) => {
-    console.log(`⏰ Item expirado:`, item);
-    
     if (item.type === 'cart') {
       toast.error(`❌ Produto removido do carrinho (tempo limite de ${CART_EXPIRATION_MINUTES} minutos atingido)`);
       // Callback customizado para expiração do carrinho

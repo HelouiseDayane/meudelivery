@@ -9,13 +9,62 @@ use Illuminate\Support\Facades\Auth;
 
 class AddressController extends Controller
 {
-
-
+    /**
+     * @OA\Get(
+     *      path="/api/addresses",
+     *      operationId="getAddressesList",
+     *      tags={"Addresses"},
+     *      summary="Listar endereços",
+     *      description="Retorna lista de todos os endereços cadastrados",
+     *      @OA\Response(
+     *          response=200,
+     *          description="Lista de endereços",
+     *          @OA\JsonContent(
+     *              type="array",
+     *              @OA\Items(ref="#/components/schemas/Address")
+     *          )
+     *      )
+     * )
+     */
     public function index()
     {
         return Address::all();
     }
 
+    /**
+     * @OA\Post(
+     *      path="/api/addresses",
+     *      operationId="createAddress",
+     *      tags={"Addresses"},
+     *      summary="Criar novo endereço",
+     *      description="Cadastra um novo endereço de entrega",
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\JsonContent(
+     *              required={"rua","numero","bairro","cidade","estado"},
+     *              @OA\Property(property="rua", type="string", example="Rua das Flores"),
+     *              @OA\Property(property="numero", type="string", example="123"),
+     *              @OA\Property(property="bairro", type="string", example="Centro"),
+     *              @OA\Property(property="cidade", type="string", example="São Paulo"),
+     *              @OA\Property(property="estado", type="string", example="SP"),
+     *              @OA\Property(property="ponto_referencia", type="string", example="Próximo ao mercado"),
+     *              @OA\Property(property="horarios", type="string", example="8h às 18h"),
+     *              @OA\Property(property="endereco_entrega", type="boolean", example=true),
+     *              @OA\Property(property="latitude", type="string", example="-23.550520"),
+     *              @OA\Property(property="longitude", type="string", example="-46.633309")
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=201,
+     *          description="Endereço criado com sucesso",
+     *          @OA\JsonContent(ref="#/components/schemas/Address")
+     *      ),
+     *      @OA\Response(
+     *          response=422,
+     *          description="Dados de validação inválidos"
+     *      )
+     * )
+     */
     public function store(Request $request)
     {
         $data = $request->validate([

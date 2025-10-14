@@ -45,11 +45,20 @@ self.addEventListener('fetch', (event) => {
   // Skip API requests
   if (event.request.url.includes('/api/')) return;
   
-  // Skip development files
+  // Skip ALL development files and Vite resources
   if (event.request.url.includes('/src/') || 
+      event.request.url.includes('?v=') ||
       event.request.url.includes('?t=') ||
       event.request.url.includes('@vite') ||
-      event.request.url.includes('__vite')) return;
+      event.request.url.includes('__vite') ||
+      event.request.url.includes('node_modules') ||
+      event.request.url.includes('.vite') ||
+      event.request.url.includes('hot') ||
+      event.request.url.includes('hmr')) {
+    // Just fetch without caching for development resources
+    event.respondWith(fetch(event.request));
+    return;
+  }
       
   //console.log('SW: Handling request for:', event.request.url);
   

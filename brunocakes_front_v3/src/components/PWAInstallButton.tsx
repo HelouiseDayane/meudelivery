@@ -3,6 +3,7 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Download, Smartphone, X, Star, Zap, Wifi, Share } from 'lucide-react';
 import { usePWA } from '../hooks/usePWA';
+import { useStoreConfigState } from '../hooks/useStoreConfigState';
 import { toast } from 'sonner';
 
 // Detecta iOS via userAgent
@@ -14,6 +15,7 @@ function isIOSDevice() {
 // Componente que mostra o botão ou banner para instalar o PWA
 export const PWAInstallButton = () => {
   const { isInstallable, installApp, isMobile } = usePWA();
+  const storeConfig = useStoreConfigState();
   const [showBanner, setShowBanner] = useState(true);
   const [isInstalling, setIsInstalling] = useState(false);
 
@@ -27,7 +29,7 @@ export const PWAInstallButton = () => {
     try {
       const success = await installApp();
       if (success) {
-        toast.success('🎉 Bruno Cake instalado com sucesso!');
+        toast.success(`🎉 ${storeConfig.storeName} instalado com sucesso!`);
         setShowBanner(false);
       } else {
         toast.error('Instalação cancelada');
@@ -51,7 +53,7 @@ export const PWAInstallButton = () => {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-sm text-primary">
-                  🍰 Instale o Bruno Cake
+                  🍰 Instale o {storeConfig.storeName}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   No iPhone/iPad, toque em <b>Compartilhar</b> <Share className="inline w-4 h-4" /> e depois <b>Adicionar à Tela de Início</b>.
@@ -99,7 +101,7 @@ export const PWAInstallButton = () => {
               </div>
               <div className="flex-1">
                 <p className="font-semibold text-sm text-primary">
-                  🍰 Instale o Bruno Cake
+                  🍰 Instale o {storeConfig.storeName}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Acesso rápido, sem ocupar espaço!

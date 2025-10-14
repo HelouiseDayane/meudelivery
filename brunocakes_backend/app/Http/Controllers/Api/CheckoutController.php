@@ -31,7 +31,39 @@ class CheckoutController extends Controller
         }
     }
     /**
-     * ✅ Adiciona item ao carrinho com expiração automática
+     * @OA\Post(
+     *      path="/api/cart/add",
+     *      operationId="addToCart",
+     *      tags={"Cart"},
+     *      summary="Adicionar item ao carrinho",
+     *      description="Adiciona um produto ao carrinho com expiração automática",
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\JsonContent(
+     *              required={"session_id","product_id","quantity"},
+     *              @OA\Property(property="session_id", type="string", example="sess_123456789"),
+     *              @OA\Property(property="product_id", type="integer", example=1),
+     *              @OA\Property(property="quantity", type="integer", minimum=1, example=2)
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Item adicionado ao carrinho com sucesso",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="message", type="string", example="Item added to cart"),
+     *              @OA\Property(property="cart", type="object"),
+     *              @OA\Property(property="expires_at", type="string", format="date-time")
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=400,
+     *          description="Estoque insuficiente ou dados inválidos"
+     *      ),
+     *      @OA\Response(
+     *          response=404,
+     *          description="Produto não encontrado"
+     *      )
+     * )
      */
     public function addToCart(Request $request)
     {
@@ -299,7 +331,38 @@ class CheckoutController extends Controller
     }
 
     /**
-     * ✅ Obter carrinho
+     * @OA\Get(
+     *      path="/api/cart/{sessionId}",
+     *      operationId="getCart",
+     *      tags={"Cart"},
+     *      summary="Obter carrinho",
+     *      description="Retorna o conteúdo atual do carrinho para a sessão",
+     *      @OA\Parameter(
+     *          name="sessionId",
+     *          description="ID da sessão do carrinho",
+     *          required=true,
+     *          in="path",
+     *          @OA\Schema(type="string")
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Conteúdo do carrinho ou carrinho expirado",
+     *          @OA\JsonContent(
+     *              oneOf={
+     *                  @OA\Schema(
+     *                      @OA\Property(property="cart", type="object"),
+     *                      @OA\Property(property="total", type="number", format="float", example=89.90),
+     *                      @OA\Property(property="expires_at", type="string", format="date-time")
+     *                  ),
+     *                  @OA\Schema(
+     *                      @OA\Property(property="message", type="string", example="Seu carrinho expirou!"),
+     *                      @OA\Property(property="cart", type="object", example={}),
+     *                      @OA\Property(property="total", type="number", example=0)
+     *                  )
+     *              }
+     *          )
+     *      )
+     * )
      */
     public function getCart($sessionId)
     {
@@ -481,10 +544,53 @@ class CheckoutController extends Controller
         }
     }
 
-
-
     /**
-     * ✅ Criar pedido + pagamento PIX
+     * @OA\Post(
+     *      path="/api/checkout/pix",
+     *      operationId="storeWithPix",
+     *      tags={"Checkout"},
+     *      summary="Finalizar pedido com PIX",
+     *      description="Cria um pedido e processa pagamento via PIX",
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\JsonContent(
+     *              required={"session_id","customer_name","customer_phone","items"},
+     *              @OA\Property(property="session_id", type="string", example="sess_123456789"),
+     *              @OA\Property(property="customer_name", type="string", example="João Silva"),
+     *              @OA\Property(property="customer_email", type="string", format="email", example="joao@email.com"),
+     *              @OA\Property(property="customer_phone", type="string", example="(11) 99999-9999"),
+     *              @OA\Property(property="address_street", type="string", example="Rua das Flores, 123"),
+     *              @OA\Property(property="address_neighborhood", type="string", example="Centro"),
+     *              @OA\Property(property="observations", type="string", example="Sem açúcar adicional"),
+     *              @OA\Property(
+     *                  property="items",
+     *                  type="array",
+     *                  @OA\Items(
+     *                      @OA\Property(property="product_id", type="integer", example=1),
+     *                      @OA\Property(property="quantity", type="integer", example=2)
+     *                  )
+     *              )
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=201,
+     *          description="Pedido criado com sucesso",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="message", type="string", example="Pedido criado com sucesso!"),
+     *              @OA\Property(property="order_id", type="integer", example=1),
+     *              @OA\Property(property="payment_id", type="integer", example=1),
+     *              @OA\Property(property="total", type="number", format="float", example=89.90)
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=400,
+     *          description="Carrinho expirado ou estoque insuficiente"
+     *      ),
+     *      @OA\Response(
+     *          response=422,
+     *          description="Dados de validação inválidos"
+     *      )
+     * )
      */
     public function storeWithPix(Request $request)
     {

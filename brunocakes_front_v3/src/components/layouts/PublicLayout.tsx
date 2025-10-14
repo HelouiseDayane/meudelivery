@@ -1,18 +1,28 @@
 
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { STORE_CONFIG, fetchAndSetActiveAddress, fetchAllAddresses } from '../../api';
+import { STORE_CONFIG, fetchAndSetActiveAddress, fetchAllAddresses, fetchStoreSettings, updateStoreConfig, apiRequest } from '../../api';
 import { ShoppingCart, Package, Search } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useApp } from '../../App';
 import { PWAInstallButton } from '../PWAInstallButton';
 import { usePWA } from '../../hooks/usePWA';
+import { useStoreConfig } from '../../hooks/useStoreConfig';
+import { useStoreConfigState } from '../../hooks/useStoreConfigState';
+import { ThemeTestComponent, useThemeTest } from '../ThemeTestComponent';
 
 export const PublicLayout = () => {
   const { cart } = useApp();
   const location = useLocation();
   const { isMobile } = usePWA();
+  const { showThemeTest } = useThemeTest();
+  
+  // Hook para gerenciar configurações da loja
+  useStoreConfig();
+  
+  // Hook reativo para configurações da loja
+  const storeConfigState = useStoreConfigState();
 
   // Estado local para dados do rodapé
   const [footerData, setFooterData] = useState({
@@ -26,7 +36,8 @@ export const PublicLayout = () => {
   // Busca endereço/horário dinâmico ao montar o layout público
   useEffect(() => {
     setLoadingAddress(true);
-    fetchAndSetActiveAddress().then(() => {
+    
+    fetchAndSetActiveAddress(apiRequest).then(() => {
       setFooterData({
         address: STORE_CONFIG.address,
         workingHours: STORE_CONFIG.workingHours,
@@ -37,7 +48,7 @@ export const PublicLayout = () => {
       setLoadingAddress(false);
     });
     // Busca todos os endereços públicos
-    fetchAllAddresses().then(setAllAddresses);
+    fetchAllAddresses(apiRequest).then(setAllAddresses);
   }, []);
 
   const cartItemsCount = cart.reduce((total, item) => total + item.quantity, 0);
@@ -54,16 +65,24 @@ export const PublicLayout = () => {
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
           <div className="flex h-14 items-center justify-between">
-            {/* Logo */}
-            <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-full bruno-gradient flex items-center justify-center">
-                <span className="text-white font-bold text-sm">BC</span>
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="font-bold bruno-text-gradient">Bruno Cake</h1>
-                <p className="text-xs text-muted-foreground">Aqui não é fatia nem pedaço, aqui é tora!</p>
-              </div>
-            </Link>
+            {/* Logo + Nome + Slogan */}
+              <Link to="/" className="flex items-center space-x-3">
+                {/* Mobile: só ícone, Desktop: logo + texto */}
+                <img
+                  src={storeConfigState.logoIcon || "/icone-selobrunocakes.ico"}
+                  alt={storeConfigState.storeName}
+                  className="h-16 w-16 block sm:hidden"
+                />
+                <img
+                  src={storeConfigState.logoHorizontal || "/Logo horizontal.png"}
+                  alt={storeConfigState.storeName}
+                  className="h-16 w-auto hidden sm:block"
+                />
+                <div className="hidden sm:flex flex-col">
+                  <span className="font-bold text-primary text-lg leading-tight">{storeConfigState.storeName}</span>
+                  <span className="text-xs text-muted-foreground">{storeConfigState.slogan}</span>
+                </div>
+              </Link>
 
             {/* Navigation - Mobile Friendly */}
             <nav className="flex items-center space-x-2 sm:space-x-4">
@@ -129,17 +148,22 @@ export const PublicLayout = () => {
         <div className="container mx-auto px-4 py-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
             <div>
-              <h3 className="font-semibold mb-2 bruno-text-gradient">Bruno Cake</h3>
+              <h3 className="font-semibold mb-2 bruno-text-gradient">
+                <img 
+                  src={storeConfigState.logoHorizontal} 
+                  alt={storeConfigState.storeName} 
+                  className="h-12 w-auto max-w-32 object-contain inline-block mr-2 align-middle" 
+                />
+              </h3>
               <p className="text-muted-foreground">
-                A melhor doceria da cidade!<br />
-                Aqui não é fatia nem pedaço, aqui é tora!
+                {storeConfigState.slogan}
               </p>
             </div>
             <div>
               <h4 className="font-semibold mb-2">Contato</h4>
               <p className="text-muted-foreground">
-                <span role="img" aria-label="whatsapp">�</span> <a href={`https://wa.me/5584991277973`} target="_blank" rel="noopener noreferrer" style={{ color: '#22c55e', fontWeight: 600, textDecoration: 'underline' }}>WhatsApp</a><br />
-                <span role="img" aria-label="instagram">📸</span> <a href="https://instagram.com/brunocakee" target="_blank" rel="noopener noreferrer" style={{ color: '#a21caf', fontWeight: 600, textDecoration: 'underline' }}>@brunocakee</a><br />
+                <span role="img" aria-label="whatsapp">🟢</span> <a href={`https://wa.me/5584991277973`} target="_blank" rel="noopener noreferrer" className="text-primary font-semibold underline hover:opacity-80">WhatsApp</a><br />
+                <span role="img" aria-label="instagram">📸</span> <a href={`https://instagram.com/${storeConfigState.instagram}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 font-semibold underline hover:opacity-80">@{storeConfigState.instagram}</a><br />
                 {loadingAddress ? (
                   'Carregando endereço...'
                 ) : allAddresses.length > 0 ? (
@@ -174,6 +198,9 @@ export const PublicLayout = () => {
           </div>
         </div>
       </footer>
+      
+      {/* Componente de teste de tema - só aparece em desenvolvimento */}
+      {showThemeTest && (import.meta as any).env.DEV && <ThemeTestComponent />}
     </div>
   );
 };

@@ -136,7 +136,7 @@ export const useStockSync = (options: UseStockSyncOptions = {}) => {
   // Efeito para buscar estoque inicial
   useEffect(() => {
     if (enabled) {
-      console.log('🔄 useStockSync: Buscando estoque inicial...');
+      // console.log('🔄 useStockSync: Buscando estoque inicial...');
       fetchAllStock();
     }
   }, [enabled]); // Removeu fetchAllStock da dependência para evitar loops
@@ -144,7 +144,7 @@ export const useStockSync = (options: UseStockSyncOptions = {}) => {
   // Efeito separado para atualização quando enabled muda
   useEffect(() => {
     if (enabled) {
-      console.log('🔄 useStockSync: Enabled mudou para true, buscando estoque...');
+    //  console.log('🔄 useStockSync: Enabled mudou para true, buscando estoque...');
       fetchAllStock();
     }
   }, [fetchAllStock, enabled]);

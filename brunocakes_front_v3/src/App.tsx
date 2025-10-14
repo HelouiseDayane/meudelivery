@@ -2,9 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, createContext, useContext, useEffect, ReactNode } from 'react';
 import { Toaster } from './components/ui/sonner';
-import { api } from './api';
-import { adminApi } from './api_admin';
-import { getProductImageUrl } from './api';
+import { api, getProductImageUrl } from './api';
+import adminApi from './api/admin';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { RealTimeProvider } from './hooks/useRealTime';
@@ -17,6 +16,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ProductsManagement } from './components/admin/ProductsManagement';
 import { OrdersManagement } from './components/admin/OrdersManagement';
 import ClientsManagement from './components/admin/ClientsManagement';
+import { StoreSettings } from './components/admin/StoreSettings';
 import { PublicMenu } from './components/public/PublicMenu';
 import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
@@ -251,17 +251,14 @@ function AppProvider({ children }: { children: ReactNode }) {
 
   // Utility functions for stock
   const getAvailableStock = (productId: string): number => {
-    console.log('[DEBUG] App.tsx - getAvailableStock chamado para produto:', productId);
     // Primeiro procura nos produtos públicos, que têm o estoque mais atualizado do Redis
     const publicProduct = publicProducts.find(p => String(p.id) === String(productId));
     if (publicProduct) {
-      console.log('[DEBUG] App.tsx - Produto encontrado em publicProducts:', publicProduct);
       
       // Se tem available_stock, usa ele
       if (publicProduct.available_stock !== undefined && publicProduct.available_stock !== null) {
         const stock = Number(publicProduct.available_stock);
         if (!isNaN(stock)) {
-          console.log('[DEBUG] App.tsx - Usando available_stock:', stock);
           return stock;
         }
       }
@@ -272,7 +269,6 @@ function AppProvider({ children }: { children: ReactNode }) {
         const reserved = Number(publicProduct.reserved_stock);
         if (!isNaN(total) && !isNaN(reserved)) {
           const available = Math.max(0, total - reserved);
-          console.log('[DEBUG] App.tsx - Calculando estoque (total - reserved):', available);
           return available;
         }
       }
@@ -281,7 +277,6 @@ function AppProvider({ children }: { children: ReactNode }) {
       if (publicProduct.stock !== undefined && publicProduct.stock !== null) {
         const stock = Number(publicProduct.stock);
         if (!isNaN(stock)) {
-          console.log('[DEBUG] App.tsx - Usando stock como fallback:', stock);
           return stock;
         }
       }
@@ -290,7 +285,6 @@ function AppProvider({ children }: { children: ReactNode }) {
     // Se não achou nos produtos públicos, procura nos produtos normais
     const product = products.find(p => String(p.id) === String(productId));
     if (!product) {
-      console.warn(`[DEBUG] App.tsx - Produto não encontrado em nenhuma lista para id: ${productId}`);
       return 0;
     }
     
@@ -298,7 +292,6 @@ function AppProvider({ children }: { children: ReactNode }) {
     if (product.available_stock !== undefined && product.available_stock !== null) {
       const stock = Number(product.available_stock);
       if (!isNaN(stock)) {
-        console.log('[DEBUG] App.tsx - Usando available_stock de products:', stock);
         return stock;
       }
     }
@@ -306,12 +299,10 @@ function AppProvider({ children }: { children: ReactNode }) {
     if (product.stock !== undefined && product.stock !== null) {
       const stock = Number(product.stock);
       if (!isNaN(stock)) {
-        console.log('[DEBUG] App.tsx - Usando stock de products:', stock);
         return stock;
       }
     }
 
-    console.log('[DEBUG] App.tsx - Nenhum campo de estoque válido encontrado, retornando 0');
     return 0;
   };
 
@@ -320,11 +311,8 @@ function AppProvider({ children }: { children: ReactNode }) {
   };
 
     // Cart functions
-  const addToCart = async (product: Product, quantity: number = 1) => {
-    console.log('[DEBUG] App.tsx - addToCart chamado com:', { product, quantity });
-    
+  const addToCart = async (product: any, quantity: number = 1) => {
     const availableStock = getAvailableStock(product.id);
-    console.log('[DEBUG] App.tsx - availableStock obtido:', availableStock);
     
     // Check stock availability
     if (availableStock === 0) {
@@ -339,11 +327,9 @@ function AppProvider({ children }: { children: ReactNode }) {
 
     setCart(prevCart => {
       const existingItem = prevCart.find(item => String(item.id) === String(product.id));
-      console.log('[DEBUG] App.tsx - Item existente no carrinho:', existingItem);
       
       if (existingItem) {
         const newQuantity = existingItem.quantity + quantity;
-        console.log('[DEBUG] App.tsx - Nova quantidade calculada:', newQuantity);
         
         // Check if new quantity exceeds stock
         if (newQuantity > availableStock) {
@@ -481,8 +467,6 @@ function AppProvider({ children }: { children: ReactNode }) {
   // Load analytics data
   const loadAnalytics = async () => {
     try {
-      console.log('🔄 Carregando analytics...');
-      
       // Usar o endpoint geral de analytics que não requer autenticação especial
       const analyticsData = await adminApi.getGeneralAnalytics();
       
@@ -514,7 +498,6 @@ function AppProvider({ children }: { children: ReactNode }) {
         }
       };
       
-      console.log('✅ Analytics mapeados:', mappedAnalytics);
       setAnalytics(mappedAnalytics);
     } catch (error) {
       console.error('❌ Erro ao carregar analytics:', error);
@@ -550,7 +533,6 @@ function AppProvider({ children }: { children: ReactNode }) {
   const loadGeneralAnalytics = async () => {
     try {
       const generalAnalyticsData = await adminApi.getGeneralAnalytics();
-      console.log('📊 Analytics gerais carregados:', generalAnalyticsData);
       return generalAnalyticsData;
     } catch (error) {
       console.error('Erro ao carregar analytics gerais:', error);
@@ -605,7 +587,9 @@ function AppProvider({ children }: { children: ReactNode }) {
       expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
       expiresAt: p.expires_at || null,
       isPromo: Boolean(p.is_promo),
+      isPromotion: Boolean(p.is_promo), // Adicionando isPromotion que está sendo usado no ProductsPage
       isNew: Boolean(p.is_new),
+      available_stock: stockValue, // Mantendo para compatibilidade
     };
   }
 
@@ -852,25 +836,24 @@ function App() {
           <div className="min-h-screen bg-gray-50">
             <Routes>
               {/* Admin Routes */}
-                 <Route path="/admin/login" element={<AdminLogin />} />
-  
-                  <Route
-                    path="/admin/*"
-                    element={
-                      <ProtectedRoute>
-                        <AdminLayout /> {/* seu layout com sidebar */}
-                      </ProtectedRoute>
-                    }
-                  >
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="dashboard" element={<AdminDashboard />} />
-                    <Route path="products" element={<ProductsManagement />} />
-                    <Route path="orders" element={<OrdersManagement />} />
-                    <Route path="clients" element={<ClientsManagement />} />
-                    <Route path="addresses" element={<AddressesManagement />} />
-                  </Route>
-
-                  <Route path="*" element={<Navigate to="/admin/login" />} />
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route
+                path="/admin/*"
+                element={
+                  <ProtectedRoute>
+                    <AdminLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<AdminDashboard />} />
+                <Route path="dashboard" element={<AdminDashboard />} />
+                <Route path="products" element={<ProductsManagement />} />
+                <Route path="orders" element={<OrdersManagement />} />
+                <Route path="clients" element={<ClientsManagement />} />
+                <Route path="addresses" element={<AddressesManagement />} />
+                <Route path="settings" element={<StoreSettings />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/admin/login" />} />
 
               {/* Public Routes */}
               <Route path="/" element={<PublicLayout />}>
@@ -885,7 +868,6 @@ function App() {
               {/* Redirect unknown routes to home */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            
             <Toaster 
               position="top-right"
               richColors

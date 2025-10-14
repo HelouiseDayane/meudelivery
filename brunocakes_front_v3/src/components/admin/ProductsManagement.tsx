@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../App';
-import { adminApi } from '../../api_admin';
+import adminApi from '../../api/admin';
 import { getProductImageUrl } from '../../api';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -84,10 +84,8 @@ export function ProductsManagement() {
 
   // Admin deve ver todos os produtos, inclusive inativos
   useEffect(() => {
-    import('../../api_admin').then(({ adminApi }) => {
-      adminApi.getProducts().then((products) => {
-        setAdminProducts(products);
-      });
+    adminApi.getProducts().then((products) => {
+      setAdminProducts(products);
     });
   }, [setAdminProducts]);
   const filteredProducts = adminProducts.filter((product: any) => {
@@ -119,16 +117,8 @@ export function ProductsManagement() {
     setFormData({
       name: product.name || '',
       description: product.description || '',
-      price: product.price ? product.price.toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-        minimumFractionDigits: 2
-      }) : '',
-      promotionPrice: (product.promotionPrice || product.promotion_price) ? (product.promotionPrice || product.promotion_price).toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-        minimumFractionDigits: 2
-      }) : '',
+      price: product.price !== undefined && product.price !== null ? product.price.toString().replace('.', ',') : '',
+      promotionPrice: (product.promotionPrice || product.promotion_price) !== undefined && (product.promotionPrice || product.promotion_price) !== null ? ((product.promotionPrice || product.promotion_price).toString().replace('.', ',')) : '',
       category: product.category || '',
       file: null,
       available: product.available || product.is_active || false,
@@ -140,109 +130,68 @@ export function ProductsManagement() {
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
-    
-    // Validação mais específica
-    if (!formData.name?.trim()) {
-      toast.error('Nome do produto é obrigatório');
-      return;
-    }
-    
-    if (!formData.description?.trim()) {
-      toast.error('Descrição do produto é obrigatória');
-      return;
-    }
-    
-    if (!formData.price?.trim()) {
-      toast.error('Preço do produto é obrigatório');
-      return;
-    }
-    
-    if (!formData.category?.trim()) {
-      toast.error('Categoria do produto é obrigatória');
-      return;
-    }
-    
-    if (!formData.stock?.trim()) {
-      toast.error('Quantidade em estoque é obrigatória');
-      return;
-    }
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    try {
-      // Converter valores formatados para números
-      const priceValue = parseFloat(formData.price.replace(/[^\d,]/g, '').replace(',', '.'));
-      const promotionPriceValue = formData.promotionPrice ? parseFloat(formData.promotionPrice.replace(/[^\d,]/g, '').replace(',', '.')) : null;
-      const stockValue = parseInt(formData.stock);
+  // Validações
+  if (!formData.name.trim() || !formData.description.trim() || !formData.price.trim() || !formData.category.trim() || !formData.stock.trim()) {
+    toast.error('Todos os campos obrigatórios devem ser preenchidos');
+    return;
+  }
 
-      // Validações numéricas
-      if (isNaN(priceValue) || priceValue <= 0) {
-        toast.error('Preço deve ser um número válido maior que zero');
-        return;
-      }
+  const priceValue = parseFloat(formData.price.replace(/[^\d,]/g, '').replace(',', '.'));
+  const promotionPriceValue = formData.promotionPrice ? parseFloat(formData.promotionPrice.replace(/[^\d,]/g, '').replace(',', '.')) : null;
+  const stockValue = parseInt(formData.stock);
 
-      if (isNaN(stockValue) || stockValue < 0) {
-        toast.error('Estoque deve ser um número válido maior ou igual a zero');
-        return;
-      }
+  if (isNaN(priceValue) || priceValue <= 0) {
+    toast.error('Preço inválido');
+    return;
+  }
+  if (isNaN(stockValue) || stockValue < 0) {
+    toast.error('Estoque inválido');
+    return;
+  }
+  if (formData.isPromotion && (!promotionPriceValue || promotionPriceValue >= priceValue)) {
+    toast.error('Preço promocional deve ser menor que o preço normal');
+    return;
+  }
 
-      if (formData.isPromotion && (!promotionPriceValue || promotionPriceValue >= priceValue)) {
-        toast.error('Preço promocional deve ser menor que o preço normal');
-        return;
-      }
-
-      // Preparar dados para envio (apenas campos que o backend espera)
-      const productData: any = {
-        name: formData.name.trim(),
-        description: formData.description.trim(),
-        price: priceValue,
-        category: formData.category.trim(),
-        quantity: stockValue,
-        is_promo: formData.isPromotion,
-        is_new: formData.isNew,
-        is_active: formData.available,
-      };
-
-      // Adicionar campos opcionais apenas se tiverem valor
-      if (promotionPriceValue) {
-        productData.promotion_price = promotionPriceValue;
-      }
-
-      if (formData.expiryDate) {
-        productData.expires_at = formData.expiryDate;
-      }
-
-      if (formData.file) {
-        productData.file = formData.file;
-      }
-
-      console.log('📤 Enviando dados do produto:', productData);
-    // ...
-
-      if (editingProduct) {
-        // Atualizar produto existente
-        console.log(`🔄 Atualizando produto ${editingProduct.id}`);
-    // ...
-        await adminApi.updateProduct(editingProduct.id, productData);
-        toast.success('Produto atualizado com sucesso!');
-      } else {
-        // Criar novo produto
-  // ...
-        await adminApi.createProduct(productData);
-        toast.success('Produto criado com sucesso!');
-      }
-
-      // Recarregar produtos usando refreshProducts
-      await refreshProducts();
-
-      setIsDialogOpen(false);
-      resetForm();
-    } catch (error) {
-      console.error('❌ Erro ao salvar produto:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      toast.error(`Erro ao salvar produto: ${errorMessage}`);
-    }
+  const productData: any = {
+    name: formData.name.trim(),
+    description: formData.description.trim(),
+    price: priceValue,
+    category: formData.category.trim(),
+    quantity: stockValue,
+    is_promo: formData.isPromotion,
+    is_new: formData.isNew,
+    is_active: formData.available,
   };
+
+  if (promotionPriceValue) productData.promotion_price = promotionPriceValue;
+  if (formData.expiryDate) productData.expires_at = formData.expiryDate;
+  if (formData.file) productData.file = formData.file;
+
+  try {
+    if (editingProduct) {
+      // Atualiza produto existente
+      const updatedProduct = await adminApi.updateProduct(editingProduct.id, productData);
+      // Atualiza estado local imediatamente
+      setAdminProducts(adminProducts.map(p => p.id === editingProduct.id ? { ...p, ...updatedProduct } : p));
+      toast.success('Produto atualizado com sucesso!');
+    } else {
+      // Cria novo produto
+      const newProduct = await adminApi.createProduct(productData);
+      setAdminProducts([newProduct, ...adminProducts]); // adiciona no topo da tabela
+      toast.success('Produto criado com sucesso!');
+    }
+
+    resetForm();
+    setIsDialogOpen(false);
+  } catch (error: any) {
+    toast.error(`Erro ao salvar produto: ${error?.message || 'Desconhecido'}`);
+  }
+};
+
 
   const handleToggleAvailability = async (productId: string, currentStatus: boolean) => {
     try {
@@ -263,11 +212,9 @@ export function ProductsManagement() {
       // Tentar primeiro o endpoint específico de toggle
       try {
         await adminApi.toggleProduct(productId);
-        console.log('✅ Toggle realizado via endpoint específico');
       } catch (toggleError) {
         // Fallback para update manual
         await adminApi.updateProduct(productId, { is_active: newStatus });
-        console.log('✅ Toggle realizado via update manual');
       }
       
       // Atualiza novamente para garantir sincronização com o backend
@@ -414,41 +361,71 @@ export function ProductsManagement() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="price">Preço Normal *</Label>
-                  <Input
-                    id="price"
-                    type="text"
-                    value={formData.price}
-                    onChange={(e) => {
-                      const rawValue = e.target.value.replace(/\D/g, '');
-                      const formattedValue = rawValue ? (parseFloat(rawValue) / 100).toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                        minimumFractionDigits: 2
-                      }) : '';
-                      setFormData(prev => ({ ...prev, price: formattedValue }));
-                    }}
-                    placeholder="R$ 0,00"
-                    required
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground text-sm">
+                      R$
+                    </span>
+                    <Input
+                      id="price"
+                      type="text"
+                      value={formData.price}
+                      onChange={(e) => {
+                        // Remove tudo que não é dígito
+                        let value = e.target.value.replace(/\D/g, '');
+                        
+                        // Adiciona zeros à esquerda se necessário
+                        value = value.padStart(3, '0');
+                        
+                        // Adiciona vírgula para centavos
+                        if (value.length > 2) {
+                          value = value.slice(0, -2) + ',' + value.slice(-2);
+                        }
+                        
+                        // Remove zeros à esquerda desnecessários
+                        value = value.replace(/^0+(?=\d)/, '');
+                        
+                        setFormData(prev => ({ ...prev, price: value }));
+                      }}
+                      placeholder="0,00"
+                      className="pl-10"
+                      required
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="promotionPrice">Preço Promocional</Label>
-                  <Input
-                    id="promotionPrice"
-                    type="text"
-                    value={formData.promotionPrice}
-                    onChange={(e) => {
-                      const rawValue = e.target.value.replace(/\D/g, '');
-                      const formattedValue = rawValue ? (parseFloat(rawValue) / 100).toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                        minimumFractionDigits: 2
-                      }) : '';
-                      setFormData(prev => ({ ...prev, promotionPrice: formattedValue }));
-                    }}
-                    placeholder="R$ 0,00"
-                    disabled={!formData.isPromotion}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground text-sm">
+                      R$
+                    </span>
+                    <Input
+                      id="promotionPrice"
+                      type="text"
+                      value={formData.promotionPrice}
+                      onChange={(e) => {
+                        if (!formData.isPromotion) return;
+                        
+                        // Remove tudo que não é dígito
+                        let value = e.target.value.replace(/\D/g, '');
+                        
+                        // Adiciona zeros à esquerda se necessário
+                        value = value.padStart(3, '0');
+                        
+                        // Adiciona vírgula para centavos
+                        if (value.length > 2) {
+                          value = value.slice(0, -2) + ',' + value.slice(-2);
+                        }
+                        
+                        // Remove zeros à esquerda desnecessários
+                        value = value.replace(/^0+(?=\d)/, '');
+                        
+                        setFormData(prev => ({ ...prev, promotionPrice: value }));
+                      }}
+                      placeholder="0,00"
+                      className="pl-10"
+                      disabled={!formData.isPromotion}
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -1,6 +1,6 @@
 {
-  "name": "Bruno Cake - Aqui não é fatia nem pedaço, aqui é tora!",
-  "short_name": "Bruno Cake",
+  "name": "Bruno Miranda Cake - Aqui não é fatia nem pedaço, aqui é tora!",
+  "short_name": "Bruno Miranda Cake",
   "description": "A melhor doceria da cidade! Aqui não é fatia nem pedaço, aqui é tora!",
   "start_url": "/",
   "display": "standalone",
@@ -9,10 +9,16 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192.svg",
+      "src": "/icone-selobrunocakes.ico",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "/icone-selobrunocakes.ico",
+      "sizes": "512x512",
+      "type": "image/x-icon",
+      "purpose": "any"
     }
   ],
   "categories": ["food", "shopping"],

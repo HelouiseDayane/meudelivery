@@ -1,7 +1,7 @@
 
-  # Bruno cakes
+  # Meu Delivery
 
-  This is a code bundle for Bruno cakes. The original project is available at https://www.figma.com/design/1D9CEvshQ3lmrxAkoxRMrf/Bruno-cakes.
+  This is a code bundle for Meu Delivery. The original project is available at https://www.figma.com/design/1D9CEvshQ3lmrxAkoxRMrf/Bruno-cakes.
 
   ## Running the code
 

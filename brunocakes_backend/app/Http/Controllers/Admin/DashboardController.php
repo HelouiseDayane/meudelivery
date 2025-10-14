@@ -11,8 +11,46 @@ use Illuminate\Support\Facades\Redis;
 
 class DashboardController extends Controller
 {
+    /**
+     * @OA\Get(
+     *      path="/api/admin/dashboard",
+     *      operationId="getDashboardData",
+     *      tags={"Admin Dashboard"},
+     *      summary="Dados do dashboard administrativo",
+     *      description="Retorna métricas e estatísticas para o painel administrativo",
+     *      security={{"sanctum": {}}},
+     *      @OA\Response(
+     *          response=200,
+     *          description="Dados do dashboard",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="engagement_metrics", type="object",
+     *                  @OA\Property(property="total_carts_with_products", type="integer", example=15),
+     *                  @OA\Property(property="conversion_rate", type="number", format="float", example=12.5),
+     *                  @OA\Property(property="abandoned_cart_rate", type="number", format="float", example=87.5)
+     *              ),
+     *              @OA\Property(property="sales_metrics", type="object",
+     *                  @OA\Property(property="orders_today", type="integer", example=8),
+     *                  @OA\Property(property="revenue_today", type="number", format="float", example=450.50),
+     *                  @OA\Property(property="total_orders", type="integer", example=125),
+     *                  @OA\Property(property="total_revenue", type="number", format="float", example=12500.75),
+     *                  @OA\Property(property="pending_orders", type="integer", example=3),
+     *                  @OA\Property(property="confirmed_orders", type="integer", example=5)
+     *              ),
+     *              @OA\Property(property="product_metrics", type="object",
+     *                  @OA\Property(property="low_stock_products", type="integer", example=2),
+     *                  @OA\Property(property="out_of_stock_products", type="integer", example=1),
+     *                  @OA\Property(property="best_selling_products", type="array", @OA\Items(type="object"))
+     *              )
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function index()
-{
+    {
     $today = now()->toDateString();
 
     // === MÉTRICAS DE ENGAJAMENTO ===

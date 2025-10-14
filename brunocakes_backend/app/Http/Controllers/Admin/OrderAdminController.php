@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Payment;  
+use App\Models\Address;  
 use Illuminate\Http\Request;  
 use App\Jobs\ProcessOrderJob;  
 use Illuminate\Support\Facades\Log; // Adicione esta linha no início do arquivo
@@ -12,7 +13,31 @@ use Illuminate\Support\Facades\Log; // Adicione esta linha no início do arquivo
 
 class OrderAdminController extends Controller {
 
-    // Retorna estatísticas de clientes baseadas em orders com status 'confirmed' OU 'completed'
+    /**
+     * @OA\Get(
+     *      path="/api/admin/analytics/customers",
+     *      operationId="getCustomerAnalytics",
+     *      tags={"Admin Analytics"},
+     *      summary="Estatísticas de clientes",
+     *      description="Retorna estatísticas de clientes baseadas em pedidos confirmados ou completos",
+     *      security={{"sanctum": {}}},
+     *      @OA\Response(
+     *          response=200,
+     *          description="Estatísticas dos clientes",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="total_clients", type="integer", example=150),
+     *              @OA\Property(property="active_clients", type="integer", example=45),
+     *              @OA\Property(property="new_clients", type="integer", example=12),
+     *              @OA\Property(property="avg_order_value", type="number", format="float", example=87.50),
+     *              @OA\Property(property="retention_rate", type="number", format="float", example=30.5)
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
     public function getCustomerAnalytics()
     {
         $validStatuses = ['confirmed', 'completed'];
@@ -77,12 +102,67 @@ class OrderAdminController extends Controller {
         ]);
     }
     
-        public function index()
-        {
+    /**
+     * @OA\Get(
+     *      path="/api/admin/orders",
+     *      operationId="getOrdersList",
+     *      tags={"Admin Orders"},
+     *      summary="Listar todos os pedidos",
+     *      description="Retorna lista de todos os pedidos com itens e pagamentos",
+     *      security={{"sanctum": {}}},
+     *      @OA\Response(
+     *          response=200,
+     *          description="Lista de pedidos",
+     *          @OA\JsonContent(
+     *              type="array",
+     *              @OA\Items(ref="#/components/schemas/Order")
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */
+    public function index()
+    {
             return response()->json(Order::with('items', 'payment')->latest()->get());
         }
-                
-     public function approvePayment(Request $request)
+
+    /**
+     * @OA\Post(
+     *      path="/api/admin/orders/approve-payment",
+     *      operationId="approvePayment",
+     *      tags={"Admin Orders"},
+     *      summary="Aprovar pagamentos",
+     *      description="Aprova pagamentos de múltiplos pedidos",
+     *      security={{"sanctum": {}}},
+     *      @OA\RequestBody(
+     *          required=true,
+     *          @OA\JsonContent(
+     *              required={"order_ids"},
+     *              @OA\Property(property="order_ids", type="array", @OA\Items(type="integer"), example={1, 2, 3})
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=200,
+     *          description="Pagamentos aprovados com sucesso",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="message", type="string", example="Payments approved successfully"),
+     *              @OA\Property(property="approved_orders", type="array", @OA\Items(type="integer"))
+     *          )
+     *      ),
+     *      @OA\Response(
+     *          response=400,
+     *          description="Dados inválidos"
+     *      ),
+     *      @OA\Response(
+     *          response=401,
+     *          description="Não autorizado"
+     *      )
+     * )
+     */                
+    public function approvePayment(Request $request)
     {
         $request->validate([
             'order_ids' => 'required|array|min:1',
@@ -148,46 +228,7 @@ class OrderAdminController extends Controller {
 
         return response()->json(['updated_count' => $updatedCount]);
     }
-
-    public function markAsCompleted(Request $request)
-    {
-        $request->validate([
-            'order_ids' => 'required|array|min:1',
-            'order_ids.*' => 'exists:orders,id',
-        ]);
-
-        // ✅ FILTRAR apenas pedidos com status 'confirmed'
-        $orders = Order::whereIn('id', $request->order_ids)
-            ->where('status', 'confirmed') // ✅ Apenas 'confirmed' pode ser completado
-            ->get();
-
-        $updatedCount = 0;
-
-        foreach ($orders as $order) {
-            $order->update(['status' => 'completed']);
-            $updatedCount++;
-            
-            Log::info('Pedido marcado como completo', [
-                'order_id' => $order->id,
-                'customer' => $order->customer_name,
-                'total' => $order->total_amount
-            ]);
-        }
-
-        Log::info('Pedidos marcados como completos', [
-            'requested_count' => count($request->order_ids),
-            'updated_count' => $updatedCount
-        ]);
-
-        return response()->json([
-            'message' => 'Pedidos marcados como completos',
-            'requested_count' => count($request->order_ids),
-            'updated_count' => $updatedCount
-        ]);
-    }
-
-
-            
+        
     
     public function getUniqueCustomers()
     {
@@ -244,5 +285,105 @@ class OrderAdminController extends Controller {
             'new_status' => $order->status
         ]);
     }
+
+     public function markAsCompleted(Request $request)
+    {
+        $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'exists:orders,id',
+        ]);
+
+        // ✅ FILTRAR apenas pedidos com status 'confirmed'
+        $orders = Order::whereIn('id', $request->order_ids)
+            ->whereIn('status', ['confirmed', 'paid', 'completed'])
+            ->get();
+
+        $updatedCount = 0;
+
+        // Buscar endereço ativo
+        $activeAddress = Address::where('ativo', true)->first();
+        $addressText = '';
+        $mapsLink = '';
+        if ($activeAddress) {
+            $addressText = $activeAddress->rua . ', ' . $activeAddress->numero . ' - ' . $activeAddress->bairro . ', ' . $activeAddress->cidade . ' - ' . $activeAddress->estado;
+            if ($activeAddress->latitude && $activeAddress->longitude) {
+                $mapsLink = 'https://www.google.com/maps/search/?api=1&query=' . $activeAddress->latitude . ',' . $activeAddress->longitude;
+            }
+        }
+
+        foreach ($orders as $order) {
+            $order->update(['status' => 'completed']);
+            $updatedCount++;
+
+            // Monta mensagem personalizada
+            $msg = "Ei, aqui é o Bruno Miranda Cake! 😄\n";
+            $msg .= "Boa notícia: seu pedido tá prontinho!\n\n";
+            $msg .= "Pode vir buscar ou mandar um moto Uber pra pegar, blz?\n\n";
+            $msg .= "Qualquer coisa, é só chamar! 🍰\n\n";
+            $msg .= "📍Segue link com a localização ⤵️\n";
+            if ($addressText) {
+                $msg .= $addressText . "\n";
+            }
+            if ($mapsLink) {
+                $msg .= $mapsLink . "\n";
+            }
+
+            // Envia WhatsApp via ZapSrv
+            if ($order->customer_phone) {
+                try {
+                    // Limpa o número para formato internacional (apenas números)
+                    $cleanNumber = preg_replace('/\D/', '', $order->customer_phone);
+                    // Se começar com 55, ok. Se não, adiciona DDI Brasil
+                    if (strpos($cleanNumber, '55') !== 0) {
+                        $cleanNumber = '55' . $cleanNumber;
+                    }
+                    $body = [
+                        'number' => $cleanNumber,
+                        'text' => $msg,
+                        'options' => [
+                            'server' => 'https://evo01.zapsrv.com/message/sendText/BRUNO-CAKE',
+                            'wait' => 500,
+                            'delay' => 1000,
+                            'presence' => 'composing'
+                        ]
+                    ];
+                    $response = \Illuminate\Support\Facades\Http::withHeaders([
+                        'apikey' => '695D24189F61-408A-8E03-9917CE36FA1C',
+                    ])->post('https://01.zapsrv.com/zap_request/', $body);
+                    Log::info('Mensagem WhatsApp enviada', [
+                        'order_id' => $order->id,
+                        'phone' => $cleanNumber,
+                        'zap_status' => $response->status(),
+                        'zap_body' => $response->body(),
+                        'zap_json' => $response->json()
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Erro ao enviar WhatsApp', [
+                        'order_id' => $order->id,
+                        'phone' => $order->customer_phone,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            Log::info('Pedido marcado como completo', [
+                'order_id' => $order->id,
+                'customer' => $order->customer_name,
+                'total' => $order->total_amount
+            ]);
+        }
+
+        Log::info('Pedidos marcados como completos', [
+            'requested_count' => count($request->order_ids),
+            'updated_count' => $updatedCount
+        ]);
+
+        return response()->json([
+            'message' => 'Pedidos marcados como completos',
+            'requested_count' => count($request->order_ids),
+            'updated_count' => $updatedCount
+        ]);
+    }
+
 
 }
