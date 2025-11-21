@@ -86,9 +86,13 @@ services:
     container_name: frontend
     restart: always
     ports:
-      - "3210:3000"
+      - "8888:8888" # Porta customizada para o Vite
     environment:
-      VITE_PORT: 3000 # Se quiser passar para Vite via env
+      VITE_PORT: 5173
+    volumes:
+      - ./brunocakes_front_v3:/app
+      - /app/node_modules
+    command: npm run dev -- --host --port 8888
 
 volumes:
   mysql_data:

@@ -90,14 +90,15 @@ const PublicMenu = () => {
 
   // Efeito para buscar produtos (inicial e em atualização de estoque)
   useEffect(() => {
-    const fetchProducts = () => {
-      import('../../api').then(({ api }) => {
-        api.getPublicProducts().then((products) => {
-          setPublicProducts(products);
-        }).catch(error => {
-          console.error('Erro ao buscar produtos:', error);
-        });
-      });
+    const fetchProducts = async () => {
+      try {
+        // Importa a publicApi para garantir uso do endpoint correto
+        const { publicApi } = await import('../../api');
+        const products = await publicApi.getPublicProducts();
+        setPublicProducts(products);
+      } catch (error) {
+        console.error('Erro ao buscar produtos (with-stock):', error);
+      }
     };
 
     fetchProducts(); // Busca inicial
@@ -127,7 +128,7 @@ const PublicMenu = () => {
       });
     };
     updateStoreStatus();
-    const interval = setInterval(updateStoreStatus, 30000);
+    const interval = setInterval(updateStoreStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -149,16 +150,70 @@ const PublicMenu = () => {
 
   // Listener para eventos de carrinho expirado
   useEffect(() => {
-    const handleCartExpired = (event: CustomEvent) => {
-      toast.error(event.detail.message, {
+    const handleCartExpired = async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('[cart-expired] Evento recebido:', customEvent);
+      toast.error(customEvent.detail?.message || 'Carrinho expirado!', {
         duration: 6000,
       });
+      // Atualiza o localStorage para sincronizar entre abas, só se não foi disparado agora
+      if (window.localStorage) {
+        const last = window.localStorage.getItem('bruno_cart_expired');
+        const now = Date.now().toString();
+        if (last !== now) {
+          window.localStorage.setItem('bruno_cart_expired', now);
+        }
+      }
+      // Força atualização dos produtos ao expirar o carrinho
+      try {
+        const { publicApi } = await import('../../api');
+        const products = await publicApi.getPublicProducts();
+        setPublicProducts(products);
+      } catch (error) {
+        console.error('Erro ao atualizar produtos após expiração do carrinho:', error);
+      }
     };
-    window.addEventListener('cart-expired', handleCartExpired as EventListener);
+    window.addEventListener('cart-expired', handleCartExpired);
     return () => {
-      window.removeEventListener('cart-expired', handleCartExpired as EventListener);
+      window.removeEventListener('cart-expired', handleCartExpired);
     };
+  }, [setPublicProducts]);
+
+  // Disparo manual do evento cart-expired para teste/debug (remova depois de validar)
+  useEffect(() => {
+    // Exemplo: se houver alguma flag de expiração do carrinho, dispare o evento
+    // Substitua por sua lógica real de expiração do carrinho!
+    const checkCartExpired = () => {
+      // Exemplo: checar se existe uma flag no localStorage
+      const expired = window.localStorage.getItem('bruno_cart_force_expired');
+      if (expired === '1') {
+        const event = new CustomEvent('cart-expired', { detail: { message: 'Carrinho expirado (debug manual)' } });
+        window.dispatchEvent(event);
+        window.localStorage.removeItem('bruno_cart_force_expired');
+      }
+    };
+    const interval = setInterval(checkCartExpired, 2000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Listener para atualização via localStorage (garante atualização em todas as abas)
+  useEffect(() => {
+    const handleStorage = async (event: StorageEvent) => {
+      if (event.key === 'bruno_cart_expired') {
+        try {
+          const { publicApi } = await import('../../api');
+          const products = await publicApi.getPublicProducts();
+          setPublicProducts(products);
+        } catch (error) {
+          console.error('Erro ao atualizar produtos via storage:', error);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [setPublicProducts]);
 
   // Função para obter quantidade local para um produto
   const getLocalQuantity = (productId: string | number) => {
@@ -267,7 +322,7 @@ const PublicMenu = () => {
       <Alert className="mb-6 border-2 border-orange-500 bg-orange-50">
        
         <AlertDescription className="font-medium text-orange-800">
-          ⏰ <strong>Lembre-se:</strong> Após adicionar produtos ao carrinho, você tem apenas <strong>10 minutos</strong> para finalizar sua compra.
+          ⏰ <strong>Lembre-se:</strong> Após adicionar produtos ao carrinho, você tem apenas <strong>3 minutos</strong> para finalizar sua compra.
           Depois desse tempo, o carrinho será limpo automaticamente.
         </AlertDescription>
       </Alert>
@@ -319,7 +374,7 @@ const PublicMenu = () => {
                 <div className="absolute top-2 left-2 flex gap-2">
                   {product.isNew && (
                     <Badge 
-                      className="product-badge-novo force-green-bg !bg-green-500 !text-white !border-green-500"
+                      className="product-badge-novo force-green-bg bg-green-500! text-white! border-green-500!"
                       data-badge="novo"
                       style={{ 
                         backgroundColor: '#22c55e !important', 
@@ -334,7 +389,7 @@ const PublicMenu = () => {
                   )}
                   {product.isPromotion && (
                     <Badge 
-                      className="product-badge-promocao force-red-bg !bg-red-500 !text-white !border-red-500"
+                      className="product-badge-promocao force-red-bg bg-red-500! text-white! border-red-500!"
                       data-badge="promocao"
                       style={{ 
                         backgroundColor: '#ef4444 !important', 
@@ -488,7 +543,7 @@ const PublicMenu = () => {
                             </div>
                             <Button
                               disabled={lojaFechada || isIndisponivel}
-                              className={`w-full ${lojaFechada || isIndisponivel ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed opacity-70' : 'bg-primary hover:bg-primary/90 text-white !text-white'}`}
+                              className={`w-full ${lojaFechada || isIndisponivel ? 'bg-gray-400 hover:bg-gray-400 cursor-not-allowed opacity-70' : 'bg-primary hover:bg-primary/90 text-white text-white!'}`}
                               onClick={() => !lojaFechada && !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
                             >
                               <ShoppingCart className="w-4 h-4 mr-2 text-white" />
@@ -500,7 +555,7 @@ const PublicMenu = () => {
                       <Button
                         disabled={lojaFechada || isIndisponivel}
                         size="sm"
-                        className={lojaFechada || isIndisponivel ? "opacity-50 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white !text-white"}
+                        className={lojaFechada || isIndisponivel ? "opacity-50 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white text-white!"}
                         onClick={() => !lojaFechada && !isIndisponivel && handleAddToCart(product, getLocalQuantity(product.id))}
                       >
                         <span className="w-4 h-4 mr-1">

@@ -227,9 +227,9 @@ function AppProvider({ children }: { children: ReactNode }) {
               (msg.includes('404') && msg.toLowerCase().includes('cart'))) {
             setCart([]);
             localStorage.removeItem('bruno_cart');
-            if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+            if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('cart-expired', {
-                detail: { message: 'Seu carrinho expirou! Você tem apenas 10 minutos para escolher seus produtos.' }
+                detail: { message: 'Seu carrinho expirou! Você tem apenas 3 minutos para escolher seus produtos.' }
               }));
             }
           }
@@ -360,7 +360,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Sincronizar com backend (carrinho com expiração de 10 minutos)
+    // Sincronizar com backend (carrinho com expiração de 3 minutos)
     try {
       await api.addToCart(sessionId, product.id, quantity);
      //  toast.success(`${product.name} adicionado ao carrinho`);

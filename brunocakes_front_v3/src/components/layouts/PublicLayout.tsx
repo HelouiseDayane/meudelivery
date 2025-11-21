@@ -13,6 +13,17 @@ import { useStoreConfigState } from '../../hooks/useStoreConfigState';
 import { ThemeTestComponent, useThemeTest } from '../ThemeTestComponent';
 
 export const PublicLayout = () => {
+  // Listener global para garantir atualização dos cards em todas as rotas sem reload
+  useEffect(() => {
+    const handleCartExpired = () => {
+      // Atualiza um valor no localStorage para forçar todos os componentes a reagirem
+      localStorage.setItem('bruno_cart_expired', String(Date.now()));
+    };
+    window.addEventListener('cart-expired', handleCartExpired);
+    return () => {
+      window.removeEventListener('cart-expired', handleCartExpired);
+    };
+  }, []);
   const { cart } = useApp();
   const location = useLocation();
   const { isMobile } = usePWA();
@@ -180,8 +191,9 @@ export const PublicLayout = () => {
             <div>
               <h4 className="font-semibold mb-2">Horário de Funcionamento</h4>
               <p className="text-muted-foreground">
-                {/* Se quiser mostrar horário, precisa buscar de outro local ou adicionar ao StoreConfigState */}
-                {'Horário não disponível'}
+                {STORE_CONFIG.workingHours && STORE_CONFIG.workingHours.trim() !== ''
+                  ? STORE_CONFIG.workingHours
+                  : 'Horário não disponível'}
               </p>
             </div>
           </div>

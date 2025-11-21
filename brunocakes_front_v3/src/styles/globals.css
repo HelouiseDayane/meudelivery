@@ -1,3 +1,28 @@
+/* Badge de Estoque - SEMPRE VERDE (estoque disponível padrão) */
+.product-badge-estoque,
+.product-badge-estoque:hover,
+.product-badge-estoque:focus,
+.product-badge-estoque:active,
+[data-badge="estoque"],
+[data-badge="estoque"]:hover,
+.force-green-bg-estoque,
+.force-green-bg-estoque:hover {
+  background-color: #22c55e !important;
+  background: #22c55e !important;
+  color: white !important;
+  border-color: #22c55e !important;
+  border: 1px solid #22c55e !important;
+}
+
+/* Badge de Estoque Baixo - SEMPRE AMARELO */
+.force-yellow-bg,
+.force-yellow-bg:hover {
+  background-color: #facc15 !important;
+  background: #facc15 !important;
+  color: #222 !important;
+  border-color: #facc15 !important;
+  border: 1px solid #facc15 !important;
+}
 @custom-variant dark (&:is(.dark *));
 
 :root {

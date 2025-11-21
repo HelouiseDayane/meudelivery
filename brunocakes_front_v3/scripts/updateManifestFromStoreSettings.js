@@ -1,7 +1,11 @@
 // Script para atualizar manifest.json com dados do backend
-const fs = require('fs');
-const path = require('path');
-const fetch = require('node-fetch');
+import fs from 'fs';
+import path from 'path';
+import fetch from 'node-fetch';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const API_URL = process.env.API_URL || 'http://localhost:8191/api/store/settings';
 const manifestPath = path.resolve(__dirname, '../public/manifest.json');
