@@ -26,9 +26,23 @@ class AddressController extends Controller
      *      )
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
-        return Address::all();
+        $user = $request->user();
+        
+        // Se for usuário autenticado, filtrar por filial
+        if ($user) {
+            if ($user->isMaster()) {
+                // Master vê todos os endereços
+                return Address::with('branch')->get();
+            } else {
+                // Admin/Employee vê apenas endereços da sua filial
+                return Address::where('branch_id', $user->branch_id)->with('branch')->get();
+            }
+        }
+        
+        // Público vê apenas endereços ativos
+        return Address::where('ativo', true)->get();
     }
 
     /**
@@ -67,6 +81,8 @@ class AddressController extends Controller
      */
     public function store(Request $request)
     {
+        $user = $request->user();
+        
         $data = $request->validate([
             'rua' => 'required|string',
             'numero' => 'required|string',
@@ -78,20 +94,49 @@ class AddressController extends Controller
             'endereco_entrega' => 'boolean',
             'latitude' => 'nullable|string',
             'longitude' => 'nullable|string',
+            'branch_id' => 'nullable|exists:branches,id',
         ]);
+        
+        // Determinar branch_id
+        if ($user && $user->isMaster()) {
+            // Master pode especificar a filial
+            if (!isset($data['branch_id'])) {
+                return response()->json([
+                    'message' => 'Master deve especificar a filial (branch_id)'
+                ], 422);
+            }
+        } elseif ($user) {
+            // Admin/Employee usam sua filial
+            $data['branch_id'] = $user->branch_id;
+        }
+        
         $address = Address::create($data);
         return response()->json($address, 201);
     }
 
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $user = $request->user();
         $address = Address::findOrFail($id);
+        
+        // Verificar permissão: usuários não-master só podem ver endereços da sua filial
+        if ($user && !$user->isMaster() && $address->branch_id !== $user->branch_id) {
+            return response()->json(['message' => 'Acesso negado'], 403);
+        }
+        
         return response()->json($address);
     }
 
     public function update(Request $request, $id)
     {
+        $user = $request->user();
         $address = Address::findOrFail($id);
+        
+        // Verificar permissão: usuários não-master só podem editar endereços da sua filial
+        if ($user && !$user->isMaster() && $address->branch_id !== $user->branch_id) {
+            return response()->json(['message' => 'Acesso negado'], 403);
+        }
+        
         $data = $request->validate([
             'rua' => 'sometimes|required|string',
             'numero' => 'sometimes|required|string',
@@ -108,48 +153,71 @@ class AddressController extends Controller
         return response()->json($address);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $user = $request->user();
         $address = Address::findOrFail($id);
+        
+        // Verificar permissão: usuários não-master só podem excluir endereços da sua filial
+        if ($user && !$user->isMaster() && $address->branch_id !== $user->branch_id) {
+            return response()->json(['message' => 'Acesso negado'], 403);
+        }
+        
         $address->delete();
         return response()->json(['message' => 'Endereço removido com sucesso']);
     }
     /**
-     * Ativa o endereço informado e desativa os demais.
+     * Ativa o endereço informado e desativa os demais DA MESMA FILIAL.
      */
-   public function activate($id)
+   public function activate(Request $request, $id)
     {
+        $user = $request->user();
         $address = Address::findOrFail($id);
+        
+        // Verificar permissão: usuários não-master só podem ativar endereços da sua filial
+        if ($user && !$user->isMaster() && $address->branch_id !== $user->branch_id) {
+            return response()->json(['message' => 'Acesso negado'], 403);
+        }
+        
         if ($address->ativo) {
             // Se já está ativo, inativa apenas ele
             $address->ativo = false;
             $address->save();
             $message = 'Endereço inativado com sucesso';
         } else {
-            // Se está inativo, desativa todos e ativa este
-            Address::query()->update(['ativo' => false]);
+            // Se está inativo, desativa todos DA MESMA FILIAL e ativa este
+            Address::where('branch_id', $address->branch_id)->update(['ativo' => false]);
             $address->ativo = true;
             $address->save();
             $message = 'Endereço ativado com sucesso';
         }
+        
         return response()->json([
             'message' => $message,
             'id' => $id,
             'address' => $address,
         ], 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
-        /**
-     * Retorna o endereço ativo (público)
+    
+    /**
+     * Retorna os endereços ativos (um por filial ativa) - público
      */
     public function getActive()
     {
-        $active = Address::where('ativo', true)->first();
-        if (!$active) {
-            return response()->json(null, 404);
+        // Retorna todos os endereços ativos de filiais abertas
+        $activeAddresses = Address::where('ativo', true)
+            ->whereHas('branch', function($q) {
+                $q->where('is_open', true)
+                  ->where('is_active', true);
+            })
+            ->with('branch:id,name,code,is_open')
+            ->get();
+        
+        if ($activeAddresses->isEmpty()) {
+            return response()->json([], 200);
         }
 
-        // Retorna o modelo diretamente, Laravel cuida da serialização
-        return response()->json($active, 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        return response()->json($activeAddresses, 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
 }

@@ -38,12 +38,22 @@ class OrderAdminController extends Controller {
      *      )
      * )
      */
-    public function getCustomerAnalytics()
+    public function getCustomerAnalytics(Request $request)
     {
+        $user = $request->user();
         $validStatuses = ['confirmed', 'completed'];
+
+        // Determinar filial
+        $branchId = null;
+        if ($user->isMaster()) {
+            $branchId = $request->query('branch_id');
+        } else {
+            $branchId = $user->branch_id;
+        }
 
         // Total de clientes únicos com pelo menos 1 pedido confirmado ou finalizado
         $totalClients = Order::whereIn('status', $validStatuses)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->distinct('customer_email')
             ->count('customer_email');
 
@@ -51,17 +61,21 @@ class OrderAdminController extends Controller {
         $thirtyDaysAgo = now()->subDays(30);
         $activeClients = Order::whereIn('status', $validStatuses)
             ->where('created_at', '>=', $thirtyDaysAgo)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->distinct('customer_email')
             ->count('customer_email');
 
         // Receita total de pedidos confirmados/finalizados
-        $totalRevenue = Order::whereIn('status', $validStatuses)->sum('total_amount');
+        $totalRevenue = Order::whereIn('status', $validStatuses)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->sum('total_amount');
 
         // Ticket médio por cliente
         $averageTicket = $totalClients > 0 ? $totalRevenue / $totalClients : 0;
 
         // Top clientes por valor gasto
         $topClients = Order::whereIn('status', $validStatuses)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->select('customer_name as name', 'customer_email as email', \DB::raw('COUNT(*) as totalOrders'), \DB::raw('SUM(total_amount) as totalSpent'), \DB::raw('MAX(created_at) as lastOrderDate'))
             ->groupBy('customer_email', 'customer_name')
             ->orderByDesc('totalSpent')
@@ -70,6 +84,7 @@ class OrderAdminController extends Controller {
 
         // Cliente mais frequente
         $mostFrequentClient = Order::whereIn('status', $validStatuses)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->select('customer_name as name', 'customer_email as email', \DB::raw('COUNT(*) as totalOrders'))
             ->groupBy('customer_email', 'customer_name')
             ->orderByDesc('totalOrders')
@@ -77,6 +92,7 @@ class OrderAdminController extends Controller {
 
         // Cliente que mais gastou
         $biggestSpender = Order::whereIn('status', $validStatuses)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->select('customer_name as name', 'customer_email as email', \DB::raw('SUM(total_amount) as totalSpent'))
             ->groupBy('customer_email', 'customer_name')
             ->orderByDesc('totalSpent')
@@ -84,6 +100,7 @@ class OrderAdminController extends Controller {
 
         // Taxa de retenção: clientes com pelo menos 2 pedidos confirmados/finalizados / total de clientes únicos
         $retainedClients = Order::whereIn('status', $validStatuses)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->select('customer_email', \DB::raw('COUNT(*) as total_orders'))
             ->groupBy('customer_email')
             ->havingRaw('COUNT(*) >= 2')
@@ -124,10 +141,26 @@ class OrderAdminController extends Controller {
      *      )
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
-            return response()->json(Order::with('items', 'payment')->latest()->get());
+        $user = $request->user();
+        
+        $query = Order::with('items', 'payment');
+        
+        // Filtrar por filial
+        if ($user->isMaster()) {
+            // Master pode ver todos ou filtrar por filial
+            $branchId = $request->query('branch_id');
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            }
+        } else {
+            // Admin e Employee veem apenas pedidos da sua filial
+            $query->where('branch_id', $user->branch_id);
         }
+        
+        return response()->json($query->latest()->get());
+    }
 
     /**
      * @OA\Post(

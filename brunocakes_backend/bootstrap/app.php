@@ -15,6 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \App\Http\Middleware\CustomCors::class,
         ]);
+        
+        // Registrar middlewares personalizados
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+            'branch.access' => \App\Http\Middleware\CheckBranchAccess::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

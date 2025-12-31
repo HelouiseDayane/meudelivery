@@ -45,7 +45,7 @@ self.addEventListener('fetch', (event) => {
   // Skip API requests
   if (event.request.url.includes('/api/')) return;
   
-  // Skip ALL development files and Vite resources
+  // Skip ALL development files and Vite resources - return early without caching
   if (event.request.url.includes('/src/') || 
       event.request.url.includes('?v=') ||
       event.request.url.includes('?t=') ||
@@ -54,9 +54,9 @@ self.addEventListener('fetch', (event) => {
       event.request.url.includes('node_modules') ||
       event.request.url.includes('.vite') ||
       event.request.url.includes('hot') ||
+      event.request.url.includes('localhost:8888') ||  // Skip all dev server requests
       event.request.url.includes('hmr')) {
-    // Just fetch without caching for development resources
-    event.respondWith(fetch(event.request));
+    // Don't cache, don't respond - let browser handle it
     return;
   }
       

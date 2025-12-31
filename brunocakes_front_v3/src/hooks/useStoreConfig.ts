@@ -349,39 +349,53 @@ export const updateLogoElements = (type: 'horizontal' | 'icon', logoUrl: string)
 // Hook personalizado para gerenciar configurações da loja
 export const useStoreConfig = () => {
   const [storeSettings, setStoreSettings] = useState<any>(null);
-  
+
   const loadStoreConfig = async () => {
     try {
+      // Tenta buscar o updated_at salvo
+      const cachedSettings = localStorage.getItem('store_settings_cache');
+      let cached = null;
+      if (cachedSettings) {
+        try { cached = JSON.parse(cachedSettings); } catch {}
+      }
+
       const settings = await fetchStoreSettings(apiRequest);
-      
+
+      // Se não veio nada da API, mantém o cache
+      if (!settings && cached) {
+        setStoreSettings(cached);
+        updateStoreConfig(cached);
+        return;
+      }
+
+      // Se veio settings e tem updated_at
+      if (settings && settings.updated_at) {
+        // Se for igual ao cache, não atualiza nada
+        if (cached && cached.updated_at === settings.updated_at) {
+          setStoreSettings(cached);
+          updateStoreConfig(cached);
+          return;
+        }
+        // Se mudou, salva novo cache
+        localStorage.setItem('store_settings_cache', JSON.stringify(settings));
+      }
+
       if (settings) {
-        setStoreSettings(settings); // Armazena os dados no estado
+        setStoreSettings(settings);
         updateStoreConfig(settings);
-        
+
         // Só aplica a cor se ela for diferente da última aplicada
         if (settings.primary_color) {
           if (lastAppliedColor !== settings.primary_color) {
             console.log(`🎨 Nova cor aplicada: ${settings.primary_color}`);
             applyPrimaryColor(settings.primary_color);
             lastAppliedColor = settings.primary_color;
-            
-            // Força aplicação novamente após um pequeno delay para garantir
+
             setTimeout(() => {
               applyPrimaryColor(settings.primary_color);
             }, 100);
           }
         }
-        
-        // Atualiza logos se necessário - DESABILITADO pois PublicLayout usa sistema reativo
-        // setTimeout(() => {
-        //   if (settings.logo_horizontal) {
-        //     updateLogoElements('horizontal', settings.logo_horizontal);
-        //   }
-          
-        //   if (settings.logo_icon) {
-        //     updateLogoElements('icon', settings.logo_icon);
-        //   }
-        // }, 100);
       }
     } catch (error) {
       console.error('❌ Erro ao carregar configurações da loja:', error);

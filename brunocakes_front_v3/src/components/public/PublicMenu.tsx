@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { API_BASE_URL } from '../../api/common/config';
 import { fetchAndSetActiveAddress, getProductImageUrl, api, apiRequest } from '../../api';
 import { useRealTime } from '../../hooks/useRealTime';
-import { useStoreConfig } from '../../hooks/useStoreConfig';
+import { useStoreConfigState } from '../../hooks/useStoreConfigState';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -13,6 +14,8 @@ import { Plus, Minus, Search, Clock, Percent, Sparkles, ShoppingCart } from 'luc
 import { useApp } from '../../App';
 import { usePWA } from '../../hooks/usePWA';
 import { toast } from 'sonner';
+import { PublicBranchSelector } from './PublicBranchSelector';
+import { Branch } from '../../types/admin';
 
 const PublicMenu = () => {
   const { publicProducts, setPublicProducts, addToCart } = useApp();
@@ -20,12 +23,14 @@ const PublicMenu = () => {
   const { isMobile } = usePWA();
   
   // Hook para gerenciar configurações da loja
-  const { storeSettings } = useStoreConfig();
+  const storeConfigState = useStoreConfigState();
+  // storeConfigState já possui as propriedades diretamente
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [footerData, setFooterData] = useState({
     workingHours: '',
     isOpen: true, // assume aberto por padrão até carregar
@@ -55,6 +60,43 @@ const PublicMenu = () => {
       isPromotion: Boolean(product.isPromotion ?? product.isPromo ?? product.is_promo),
     };
   });
+
+  // Recuperar filial selecionada do localStorage
+  useEffect(() => {
+    const loadBranch = () => {
+      const savedBranch = localStorage.getItem('selected_branch');
+      if (savedBranch) {
+        try {
+          setSelectedBranch(JSON.parse(savedBranch));
+        } catch (error) {
+          console.error('Erro ao recuperar filial salva:', error);
+        }
+      }
+    };
+
+    // Carrega ao montar
+    loadBranch();
+
+    // Listener para mudanças no storage (quando outra aba/componente muda)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'selected_branch') {
+        loadBranch();
+      }
+    };
+
+    // Listener para evento customizado de troca de filial
+    const handleBranchUpdate = () => {
+      loadBranch();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('branch-updated', handleBranchUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('branch-updated', handleBranchUpdate);
+    };
+  }, []);
 
   // Função para obter o estoque disponível corretamente do produto
   const getProductAvailableStock = (productId: string | number) => {
@@ -94,42 +136,99 @@ const PublicMenu = () => {
       try {
         // Importa a publicApi para garantir uso do endpoint correto
         const { publicApi } = await import('../../api');
-        const products = await publicApi.getPublicProducts();
+        const branchId = selectedBranch?.id;
+        const products = await publicApi.getPublicProducts(branchId);
         setPublicProducts(products);
       } catch (error) {
         console.error('Erro ao buscar produtos (with-stock):', error);
       }
     };
 
-    fetchProducts(); // Busca inicial
+    // Só busca produtos se tiver uma filial selecionada
+    if (selectedBranch) {
+      fetchProducts(); // Busca inicial
 
-    if (lastEvent && lastEvent.type === 'stock_update') {
-      fetchProducts(); // Atualiza no evento de estoque
+      if (lastEvent && lastEvent.type === 'stock_update') {
+        fetchProducts(); // Atualiza no evento de estoque
+      }
     }
-  }, [lastEvent, setPublicProducts]);
+  }, [lastEvent, setPublicProducts, selectedBranch]);
 
-  // Efeito para atualizar o status da loja (aberto/fechado)
+  // Efeito para atualizar o status da loja (aberto/fechado) e escutar evento address-updated
   useEffect(() => {
     const updateStoreStatus = async () => {
-      const address = await fetchAndSetActiveAddress(apiRequest);
-      const apiModule = await import('../../api');
-      const { STORE_CONFIG } = apiModule;
-      let isOpen = STORE_CONFIG.isOpen;
-      if (!address || address === '') {
-        isOpen = false;
-        STORE_CONFIG.isOpen = false;
+      try {
+        const cachedAddress = localStorage.getItem('active_address_cache');
+        let cached = null;
+        if (cachedAddress) {
+          try { cached = JSON.parse(cachedAddress); } catch {}
+        }
+        const res = await apiRequest(`${API_BASE_URL}/addresses/active`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        });
+        const active = res && typeof res === 'object' ? res : null;
+        if (!active && cached) {
+          setFooterData({
+            workingHours: cached.horarios || '',
+            isOpen: cached.horarios ? String(cached.horarios).toLowerCase() !== '' : false,
+          });
+          return;
+        }
+        if (active && active.updated_at) {
+          if (cached && cached.updated_at === active.updated_at) {
+            setFooterData({
+              workingHours: cached.horarios || '',
+              isOpen: cached.horarios ? String(cached.horarios).toLowerCase() !== '' : false,
+            });
+            return;
+          }
+          localStorage.setItem('active_address_cache', JSON.stringify(active));
+        }
+        let workingHours = '';
+        let isOpen = false;
+        if (active) {
+          workingHours = active.horarios || '';
+          if (active.ativo) {
+            let ini = '', fim = '';
+            if (workingHours && (workingHours.includes('até') || workingHours.includes('-'))) {
+              if (workingHours.includes('até')) {
+                [ini, fim] = workingHours.split('até').map(s => s.trim());
+              } else if (workingHours.includes('-')) {
+                [ini, fim] = workingHours.split('-').map(s => s.trim());
+              }
+              const now = new Date();
+              const pad = (n: number) => n.toString().padStart(2, '0');
+              const nowStr = pad(now.getHours()) + ':' + pad(now.getMinutes());
+              const toMinutes = (h: string) => {
+                const [hh, mm] = h.split(':');
+                return parseInt(hh, 10) * 60 + parseInt(mm, 10);
+              };
+              const nowMin = toMinutes(nowStr);
+              const iniMin = toMinutes(ini);
+              const fimMin = toMinutes(fim);
+              isOpen = nowMin >= iniMin && nowMin <= fimMin;
+            } else {
+              isOpen = true;
+            }
+          } else {
+            isOpen = false;
+          }
+        }
+        setFooterData({
+          workingHours,
+          isOpen,
+        });
+      } catch (e) {
+        setFooterData({ workingHours: '', isOpen: false });
       }
-      if (typeof isOpen !== 'boolean') {
-        isOpen = String(isOpen).toLowerCase() === 'true';
-      }
-      setFooterData({
-        workingHours: STORE_CONFIG.workingHours,
-        isOpen,
-      });
     };
     updateStoreStatus();
-    const interval = setInterval(updateStoreStatus, 5000);
-    return () => clearInterval(interval);
+    // Escuta evento address-updated para atualizar status da loja
+    window.addEventListener('address-updated', updateStoreStatus);
+    return () => {
+      window.removeEventListener('address-updated', updateStoreStatus);
+    };
   }, []);
 
   // Sincroniza a quantidade local com o estoque disponível
@@ -249,25 +348,24 @@ const PublicMenu = () => {
   });
 
     const handleAddToCart = async (product: any, quantity: number = 1) => {
-    setIsLoading(true);
-    try {
-      // Deixa o App.tsx fazer as verificações de estoque
-      await addToCart(product, quantity);
-      setLocalQuantity(product.id, 1);
-      
-      // Força a re-busca dos produtos para atualizar o estoque na UI
-      import('../../api').then(({ api }) => {
-        api.getPublicProducts().then((products) => {
-          setPublicProducts(products);
+      setIsLoading(true);
+      try {
+        // Adiciona ao carrinho normalmente
+        await addToCart(product, quantity);
+        setLocalQuantity(product.id, 1);
+        // Força a re-busca dos produtos para atualizar o estoque na UI
+        import('../../api').then(({ api }) => {
+          api.getPublicProducts().then((products) => {
+            setPublicProducts(products);
+          });
         });
-      });
-    } catch (error) {
-      console.error('Erro ao adicionar ao carrinho:', error);
-      toast.error('Erro ao adicionar ao carrinho. Tente novamente.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      } catch (error) {
+        console.error('Erro ao adicionar ao carrinho:', error);
+        toast.error('Erro ao adicionar ao carrinho. Tente novamente.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
   const formatPrice = (price: number | undefined | null) => {
     if (price === undefined || price === null) return 'R$ 0,00';
@@ -287,16 +385,54 @@ const PublicMenu = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="text-center mb-8">
-        {storeSettings?.store_name && (
+      {/* Branch Selector */}
+      {!selectedBranch && (
+        <div className="mb-8">
+          <PublicBranchSelector 
+            selectedBranch={selectedBranch}
+            onBranchSelect={(branch) => {
+              setSelectedBranch(branch);
+              localStorage.setItem('selected_branch', JSON.stringify(branch));
+              toast.success(`Filial ${branch.name} selecionada!`);
+            }}
+          />
+        </div>
+      )}
+
+      {selectedBranch && (
+        <>
+          {/* Selected Branch Info */}
+          <Card className="mb-6 bg-primary/5 border-primary/20">
+            <CardContent className="p-4 flex justify-between items-center">
+              <div>
+                <p className="text-sm text-muted-foreground">Comprando na filial:</p>
+                <p className="font-bold text-lg">{selectedBranch.name}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedBranch(null);
+                  localStorage.removeItem('selected_branch');
+                  // Dispara evento para abrir modal no PublicLayout
+                  window.dispatchEvent(new Event('branch-change-requested'));
+                }}
+              >
+                Trocar Filial
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Header */}
+          <div className="text-center mb-8">
+        {storeConfigState?.storeName && (
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            {storeSettings.store_name}
+            {storeConfigState.storeName}
           </h1>
         )}
-        {storeSettings?.store_slogan && (
+        {storeConfigState?.slogan && (
           <p className="text-xl text-gray-600">
-            {storeSettings.store_slogan}
+            {storeConfigState.slogan}
           </p>
         )}
         {footerData.workingHours && (
@@ -362,14 +498,17 @@ const PublicMenu = () => {
           const isIndisponivel = availableStock <= 0;
           const lojaFechada = !footerData.isOpen;
           return (
-            <Card key={product.id} className={`overflow-hidden transition-shadow ${isIndisponivel || lojaFechada ? 'opacity-80 grayscale' : 'hover:shadow-lg'}`}>
-              <div className="relative">
+            <Card key={product.id} className={`overflow-hidden transition-shadow flex flex-col ${isIndisponivel || lojaFechada ? 'opacity-80 grayscale' : 'hover:shadow-lg'}`}>
+              <div className="relative flex flex-col items-center pt-4">
                 {product.imageUrl && (
-                  <img
-                    src={product.imageUrl}
-                    alt={product.name}
-                    className="w-full h-48 object-cover"
-                  />
+                  <div className="bg-white rounded-xl shadow-sm flex items-center justify-center mb-2" style={{width: '480px', height: '480px'}}>
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      className="object-contain rounded-lg"
+                      style={{maxWidth: '390px', maxHeight: '390px'}}
+                    />
+                  </div>
                 )}
                 <div className="absolute top-2 left-2 flex gap-2">
                   {product.isNew && (
@@ -583,6 +722,8 @@ const PublicMenu = () => {
             Tente ajustar os filtros ou buscar por outros termos.
           </p>
         </div>
+      )}
+        </>
       )}
     </div>
   );

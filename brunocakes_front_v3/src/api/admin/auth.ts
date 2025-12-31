@@ -21,7 +21,8 @@ export const authApi = {
           id: String(response.user.id || '1'),
           name: response.user.name || 'Admin',
           email: response.user.email || email,
-          role: 'staff' as const,
+          role: response.user.role || 'employee', // Pega role real do backend
+          branch_id: response.user.branch_id || null,
           created_at: response.user.created_at || new Date().toISOString(),
           updated_at: response.user.updated_at || new Date().toISOString(),
         };
@@ -32,7 +33,8 @@ export const authApi = {
           id: '1',
           name: 'Admin',
           email: email,
-          role: 'staff' as const,
+          role: 'employee', // Fallback para employee
+          branch_id: null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };

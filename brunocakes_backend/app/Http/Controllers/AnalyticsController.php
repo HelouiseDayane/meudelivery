@@ -15,8 +15,9 @@ class AnalyticsController extends Controller
     public function index(): JsonResponse
     {
         // ✅ Vendas por dia (últimos 30 dias)
+        $validStatuses = ['confirmed', 'completed', 'delivered'];
         $salesByDay = Order::selectRaw('DATE(created_at) as date, SUM(total_amount) as amount')
-            ->where('status', '!=', 'canceled')
+            ->whereIn('status', $validStatuses)
             ->where('created_at', '>=', now()->subDays(30))
             ->groupBy('date')
             ->orderBy('date', 'desc')
@@ -56,7 +57,7 @@ class AnalyticsController extends Controller
             });
 
         // ✅ Receita total
-        $totalRevenue = Order::where('status', '!=', 'canceled')->sum('total_amount');
+        $totalRevenue = Order::whereIn('status', $validStatuses)->sum('total_amount');
 
         // ✅ Top produtos do mês atual
         $topProductsMonth = OrderItem::select([
@@ -103,22 +104,34 @@ class AnalyticsController extends Controller
 
         // ✅ Cálculos para statistics
         $totalOrders = Order::where('status', '!=', 'canceled')->count();
-        $totalProducts = Product::where('is_active', true)->count();
+        $products = Product::all();
+        $activeProducts = $products->where('is_active', 1);
+        $totalProducts = $activeProducts->count();
+        $availableProducts = $activeProducts->filter(function($p) {
+            return intval($p->quantity) > 0;
+        })->count();
+        $lowStockProducts = $activeProducts->filter(function($p) {
+            $q = intval($p->quantity);
+            return $q > 0 && $q <= 5;
+        })->count();
+        $outOfStockProducts = $activeProducts->filter(function($p) {
+            return intval($p->quantity) === 0;
+        })->count();
         $pendingOrders = Order::where('status', 'pending_payment')->count();
         
         // ✅ Vendas de hoje
-        $todaySales = Order::where('status', '!=', 'canceled')
+        $todaySales = Order::whereIn('status', $validStatuses)
             ->whereDate('created_at', today())
             ->sum('total_amount');
 
         // ✅ Vendas deste mês
-        $thisMonthSales = Order::where('status', '!=', 'canceled')
+        $thisMonthSales = Order::whereIn('status', $validStatuses)
             ->whereMonth('created_at', now()->month)
             ->whereYear('created_at', now()->year)
             ->sum('total_amount');
 
         // ✅ Vendas deste ano
-        $thisYearSales = Order::where('status', '!=', 'canceled')
+        $thisYearSales = Order::whereIn('status', $validStatuses)
             ->whereYear('created_at', now()->year)
             ->sum('total_amount');
 
@@ -137,6 +150,12 @@ class AnalyticsController extends Controller
                 'totalOrders' => $totalOrders,
                 'totalProducts' => $totalProducts,
                 'pendingOrders' => $pendingOrders,
+            ],
+            'product_metrics' => [
+                'available_products' => $availableProducts,
+                'low_stock_products' => $lowStockProducts,
+                'out_of_stock_products' => $outOfStockProducts,
+                'total_products' => $totalProducts,
             ]
         ]);
     }
@@ -169,9 +188,10 @@ class AnalyticsController extends Controller
     public function customerAnalytics()
     {
         // Exemplo básico, adapte conforme sua lógica
+        $validStatuses = ['confirmed', 'completed', 'delivered'];
         $topClients = Order::select('customer_name as name', 'customer_email as email')
             ->selectRaw('COUNT(*) as totalOrders, SUM(total_amount) as totalSpent, MAX(created_at) as lastOrderDate')
-            ->where('status', 'confirmed')
+            ->whereIn('status', $validStatuses)
             ->groupBy('customer_email', 'customer_name')
             ->orderByDesc('totalSpent')
             ->limit(20)

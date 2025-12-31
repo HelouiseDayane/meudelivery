@@ -1,7 +1,7 @@
 
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { STORE_CONFIG, fetchAndSetActiveAddress, fetchAllAddresses, fetchStoreSettings, updateStoreConfig, apiRequest } from '../../api';
+import { STORE_CONFIG, fetchAndSetActiveAddress, fetchStoreSettings, updateStoreConfig, apiRequest } from '../../api';
 import { ShoppingCart, Package, Search } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -11,6 +11,8 @@ import { usePWA } from '../../hooks/usePWA';
 import { useStoreConfig } from '../../hooks/useStoreConfig';
 import { useStoreConfigState } from '../../hooks/useStoreConfigState';
 import { ThemeTestComponent, useThemeTest } from '../ThemeTestComponent';
+import { BranchSelectionModal } from '../public/BranchSelectionModal';
+import { Branch } from '../../types/admin';
 
 export const PublicLayout = () => {
   // Listener global para garantir atualização dos cards em todas as rotas sem reload
@@ -29,8 +31,7 @@ export const PublicLayout = () => {
   const { isMobile } = usePWA();
   const { showThemeTest } = useThemeTest();
   
-  // Hook para gerenciar configurações da loja
-  useStoreConfig();
+  // useStoreConfig removido para evitar múltiplas requisições
   
   // Hook reativo para configurações da loja
   const storeConfigState = useStoreConfigState();
@@ -38,14 +39,45 @@ export const PublicLayout = () => {
   // Estado local para endereços, sem travar renderização global
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [allAddresses, setAllAddresses] = useState<any[]>([]);
+  
+  // Estado para controle de seleção de filial
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
 
+  // Verificar se já tem filial selecionada no localStorage
   useEffect(() => {
-    setLoadingAddress(true);
-    fetchAllAddresses(apiRequest)
-      .then(setAllAddresses)
-      .catch(() => setAllAddresses([]))
-      .finally(() => setLoadingAddress(false));
-  }, [storeConfigState]);
+    const savedBranch = localStorage.getItem('selected_branch');
+    if (savedBranch) {
+      try {
+        setSelectedBranch(JSON.parse(savedBranch));
+        setShowBranchModal(false);
+      } catch (e) {
+        setShowBranchModal(true);
+      }
+    } else {
+      setShowBranchModal(true);
+    }
+  }, []);
+
+  // Listener para evento de troca de filial
+  useEffect(() => {
+    const handleBranchChange = () => {
+      setSelectedBranch(null);
+      setShowBranchModal(true);
+    };
+    window.addEventListener('branch-change-requested', handleBranchChange);
+    return () => {
+      window.removeEventListener('branch-change-requested', handleBranchChange);
+    };
+  }, []);
+
+  const handleBranchSelect = (branch: Branch) => {
+    setSelectedBranch(branch);
+    localStorage.setItem('selected_branch', JSON.stringify(branch));
+    setShowBranchModal(false);
+    // Dispara evento para notificar outros componentes
+    window.dispatchEvent(new Event('branch-updated'));
+  };
 
   const cartItemsCount = cart.reduce((total, item) => total + item.quantity, 0);
 
@@ -156,7 +188,7 @@ export const PublicLayout = () => {
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-2">Contato</h4>
+              <h4 className="font-semibold mb-2">Contatos</h4>
               <p className="text-muted-foreground">
                 {storeConfigState.phone && (
                   <span>
@@ -202,6 +234,13 @@ export const PublicLayout = () => {
           </div>
         </div>
       </footer>
+      
+      {/* Modal de Seleção de Filial - Obrigatório ao acessar o site */}
+      <BranchSelectionModal 
+        open={showBranchModal}
+        onBranchSelect={handleBranchSelect}
+        allowClose={!!selectedBranch}
+      />
       
       {/* Componente de teste de tema - só aparece em desenvolvimento */}
       {showThemeTest && (import.meta as any).env.DEV && <ThemeTestComponent />}

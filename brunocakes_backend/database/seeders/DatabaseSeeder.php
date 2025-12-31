@@ -11,9 +11,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Chama o UserSeeder
+        // Chama os seeders na ordem correta
         $this->call([
-            UserSeeder::class,
+            BranchSeeder::class,  // Primeiro criar as filiais
+            UserSeeder::class,    // Depois criar os usuários vinculados às filiais
         ]);
     }
 }

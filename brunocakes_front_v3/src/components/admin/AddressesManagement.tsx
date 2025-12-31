@@ -5,6 +5,8 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import adminApi from '../../api/admin';
+import { Branch } from '../../types/admin';
 
 interface Address {
   id: string;
@@ -17,6 +19,12 @@ interface Address {
   horario_abertura?: string;
   horario_fechamento?: string;
   ativo?: boolean;
+  branch_id?: number;
+  branch?: {
+    id: number;
+    name: string;
+    code: string;
+  };
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -50,17 +58,26 @@ export function AddressesManagement() {
     return null;
   }
   const [addresses, setAddresses] = useState<Address[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Address | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  
+  const currentAdmin = JSON.parse(localStorage.getItem('bruno_admin') || '{}');
+  const isMaster = currentAdmin?.role === 'master';
+  const userBranchId = currentAdmin?.branch_id;
+  
+  console.log('🏢 Estado atual de branches:', branches);
+  console.log('👤 Usuário atual:', { role: currentAdmin?.role, branch_id: userBranchId });
+  
   const estados = [
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
     'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
     'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
   ];
   const [form, setForm] = useState<Omit<Address, 'id'> & { latitude?: string; longitude?: string }>({
-    rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '', latitude: '', longitude: ''
+    rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '', latitude: '', longitude: '', branch_id: isMaster ? undefined : userBranchId
   });
   // Preencher endereço via geolocalização
   const handleFillAddressByLocation = async () => {
@@ -120,10 +137,12 @@ export function AddressesManagement() {
       setAddresses(
         (Array.isArray(data) ? data : []).map((a: any) => {
           let horario_abertura = '', horario_fechamento = '';
-          if (a.horarios && typeof a.horarios === 'string' && a.horarios.includes('até')) {
-            const [ini, fim] = a.horarios.split('até').map((s: string) => s.trim());
-            horario_abertura = ini;
-            horario_fechamento = fim;
+          if (a.horarios && typeof a.horarios === 'string' && (a.horarios.includes('até') || a.horarios.includes('-'))) {
+            if (a.horarios.includes('até')) {
+              [horario_abertura, horario_fechamento] = a.horarios.split('até').map((s: string) => s.trim());
+            } else if (a.horarios.includes('-')) {
+              [horario_abertura, horario_fechamento] = a.horarios.split('-').map((s: string) => s.trim());
+            }
           } else {
             horario_abertura = a.horario_abertura || '';
             horario_fechamento = a.horario_fechamento || '';
@@ -190,7 +209,24 @@ export function AddressesManagement() {
     }
   };
 
-  useEffect(() => { fetchAddresses(); }, []);
+  useEffect(() => { 
+    fetchAddresses(); 
+    fetchBranches();
+  }, []);
+  
+  const fetchBranches = async () => {
+    // Apenas master precisa carregar lista de filiais
+    if (!isMaster) return;
+    
+    try {
+      const data = await adminApi.get('/admin/branches');
+      console.log('🔍 Filiais carregadas:', data);
+      setBranches(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Erro ao carregar filiais:', error);
+      setBranches([]);
+    }
+  };
 
   // Handlers de formulário
   const handleChange = (
@@ -212,6 +248,7 @@ export function AddressesManagement() {
       horario_fechamento: address.horario_fechamento || '',
       latitude: (address as any).latitude || '',
       longitude: (address as any).longitude || '',
+      branch_id: address.branch_id,
     });
   };
 
@@ -277,6 +314,18 @@ export function AddressesManagement() {
       <h1 className="text-2xl font-bold mb-4">Gerenciar Endereços</h1>
       <p className="text-muted-foreground mb-4">Cadastre, edite e remova endereços de retirada ou entrega.</p>
 
+      {/* Informação da filial para funcionários/admins */}
+      {!isMaster && userBranchId && (
+        <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-800">
+            <strong>📍 Você está gerenciando endereços da sua filial</strong>
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            Todos os endereços criados serão automaticamente vinculados à sua filial.
+          </p>
+        </div>
+      )}
+
       {/* Formulário de cadastro/edição */}
       <form onSubmit={handleSubmit} className="mb-6 space-y-2 bg-white p-4 rounded shadow">
   <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -338,6 +387,23 @@ export function AddressesManagement() {
               <option key={uf} value={uf}>{uf}</option>
             ))}
           </select>
+          
+          {/* Campo de seleção de filial apenas para master */}
+          {isMaster && (
+            <select
+              name="branch_id"
+              value={form.branch_id || ''}
+              onChange={(e) => setForm({ ...form, branch_id: e.target.value ? parseInt(e.target.value) : undefined })}
+              required
+              style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}}
+            >
+              <option value="">Selecione a filial</option>
+              {branches.map(branch => (
+                <option key={branch.id} value={branch.id}>{branch.name} ({branch.code})</option>
+              ))}
+            </select>
+          )}
+          
           <input name="ponto_referencia" value={form.ponto_referencia} onChange={handleChange} placeholder="Ponto de Referência" style={{border:'1px solid #ccc',borderRadius:4,padding:8,marginBottom:4}} />
           <input
             type="time"
@@ -463,11 +529,15 @@ export function AddressesManagement() {
                         }}
                         disabled={loading}
                         onClick={async () => {
-                          setLoading(true);
-                          await fetch(`${API_BASE_URL}/admin/addresses/${address.id}/activate`, { method: 'PATCH', headers: getHeaders() });
-                          await fetchAddresses();
-                          setLoading(false);
-                        }}
+                            setLoading(true);
+                            await fetch(`${API_BASE_URL}/admin/addresses/${address.id}/activate`, { method: 'PATCH', headers: getHeaders() });
+                            await fetchAddresses();
+                            setLoading(false);
+                            // Dispara evento global ao ativar checkout
+                            if (!address.ativo) {
+                              window.dispatchEvent(new Event('address-updated'));
+                            }
+                          }}
                         title={address.ativo ? 'Desligar checkout' : 'Ligar checkout'}
                       >
                         <span style={{

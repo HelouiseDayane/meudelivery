@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
+use App\Models\Products;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 
@@ -49,9 +51,20 @@ class DashboardController extends Controller
      *      )
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
+    $user = $request->user();
     $today = now()->toDateString();
+
+    // Determinar qual filial filtrar
+    $branchId = null;
+    if ($user->isMaster()) {
+        // Master pode ver todas ou escolher uma filial específica
+        $branchId = $request->query('branch_id');
+    } else {
+        // Admin e Employee veem apenas sua filial
+        $branchId = $user->branch_id;
+    }
 
     // === MÉTRICAS DE ENGAJAMENTO ===
     // 1. Carrinhos com produtos (mock: Redis ou tabela carts, aqui exemplo Redis)
@@ -91,34 +104,41 @@ class DashboardController extends Controller
     }
 
     // Considera apenas pedidos não cancelados e pagamento confirmado ou pago
+    $validOrderStatus = ['confirmed', 'completed', 'delivered'];
 
-    $validOrderStatus = ['confirmed', 'completed'];
-
+    // Aplicar filtro de filial em todas as queries de Orders
     $salesByDay = Order::whereDate('created_at', $today)
         ->whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->sum('total_amount');
 
     $ordersByDay = Order::whereDate('created_at', $today)
         ->whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->count();
 
     $salesByMonth = Order::whereMonth('created_at', now()->month)
         ->whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->sum('total_amount');
 
     $ordersByMonth = Order::whereMonth('created_at', now()->month)
         ->whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->count();
 
     $salesByYear = Order::whereYear('created_at', now()->year)
         ->whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->sum('total_amount');
 
     // ✅ Top produtos (somente confirmados ou pagos)
-
     $topProductWeek = OrderItem::select('product_name', DB::raw('SUM(quantity) as qty'))
-        ->whereHas('order', function($q) use ($validOrderStatus) {
+        ->whereHas('order', function($q) use ($validOrderStatus, $branchId) {
             $q->whereIn('status', $validOrderStatus);
+            if ($branchId) {
+                $q->where('branch_id', $branchId);
+            }
         })
         ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
         ->groupBy('product_name')
@@ -126,51 +146,94 @@ class DashboardController extends Controller
         ->first();
 
     $topProductsMonth = OrderItem::select('product_name as name', DB::raw('SUM(quantity) as quantity'), DB::raw('SUM(total_price) as revenue'))
-        ->whereHas('order', function($q) use ($validOrderStatus) {
+        ->whereHas('order', function($q) use ($validOrderStatus, $branchId) {
             $q->whereIn('status', $validOrderStatus);
             $q->whereMonth('created_at', now()->month);
+            if ($branchId) {
+                $q->where('branch_id', $branchId);
+            }
         })
         ->groupBy('product_name')
         ->orderByDesc('quantity')
         ->limit(5)
         ->get();
+        
     // ✅ Top bairro (somente confirmados ou pagos)
-
     $neighborhoodsSales = Order::select('address_neighborhood as neighborhood', DB::raw('COUNT(*) as sales'), DB::raw('SUM(total_amount) as revenue'))
         ->whereNotNull('address_neighborhood')
         ->where('address_neighborhood', '!=', '')
         ->whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->groupBy('address_neighborhood')
         ->orderByDesc('sales')
         ->limit(10)
         ->get();
 
     // ✅ Faturamento total (somente confirmados ou pagos)
-
     $totalRevenue = Order::whereIn('status', $validOrderStatus)
+        ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
         ->sum('total_amount');
 
     // ✅ Estatísticas de tickets (status puro da ordem, não do pagamento)
     $ticketStats = [
-        'total_created' => Order::count(),
-        'pending_payment' => Order::where('status', 'pending_payment')->count(),
-        'awaiting_confirmation' => Order::where('status', 'awaiting_seller_confirmation')->count(),
-        'confirmed' => Order::where('status', 'confirmed')->count(),
-        'completed' => Order::where('status', 'completed')->count(),
-        'canceled' => Order::where('status', 'canceled')->count(),
+        'total_created' => Order::when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
+        'pending_payment' => Order::where('status', 'pending_payment')->when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
+        'awaiting_confirmation' => Order::where('status', 'awaiting_seller_confirmation')->when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
+        'confirmed' => Order::where('status', 'confirmed')->when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
+        'completed' => Order::where('status', 'completed')->when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
+        'canceled' => Order::where('status', 'canceled')->when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
         // Estatísticas de pagamento
         'payments_pending' => Payment::where('status', 'pending')->count(),
         'payments_paid' => Payment::where('status', 'paid')->count(),
         'payments_failed' => Payment::where('status', 'failed')->count(),
         // Estatísticas do mês atual
-        'tickets_this_month' => Order::whereMonth('created_at', now()->month)->count(),
+        'tickets_this_month' => Order::whereMonth('created_at', now()->month)->when($branchId, fn($q) => $q->where('branch_id', $branchId))->count(),
         'paid_this_month' => Order::whereMonth('created_at', now()->month)
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->whereHas('payment', function($query) {
                 $query->where('status', 'paid');
             })->count(),
         'canceled_this_month' => Order::whereMonth('created_at', now()->month)
-            ->where('status', 'canceled')->count(),
+            ->where('status', 'canceled')
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->count(),
     ];
+
+    // === MÉTRICAS DE ESTOQUE ===
+    $lowStockThreshold = 3;
+    $lowStockProducts = 0;
+    $outOfStockProducts = 0;
+    $availableProducts = 0;
+    $totalProducts = 0;
+    
+    // Buscar produtos com seus estoques por filial
+    $productsQuery = \App\Models\Product::where('is_active', true)
+        ->with(['stocks' => function($query) use ($branchId) {
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            }
+        }]);
+    
+    if ($branchId) {
+        // Se filtrar por filial, só conta produtos dessa filial
+        $productsQuery->where('branch_id', $branchId);
+    }
+    
+    $products = $productsQuery->get();
+        
+    foreach ($products as $product) {
+        // Calcular estoque real somando todos os stocks da filial filtrada
+        $realStock = $product->stocks->sum('quantity');
+        $totalProducts++;
+        
+        if ($realStock > $lowStockThreshold) {
+            $availableProducts++;
+        } elseif ($realStock > 0 && $realStock <= $lowStockThreshold) {
+            $lowStockProducts++;
+        } elseif ($realStock == 0) {
+            $outOfStockProducts++;
+        }
+    }
 
     return response()->json([
         'sales_today' => $salesByDay,
@@ -188,6 +251,14 @@ class DashboardController extends Controller
             'unique_visitors' => $uniqueVisitors,
             'pwa_installs' => $pwaInstalls,
         ],
+        'product_metrics' => [
+            'available_products' => $availableProducts,
+            'low_stock_products' => $lowStockProducts,
+            'out_of_stock_products' => $outOfStockProducts,
+            'total_products' => $totalProducts,
+        ],
+        'filtered_by_branch' => $branchId,
+        'user_role' => $user->role,
     ]);
     }
 

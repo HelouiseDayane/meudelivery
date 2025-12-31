@@ -60,19 +60,19 @@ function isOpenNow(horarios: string): boolean {
 // Função para buscar o endereço ativo do backend e atualizar STORE_CONFIG
 export const fetchAndSetActiveAddress = async (apiRequest: (url: string, options?: RequestInit) => Promise<any>) => {
   try {
-    // Busca apenas o endereço ativo
-    const active = await apiRequest(PUBLIC_API_ENDPOINTS.addresses.active, {
+    // Busca todos os endereços públicos
+    const addresses = await apiRequest(`${PUBLIC_API_ENDPOINTS.addresses.list || PUBLIC_API_ENDPOINTS.addresses.public || PUBLIC_API_ENDPOINTS.addresses.all || PUBLIC_API_ENDPOINTS.addresses}`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
+    // Filtra o endereço ativo
+    const active = Array.isArray(addresses) ? addresses.find((a: any) => a.ativo) : null;
     if (active && active.rua) {
       const fullAddress = `${active.rua}, ${active.numero} - ${active.bairro}, ${active.cidade} - ${active.estado}`;
       STORE_CONFIG.address = fullAddress;
       let horarios = active.horarios || '';
-      
       STORE_CONFIG.workingHours = horarios;
       const isOpen = horarios ? isOpenNow(horarios) : false;
-      
       STORE_CONFIG.isOpen = isOpen;
       return fullAddress;
     }
@@ -91,13 +91,12 @@ export const fetchAndSetActiveAddress = async (apiRequest: (url: string, options
 // Busca todos os endereços públicos
 export const fetchAllAddresses = async (apiRequest: (url: string, options?: RequestInit) => Promise<any>) => {
   try {
-    // Busca apenas o endereço ativo (ajuste para refletir o backend)
-    const res = await apiRequest(PUBLIC_API_ENDPOINTS.addresses.active, {
+    // Busca todos os endereços públicos
+    const addresses = await apiRequest(`${PUBLIC_API_ENDPOINTS.addresses.list || PUBLIC_API_ENDPOINTS.addresses.public || PUBLIC_API_ENDPOINTS.addresses.all || PUBLIC_API_ENDPOINTS.addresses}`, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
-    // Retorna como array para manter compatibilidade
-    return res ? [res] : [];
+    return Array.isArray(addresses) ? addresses : [];
   } catch (e) {
     return [];
   }

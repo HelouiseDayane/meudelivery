@@ -8,6 +8,13 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
+import { ProductStockModal } from './ProductStockModal';
+
+interface Branch {
+  id: number;
+  name: string;
+  code: string;
+}
 
 interface Product {
   id: string;
@@ -29,6 +36,14 @@ interface Product {
   available?: boolean;
   isPromotion?: boolean;
   isNew?: boolean;
+  branch_id?: number;
+  stocks?: Array<{
+    id: number;
+    product_id: number;
+    branch_id: number;
+    quantity: number;
+    branch?: Branch;
+  }>;
 }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
@@ -45,6 +60,17 @@ export function ProductsManagement() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [editingStock, setEditingStock] = useState<{ productId: string; value: string } | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [stockModalOpen, setStockModalOpen] = useState(false);
+  const [selectedProductForStock, setSelectedProductForStock] = useState<{ id: string; name: string } | null>(null);
+  const [branchStocks, setBranchStocks] = useState<{ [branchId: number]: number }>({});
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  const currentAdmin = JSON.parse(localStorage.getItem('bruno_admin') || '{}');
+  const isMaster = currentAdmin?.role === 'master';
+  const isAdmin = currentAdmin?.role === 'admin';
+  const isEmployee = currentAdmin?.role === 'employee';
+  const userBranchId = currentAdmin?.branch_id;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -58,9 +84,40 @@ export function ProductsManagement() {
     expiryDate: '',
     isPromotion: false,
     isNew: false,
+    branch_id: isMaster ? undefined : userBranchId,
   });
 
   const categories = [...new Set(adminProducts.map((p: any) => p.category).filter((cat: string) => cat && cat.trim() !== ''))];
+  
+  // Carregar filiais se for master
+  useEffect(() => {
+    if (isMaster) {
+      fetchBranches();
+    }
+  }, [isMaster]);
+  
+  const fetchBranches = async () => {
+    try {
+      const data = await adminApi.get('/admin/branches');
+      const branchList = Array.isArray(data) ? data : [];
+      setBranches(branchList);
+      
+      // Inicializar estoques com 0 para cada filial
+      const initialStocks: { [key: number]: number } = {};
+      branchList.forEach(branch => {
+        initialStocks[branch.id] = 0;
+      });
+      
+      // Se não for master, definir estoque apenas para a filial do admin
+      if (!isMaster && userBranchId) {
+        setBranchStocks({ [userBranchId]: 0 });
+      } else {
+        setBranchStocks(initialStocks);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar filiais:', error);
+    }
+  };
 
   // Função para formatar valor monetário brasileiro
   const formatCurrency = (value: string) => {
@@ -110,6 +167,17 @@ export function ProductsManagement() {
       isNew: false,
     });
     setEditingProduct(null);
+    
+    // Resetar estoques por filial
+    const initialStocks: { [key: number]: number } = {};
+    branches.forEach(branch => {
+      initialStocks[branch.id] = 0;
+    });
+    if (!isMaster && userBranchId) {
+      setBranchStocks({ [userBranchId]: 0 });
+    } else {
+      setBranchStocks(initialStocks);
+    }
   };
 
   const handleEdit = (product: any) => {
@@ -134,21 +202,23 @@ const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
 
   // Validações
-  if (!formData.name.trim() || !formData.description.trim() || !formData.price.trim() || !formData.category.trim() || !formData.stock.trim()) {
+  if (!formData.name.trim() || !formData.description.trim() || !formData.price.trim() || !formData.category.trim()) {
     toast.error('Todos os campos obrigatórios devem ser preenchidos');
+    return;
+  }
+
+  // Validar que pelo menos uma filial tenha estoque > 0
+  const totalStock = Object.values(branchStocks).reduce((sum, qty) => sum + qty, 0);
+  if (totalStock === 0) {
+    toast.error('Adicione quantidade em pelo menos uma filial');
     return;
   }
 
   const priceValue = parseFloat(formData.price.replace(/[^\d,]/g, '').replace(',', '.'));
   const promotionPriceValue = formData.promotionPrice ? parseFloat(formData.promotionPrice.replace(/[^\d,]/g, '').replace(',', '.')) : null;
-  const stockValue = parseInt(formData.stock);
 
   if (isNaN(priceValue) || priceValue <= 0) {
     toast.error('Preço inválido');
-    return;
-  }
-  if (isNaN(stockValue) || stockValue < 0) {
-    toast.error('Estoque inválido');
     return;
   }
   if (formData.isPromotion && (!promotionPriceValue || promotionPriceValue >= priceValue)) {
@@ -161,10 +231,11 @@ const handleSubmit = async (e: React.FormEvent) => {
     description: formData.description.trim(),
     price: priceValue,
     category: formData.category.trim(),
-    quantity: stockValue,
+    quantity: totalStock, // Total para o produto
     is_promo: formData.isPromotion,
     is_new: formData.isNew,
     is_active: formData.available,
+    branch_id: isMaster ? Object.keys(branchStocks)[0] : userBranchId, // Primeira filial ou filial do admin
   };
 
   if (promotionPriceValue) productData.promotion_price = promotionPriceValue;
@@ -181,8 +252,20 @@ const handleSubmit = async (e: React.FormEvent) => {
     } else {
       // Cria novo produto
       const newProduct = await adminApi.createProduct(productData);
+      
+      // Criar estoques por filial
+      const stocksToCreate = Object.entries(branchStocks)
+        .filter(([_, qty]) => qty > 0)
+        .map(([branchId, quantity]) => ({ branch_id: parseInt(branchId), quantity }));
+      
+      if (stocksToCreate.length > 0) {
+        await adminApi.post(`/admin/products/${newProduct.id}/stocks/bulk`, {
+          stocks: stocksToCreate
+        });
+      }
+      
       setAdminProducts([newProduct, ...adminProducts]); // adiciona no topo da tabela
-      toast.success('Produto criado com sucesso!');
+      toast.success('Produto criado com sucesso em todas as filiais!');
     }
 
     resetForm();
@@ -292,21 +375,22 @@ const handleSubmit = async (e: React.FormEvent) => {
         </div>
         
         <div className="flex gap-2">
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Novo Doce
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingProduct ? 'Editar Doce' : 'Novo Doce'}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={async (e) => {
-                await handleSubmit(e);
+            {(isMaster || isAdmin) && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={resetForm}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Novo Doce
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingProduct ? 'Editar Doce' : 'Novo Doce'}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={async (e) => {
+                  await handleSubmit(e);
                 // Atualiza lista de produtos automaticamente após criar/editar
                 await refreshProducts();
               }} className="space-y-6">
@@ -429,28 +513,82 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </div>
               </div>
 
-              {/* Stock and Expiry */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="stock">Quantidade em Estoque *</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    value={formData.stock}
-                    onChange={(e) => setFormData(prev => ({ ...prev, stock: e.target.value }))}
-                    placeholder="0"
-                    required
-                  />
+              {/* Estoques por Filial */}
+              <div>
+                <Label className="text-base font-semibold mb-3 block">
+                  Estoque por Filial *
+                </Label>
+                <div className="border rounded-lg p-4 bg-gray-50 space-y-3">
+                  {isMaster ? (
+                    // Master vê todas as filiais
+                    branches.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {branches.map(branch => (
+                          <div key={branch.id} className="flex items-center gap-3 bg-white p-3 rounded-md border">
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{branch.name}</p>
+                              <p className="text-xs text-muted-foreground">{branch.code}</p>
+                            </div>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={branchStocks[branch.id] || 0}
+                              onChange={(e) => setBranchStocks(prev => ({
+                                ...prev,
+                                [branch.id]: parseInt(e.target.value) || 0
+                              }))}
+                              className="w-24 text-center"
+                              placeholder="0"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Carregando filiais...
+                      </p>
+                    )
+                  ) : (
+                    // Admin vê apenas sua filial
+                    userBranchId && (
+                      <div className="flex items-center gap-3 bg-white p-3 rounded-md border">
+                        <div className="flex-1">
+                          <p className="font-medium">Sua Filial</p>
+                          <p className="text-xs text-muted-foreground">
+                            {branches.find(b => b.id === userBranchId)?.name || 'Filial Principal'}
+                          </p>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={branchStocks[userBranchId] || 0}
+                          onChange={(e) => setBranchStocks({
+                            [userBranchId]: parseInt(e.target.value) || 0
+                          })}
+                          className="w-24 text-center"
+                          placeholder="0"
+                        />
+                      </div>
+                    )
+                  )}
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <span className="text-sm font-medium">Total Geral:</span>
+                    <span className="text-lg font-bold text-primary">
+                      {Object.values(branchStocks).reduce((sum, qty) => sum + qty, 0)} unidades
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="expiryDate">Data de Validade</Label>
-                  <Input
-                    id="expiryDate"
-                    type="date"
-                    value={formData.expiryDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, expiryDate: e.target.value }))}
-                  />
-                </div>
+              </div>
+
+              {/* Data de Validade */}
+              <div>
+                <Label htmlFor="expiryDate">Data de Validade</Label>
+                <Input
+                  id="expiryDate"
+                  type="date"
+                  value={formData.expiryDate}
+                  onChange={(e) => setFormData(prev => ({ ...prev, expiryDate: e.target.value }))}
+                />
               </div>
 
               {/* Image Upload */}
@@ -518,6 +656,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             </form>
           </DialogContent>
         </Dialog>
+      )}
       </div>
       </div>
 
@@ -585,7 +724,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <TableHead>Produto</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Preço</TableHead>
-                <TableHead>Estoque</TableHead>
+                <TableHead>Estoque Total</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Validade</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -598,7 +737,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-md overflow-hidden">
                         <ImageWithFallback
-                          src={getProductImageUrl(product.image_url || product.image)}
+                          src={product.image_url || getProductImageUrl(product.image)}
                           alt={product.name}
                           className="w-full h-full object-cover"
                         />
@@ -649,54 +788,29 @@ const handleSubmit = async (e: React.FormEvent) => {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-muted-foreground" />
-                      {editingStock?.productId === product.id ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            type="number"
-                            value={editingStock?.value || ''}
-                            onChange={(e) => setEditingStock({ 
-                              productId: product.id, 
-                              value: e.target.value 
-                            })}
-                            className="w-16 h-6 text-xs"
-                            min="0"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && editingStock) {
-                                handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
-                                setEditingStock(null);
-                              } else if (e.key === 'Escape') {
-                                setEditingStock(null);
-                              }
-                            }}
-                            autoFocus
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              if (editingStock) {
-                                handleQuickStockUpdate(product.id, parseInt(editingStock.value) || 0);
-                                setEditingStock(null);
-                              }
-                            }}
-                            className="h-6 w-6 p-0"
-                          >
-                            ✓
-                          </Button>
-                        </div>
-                      ) : (
-                        <span 
-                          className="font-medium cursor-pointer hover:bg-muted px-1 rounded"
-                          onClick={() => setEditingStock({ 
-                            productId: product.id, 
-                            value: (product.stock || product.quantity || 0).toString() 
-                          })}
-                          title="Clique para editar"
-                        >
-                          {product.stock || product.quantity || 0}
+                      <div className="flex flex-col">
+                        <span className="font-medium">
+                          {product.stocks?.reduce((sum: number, stock: any) => sum + stock.quantity, 0) || product.stock || product.quantity || 0}
                         </span>
+                        {product.stocks && product.stocks.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {product.stocks.length} {product.stocks.length === 1 ? 'filial' : 'filiais'}
+                          </span>
+                        )}
+                      </div>
+                      {(isMaster || isAdmin) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedProductForStock({ id: product.id, name: product.name });
+                            setStockModalOpen(true);
+                          }}
+                          className="h-6 text-xs"
+                        >
+                          Gerenciar
+                        </Button>
                       )}
-                      {getStockBadge(product.stock || product.quantity || 0)}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -729,14 +843,16 @@ const handleSubmit = async (e: React.FormEvent) => {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(product)}
-                        title="Editar produto"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
+                      {(isMaster || isAdmin) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEdit(product)}
+                          title="Editar produto"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -745,6 +861,24 @@ const handleSubmit = async (e: React.FormEvent) => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Modal de Gestão de Estoques */}
+      {selectedProductForStock && (
+        <ProductStockModal
+          key={`stock-modal-${selectedProductForStock.id}-${refreshKey}`}
+          open={stockModalOpen}
+          onClose={async () => {
+            setStockModalOpen(false);
+            setSelectedProductForStock(null);
+            await refreshProducts(); // Atualizar lista após fechar modal
+            setRefreshKey(prev => prev + 1); // Forçar re-renderização
+          }}
+          productId={selectedProductForStock.id}
+          productName={selectedProductForStock.name}
+          userRole={currentAdmin?.role || 'employee'}
+          userBranchId={userBranchId}
+        />
+      )}
     </div>
   );
 }

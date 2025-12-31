@@ -7,12 +7,12 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!admin || admin.role !== 'staff') {
+    if (!admin || !['master', 'admin', 'employee'].includes(admin.role)) {
       navigate('/admin/login');
     }
   }, [admin, navigate]);
 
-  if (!admin || admin.role !== 'staff') {
+  if (!admin || !['master', 'admin', 'employee'].includes(admin.role)) {
     return null;
   }
 

@@ -63,6 +63,16 @@ export const Checkout = () => {
       // Obter session ID do localStorage
       const sessionId = localStorage.getItem('bruno_session_id') || '';
       
+      // Obter filial selecionada
+      const savedBranch = localStorage.getItem('selected_branch');
+      if (!savedBranch) {
+        toast.error('Por favor, selecione uma filial antes de finalizar o pedido');
+        navigate('/');
+        return;
+      }
+      
+      const selectedBranch = JSON.parse(savedBranch);
+      
       // Validar estrutura do carrinho
       const validatedItems = cart.filter(item => item?.product?.id).map(item => {
         const price = item.product.isPromotion ? item.product.promotionPrice || item.product.price : item.product.price;
@@ -81,6 +91,7 @@ export const Checkout = () => {
       
       const orderData = {
         session_id: sessionId,
+        branch_id: selectedBranch.id,
         customer_name: customerData.name,
         customer_email: customerData.email,
         customer_phone: customerData.phone,

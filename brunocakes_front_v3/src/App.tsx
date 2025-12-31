@@ -16,7 +16,7 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ProductsManagement } from './components/admin/ProductsManagement';
 import { OrdersManagement } from './components/admin/OrdersManagement';
 import ClientsManagement from './components/admin/ClientsManagement';
-import { StoreSettings } from './components/admin/StoreSettings';
+import { Settings } from './components/admin/Settings';
 import { PublicMenu } from './components/public/PublicMenu';
 import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
@@ -28,7 +28,8 @@ interface Admin {
   id: string;
   name: string;
   email: string;
-  role: 'staff';
+  role: 'master' | 'admin' | 'employee'; // Roles do sistema
+  branch_id?: number | null; // ID da filial
 }
 
 interface Product {
@@ -189,7 +190,7 @@ function AppProvider({ children }: { children: ReactNode }) {
     return savedSessionId;
   });
 
-  const isAdminAuthenticated = admin?.role === 'staff';
+  const isAdminAuthenticated = admin && ['master', 'admin', 'employee'].includes(admin.role);
 
   // Load cart from localStorage
   useEffect(() => {
@@ -446,10 +447,13 @@ function AppProvider({ children }: { children: ReactNode }) {
   const refreshProducts = async () => {
     try {
       if (isAdminAuthenticated) {
-        const adminProducts = await adminApi.getProducts();
-        const mappedProducts = Array.isArray(adminProducts) ? adminProducts.map(mapProductFromBackend) : [];
+        const productsFromApi = await adminApi.getProducts();
+        console.log('🔄 Produtos recebidos da API:', productsFromApi);
+        const mappedProducts = Array.isArray(productsFromApi) ? productsFromApi.map(mapProductFromBackend) : [];
+        console.log('📦 Produtos mapeados:', mappedProducts);
         if (mappedProducts.length > 0) {
           setProducts(mappedProducts);
+          setAdminProducts(mappedProducts); // Atualiza também adminProducts
         }
       } else {
         const productsWithStock = await api.getPublicProducts();
@@ -740,14 +744,14 @@ function AppProvider({ children }: { children: ReactNode }) {
             id: response.user?.id || '1',
             name: response.user?.name || 'Admin',
             email: response.user?.email || email,
-            role: 'staff'
+            role: response.user?.role || 'employee', // Pega o role real do backend
+            branch_id: response.user?.branch_id || null // Adiciona o branch_id também
           };
           setAdmin(adminUser);
+          localStorage.setItem('bruno_admin', JSON.stringify(adminUser)); // Salva no localStorage
           return true;
         }
       }
-      
-      return false;
       
       return false;
     } catch (error) {
@@ -766,6 +770,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       console.warn('Erro ao fazer logout:', error);
     } finally {
       setAdmin(null);
+      localStorage.removeItem('bruno_admin'); // 👈 Remove do localStorage
       toast.success('Logout realizado com sucesso');
     }
   };
@@ -851,7 +856,7 @@ function App() {
                 <Route path="orders" element={<OrdersManagement />} />
                 <Route path="clients" element={<ClientsManagement />} />
                 <Route path="addresses" element={<AddressesManagement />} />
-                <Route path="settings" element={<StoreSettings />} />
+                <Route path="settings" element={<Settings />} />
               </Route>
               <Route path="*" element={<Navigate to="/admin/login" />} />
 

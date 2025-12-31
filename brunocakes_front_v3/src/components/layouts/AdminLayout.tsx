@@ -9,7 +9,8 @@ import {
   Users, 
   LogOut,
   Menu,
-  X
+  X,
+  UserCog
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -32,7 +33,11 @@ export function AdminLayout() {
     { name: 'Pedidos', href: '/admin/orders', icon: ShoppingCart },
     { name: 'Clientes', href: '/admin/clients', icon: Users },
     { name: 'Endereços', href: '/admin/addresses', icon: Package },
-    { name: 'Configurações', href: '/admin/settings', icon: Shield },
+    // Configurações apenas para master e admin
+    ...(admin?.role === 'master' || admin?.role === 'admin' 
+      ? [{ name: 'Configurações', href: '/admin/settings', icon: Shield }] 
+      : []
+    ),
   ];
 
   const isActive = (path: string) => {

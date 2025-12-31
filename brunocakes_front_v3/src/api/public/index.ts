@@ -5,7 +5,12 @@ import { PUBLIC_API_ENDPOINTS } from '../common/endpoints';
 export const publicApi = {
   // === PRODUTOS PÚBLICOS ===
   // Retorna produtos com estoque real do Redis
-  getPublicProducts: () => apiRequest(PUBLIC_API_ENDPOINTS.products.withStock),
+  getPublicProducts: (branchId?: number) => {
+    const url = branchId 
+      ? `${PUBLIC_API_ENDPOINTS.products.withStock}?branch_id=${branchId}`
+      : PUBLIC_API_ENDPOINTS.products.withStock;
+    return apiRequest(url);
+  },
 
   getPublicProduct: (id: string) => apiRequest(PUBLIC_API_ENDPOINTS.products.showPublic(id)),
 

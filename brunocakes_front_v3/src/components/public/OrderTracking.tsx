@@ -16,31 +16,31 @@ export const OrderTracking = () => {
   const { lastEvent } = useRealTime();
   const [activeAddress, setActiveAddress] = useState<any>(null);
   const [activeLatLng, setActiveLatLng] = useState<{ latitude: number, longitude: number } | null>(null);
-  // Buscar endereço ativo
+  // Buscar todos os endereços e filtrar pelo ativo
   const fetchActiveAddress = async () => {
     try {
-      // Busca o endereço ativo completo do backend
-  const res = await fetch(`${API_BASE_URL}/addresses/active`);
+      const res = await fetch(`${API_BASE_URL}/addresses/active`);
       if (res.ok) {
         const active = await res.json();
-        //nsole.log('Resposta do /api/addresses/active:', active);
-        const addressString = `${active.rua}, ${active.numero} - ${active.bairro}, ${active.cidade} - ${active.estado}`;
-        setActiveAddress({
-          address: addressString,
-          workingHours: active.horarios || '',
-        });
-        if (active.latitude && active.longitude) {
-          setActiveLatLng({ latitude: Number(active.latitude), longitude: Number(active.longitude) });
-          // console.log('activeLatLng definido:', { latitude: Number(active.latitude), longitude: Number(active.longitude) });
+        if (active) {
+          const addressString = `${active.rua}, ${active.numero} - ${active.bairro}, ${active.cidade} - ${active.estado}`;
+          setActiveAddress({
+            address: addressString,
+            workingHours: active.horarios || '',
+          });
+          if (active.latitude && active.longitude) {
+            setActiveLatLng({ latitude: Number(active.latitude), longitude: Number(active.longitude) });
+          } else {
+            setActiveLatLng(null);
+          }
         } else {
+          setActiveAddress(null);
           setActiveLatLng(null);
-
         }
-      } else {
-
       }
     } catch (err) {
-
+      setActiveAddress(null);
+      setActiveLatLng(null);
     }
   };
 

@@ -43,12 +43,28 @@ class ProductAdminController extends Controller
      *      )
      * )
      */
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::all();
+        $user = $request->user();
+        
+        // Determinar filial a filtrar
+        $query = Product::query()->with('stocks.branch');
+        
+        if ($user->isMaster()) {
+            // Master pode ver todos ou filtrar por filial específica
+            $branchId = $request->query('branch_id');
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            }
+        } else {
+            // Admin e Employee veem apenas produtos da sua filial
+            $query->where('branch_id', $user->branch_id);
+        }
+        
+        $products = $query->get();
 
         $appUrl = config('app.url');
-        $products->map(function ($product) use ($appUrl) {
+        $products->transform(function ($product) use ($appUrl) {
             if ($product->image) {
                 if (preg_match('/^https?:\/\//', $product->image)) {
                     $product->image_url = $product->image;
@@ -111,6 +127,8 @@ class ProductAdminController extends Controller
      */
     public function store(Request $request)
     {
+        $user = $request->user();
+        
         \Log::info('ProductAdminController@store chamado', $request->all());
         
         $input = $request->all();
@@ -134,6 +152,22 @@ class ProductAdminController extends Controller
             }
         }
 
+        // Determinar branch_id
+        // Master pode criar para qualquer filial, outros apenas para a sua
+        $branchId = null;
+        if ($user->isMaster()) {
+            $branchId = $request->input('branch_id');
+            if (!$branchId) {
+                return response()->json([
+                    'message' => 'Master deve especificar a filial (branch_id) ao criar produtos.'
+                ], 422);
+            }
+        } else {
+            $branchId = $user->branch_id;
+        }
+        
+        $input['branch_id'] = $branchId;
+
         $data = $request->merge($input)->validate([
             'name'            => 'required|string',
             'slug'            => 'required|string|unique:products,slug',
@@ -146,6 +180,7 @@ class ProductAdminController extends Controller
             'is_new'          => 'boolean',
             'is_active'       => 'boolean',
             'description'     => 'nullable|string',
+            'branch_id'       => 'required|exists:branches,id',
         ]);
 
         if ($request->hasFile('image')) {

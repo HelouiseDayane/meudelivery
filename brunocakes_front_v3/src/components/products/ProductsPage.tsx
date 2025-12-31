@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../App';
 import { getProductImageUrl } from '../../api';
-import { useStoreConfig } from '../../hooks/useStoreConfig';
+import { useStoreConfigState } from '../../hooks/useStoreConfigState';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -36,8 +36,9 @@ export function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [favorites, setFavorites] = useState<string[]>(['1', '3']);
 
-  // Hook para aplicar configurações de tema dinâmico
-  useStoreConfig();
+  // Hook para acessar configurações de tema dinâmico sem novas requisições
+  const storeConfigState = useStoreConfigState();
+  const storeSettings = storeConfigState?.storeSettings;
 
   const isAdmin = admin !== null;
   
@@ -135,11 +136,12 @@ export function ProductsPage() {
           const isAvailable = estoque > 0;
           return (
             <Card key={product.id} className="group hover:shadow-lg transition-shadow">
-              <div className="relative">
+              <div className="relative flex justify-center items-center bg-white" style={{height: '140px'}}>
                 <ImageWithFallback
                   src={product.imageUrl || getProductImageUrl(product.image)}
                   alt={product.name}
-                  className="w-full h-48 object-cover rounded-t-lg"
+                  className="max-h-32 max-w-[80%] object-contain mx-auto block"
+                  style={{margin: 'auto', display: 'block'}}
                 />
                 {/* Badges */}
               <div className="absolute top-2 left-2 flex flex-col gap-1">

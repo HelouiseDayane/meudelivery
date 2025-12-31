@@ -39,7 +39,7 @@ export const OrdersManagement = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkLoading, setIsBulkLoading] = useState(false);
 
-  const isAdminAuthenticated = admin?.role === 'staff';
+  const isAdminAuthenticated = admin && ['master', 'admin', 'employee'].includes(admin.role);
 
   // Marcar pedidos como concluídos em lote
   const handleBulkComplete = async () => {

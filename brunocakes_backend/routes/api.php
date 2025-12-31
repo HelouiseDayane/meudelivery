@@ -9,6 +9,8 @@ use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\ProductAdminController;
 use App\Http\Controllers\Admin\OrderAdminController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\BranchController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\EngagementController;
@@ -18,6 +20,9 @@ use App\Http\Controllers\Api\GeocodeController;
 // ROTAS PÚBLICAS
 // Geocodificação reversa
 Route::get('/geocode/reverse', [GeocodeController::class, 'reverse']);
+
+// Filiais públicas (para o usuário escolher)
+Route::get('/branches', [BranchController::class, 'publicList']);
 // ==========================================
 
 // Produtos (existentes)
@@ -91,13 +96,18 @@ Route::prefix('admin')->group(function () {
         // Products
              Route::prefix('products')->group(function () {
             Route::get('/', [ProductAdminController::class, 'index']);           // GET /api/admin/products
-            Route::post('/', [ProductAdminController::class, 'store']);          // POST /api/admin/products
+            Route::post('/', [ProductAdminController::class, 'store'])->middleware('role:master,admin');          // POST /api/admin/products
             Route::get('/{id}', [ProductAdminController::class, 'show']);        // GET /api/admin/products/{id}
-            Route::put('/{id}', [ProductAdminController::class, 'update']);      // PUT /api/admin/products/{id}
-            Route::delete('/{id}', [ProductAdminController::class, 'destroy']);  // DELETE /api/admin/products/{id}
-            Route::patch('/{id}/stock', [ProductAdminController::class, 'updateStock']);     // PATCH /api/admin/products/{id}/stock
-            Route::patch('/{id}/toggle', [ProductAdminController::class, 'toggleActive']);   // PATCH /api/admin/products/{id}/toggle
-            Route::post('/sync-stock', [ProductAdminController::class, 'syncStock']);        // POST /api/admin/products/sync-stock
+            Route::put('/{id}', [ProductAdminController::class, 'update'])->middleware('role:master,admin');      // PUT /api/admin/products/{id}
+            Route::delete('/{id}', [ProductAdminController::class, 'destroy'])->middleware('role:master,admin');  // DELETE /api/admin/products/{id}
+            Route::patch('/{id}/stock', [ProductAdminController::class, 'updateStock'])->middleware('role:master,admin');     // PATCH /api/admin/products/{id}/stock
+            Route::patch('/{id}/toggle', [ProductAdminController::class, 'toggleActive'])->middleware('role:master,admin');   // PATCH /api/admin/products/{id}/toggle
+            Route::post('/sync-stock', [ProductAdminController::class, 'syncStock'])->middleware('role:master,admin');        // POST /api/admin/products/sync-stock
+            
+            // Rotas de estoque por filial
+            Route::get('/{productId}/stocks', [\App\Http\Controllers\Admin\ProductStockController::class, 'index']);
+            Route::put('/{productId}/stocks/{branchId}', [\App\Http\Controllers\Admin\ProductStockController::class, 'update'])->middleware('role:master,admin');
+            Route::post('/{productId}/stocks/bulk', [\App\Http\Controllers\Admin\ProductStockController::class, 'bulkUpdate'])->middleware('role:master,admin');
         });
         
         
@@ -126,6 +136,25 @@ Route::prefix('admin')->group(function () {
             Route::post('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'update']);
             Route::put('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'update']);
             Route::delete('settings', [App\Http\Controllers\Api\Admin\StoreSettingController::class, 'destroy']);
+            
+            // Branches Management (Filiais)
+            Route::prefix('branches')->middleware(['role:master,admin'])->group(function () {
+                Route::get('/', [BranchController::class, 'index']);
+                Route::post('/', [BranchController::class, 'store'])->middleware('role:master');
+                Route::get('/{id}', [BranchController::class, 'show']);
+                Route::put('/{id}', [BranchController::class, 'update']);
+                Route::delete('/{id}', [BranchController::class, 'destroy'])->middleware('role:master');
+                Route::patch('/{id}/toggle-open', [BranchController::class, 'toggleOpen']);
+            });
+            
+            // Users Management (Usuários)
+            Route::prefix('users')->middleware(['role:master,admin'])->group(function () {
+                Route::get('/', [UserController::class, 'index']);
+                Route::post('/', [UserController::class, 'store']);
+                Route::get('/{id}', [UserController::class, 'show']);
+                Route::put('/{id}', [UserController::class, 'update']);
+                Route::delete('/{id}', [UserController::class, 'destroy']);
+            });
             
             // Courses Management
             Route::apiResource('courses', App\Http\Controllers\Api\Admin\CourseController::class);

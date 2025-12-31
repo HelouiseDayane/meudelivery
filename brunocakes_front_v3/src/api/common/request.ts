@@ -8,6 +8,7 @@ export const getAdminAuthHeaders = () => {
   const token = localStorage.getItem('admin_token');
   const headers = {
     'Accept': 'application/json',
+    'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
   return headers;
@@ -50,13 +51,17 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
 // Função genérica de requisição admin
 export const adminApiRequest = async (url: string, options: RequestInit = {}) => {
   try {
+    // Adiciona o base URL se não for uma URL completa
+    const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8191/api';
+    const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+    
     const defaultOptions: RequestInit = { 
       headers: { ...getAdminAuthHeaders(), ...options.headers }, 
       mode: 'cors', // Adicionar modo CORS
       ...options 
     };
 
-    const response = await fetch(url, defaultOptions);
+    const response = await fetch(fullUrl, defaultOptions);
 
     // 204 é um sucesso para operações que não retornam conteúdo
     if (response.status === 204) {

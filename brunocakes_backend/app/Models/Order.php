@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Order extends Model
 {
@@ -28,6 +29,7 @@ class Order extends Model
         'cart_expires_at',
         'checkout_expires_at',
         'stock_reserved',
+        'branch_id',
     ];
 
     protected $casts = [
@@ -49,6 +51,12 @@ class Order extends Model
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+
+    // Relacionamento com Branch
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     // ✅ MÉTODOS ÚTEIS ADICIONADOS

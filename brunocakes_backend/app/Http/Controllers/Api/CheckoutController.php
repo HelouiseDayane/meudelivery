@@ -429,11 +429,24 @@ class CheckoutController extends Controller
 
     /**
      * ✅ Obter estoque de todos os produtos com tratamento de erros
+     * Agora com suporte a filtro por filial
      */
-    public function getAllProductsStock()
+    public function getAllProductsStock(Request $request)
     {
         try {
-            $products = Product::where('is_active', true)->get();
+            // Query base: produtos ativos
+            $query = Product::where('is_active', true)->with('stocks');
+            
+            // Filtro por filial se fornecido
+            $branchId = $request->query('branch_id');
+            if ($branchId) {
+                // Filtra produtos que têm estoque nesta filial
+                $query->whereHas('stocks', function($q) use ($branchId) {
+                    $q->where('branch_id', $branchId);
+                });
+            }
+            
+            $products = $query->get();
             $productsWithStock = [];
             $redisAvailable = true;
 
@@ -449,22 +462,33 @@ class CheckoutController extends Controller
 
             foreach ($products as $product) {
                 try {
-                    if ($redisAvailable) {
-                        $redisStock = Redis::get("product_stock_{$product->id}");
-                        $reservedStock = Redis::get("product_reserved_{$product->id}") ?? 0;
-                        
-                        // Se não tem no Redis, sincroniza do MySQL
-                        if ($redisStock === null) {
-                            $redisStock = $product->quantity;
-                            Redis::set("product_stock_{$product->id}", $redisStock);
-                            \Log::info("Estoque sincronizado do MySQL para Redis em getAllProductsStock", [
-                                'product_id' => $product->id,
-                                'quantity' => $redisStock
-                            ]);
+                    // Se filtrou por filial, usa o estoque específico dessa filial
+                    if ($branchId) {
+                        $branchStock = $product->stocks->where('branch_id', $branchId)->first();
+                        if (!$branchStock) {
+                            continue; // Pula se não tem estoque nessa filial
                         }
+                        $redisStock = $branchStock->quantity;
+                        $reservedStock = 0; // TODO: Implementar reserva por filial se necessário
                     } else {
-                        $redisStock = $product->quantity;
-                        $reservedStock = 0;
+                        // Sem filtro de filial: usa lógica Redis original
+                        if ($redisAvailable) {
+                            $redisStock = Redis::get("product_stock_{$product->id}");
+                            $reservedStock = Redis::get("product_reserved_{$product->id}") ?? 0;
+                            
+                            // Se não tem no Redis, sincroniza do MySQL
+                            if ($redisStock === null) {
+                                $redisStock = $product->quantity;
+                                Redis::set("product_stock_{$product->id}", $redisStock);
+                                \Log::info("Estoque sincronizado do MySQL para Redis em getAllProductsStock", [
+                                    'product_id' => $product->id,
+                                    'quantity' => $redisStock
+                                ]);
+                            }
+                        } else {
+                            $redisStock = $product->quantity;
+                            $reservedStock = 0;
+                        }
                     }
                     
                     $availableStock = $redisStock - $reservedStock;
@@ -596,6 +620,7 @@ class CheckoutController extends Controller
     {
         $data = $request->validate([
             'session_id' => 'required|string',
+            'branch_id' => 'required|integer|exists:branches,id',
             'customer_name' => 'required|string|max:255',
             'customer_email' => 'nullable|string|email',
             'customer_phone' => 'required|string|max:20',
@@ -652,6 +677,7 @@ class CheckoutController extends Controller
 
             // Criar ordem
             $order = Order::create([
+                'branch_id' => $data['branch_id'],
                 'customer_name' => $data['customer_name'],
                 'customer_email' => $data['customer_email'],
                 'customer_phone' => $data['customer_phone'],
@@ -740,11 +766,32 @@ class CheckoutController extends Controller
      * ✅ Obter pedidos (para listagem pública)
      */
 
-    public function getPedidos()
+    public function getPedidos(Request $request)
     {
-        $orders = Order::with(['items', 'payment'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
+        $email = $request->input('email');
+        $phone = $request->input('phone');
+
+        // Valida que pelo menos um dos parâmetros foi fornecido
+        if (!$email && !$phone) {
+            return response()->json(['message' => 'Email ou telefone é obrigatório'], 400);
+        }
+
+        $query = Order::with(['items', 'payment']);
+
+        // Filtra por email ou telefone
+        if ($email && $phone) {
+            // Se ambos forem fornecidos, busca por qualquer um dos dois
+            $query->where(function($q) use ($email, $phone) {
+                $q->where('customer_email', $email)
+                  ->orWhere('customer_phone', $phone);
+            });
+        } elseif ($email) {
+            $query->where('customer_email', $email);
+        } elseif ($phone) {
+            $query->where('customer_phone', $phone);
+        }
+
+        $orders = $query->orderBy('created_at', 'desc')->paginate(10);
 
         // Adiciona o total real somando os itens e inclui status do pagamento
         $orders->getCollection()->transform(function ($order) {

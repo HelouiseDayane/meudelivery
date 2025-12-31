@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { useApp } from '../../App';
@@ -6,24 +6,73 @@ import { DollarSign, TrendingUp, Package, MapPin, Calendar, Users } from 'lucide
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { STORE_CONFIG } from '../../api';
+import { BranchSelector } from './BranchSelector';
+import { Branch } from '../../types/admin';
+import adminApi from '../../api/admin';
+import { toast } from 'sonner';
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1'];
 
 export function AdminDashboard() {
-  const { analytics, loadAnalytics, orders, products } = useApp();
+  const { orders, products } = useApp();
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  
+  const currentAdmin = JSON.parse(localStorage.getItem('bruno_admin') || '{}');
+  const isMaster = currentAdmin?.role === 'master';
+  const isAdmin = currentAdmin?.role === 'admin';
+  const userBranchId = currentAdmin?.branch_id;
 
   useEffect(() => {
-    loadAnalytics(true); // true = admin, busca dados filtrados do dashboard
-  }, []);
+    if (isMaster) {
+      fetchBranches();
+    } else if (isAdmin && userBranchId) {
+      // Admin sempre vê sua própria filial
+      setSelectedBranchId(userBranchId);
+    }
+  }, [isMaster, isAdmin, userBranchId]);
+
+  useEffect(() => {
+    loadDashboardAnalytics();
+  }, [selectedBranchId]);
+
+  const fetchBranches = async () => {
+    try {
+      const response = await adminApi.get('/admin/branches');
+      setBranches(response.data);
+    } catch (error) {
+      toast.error('Erro ao carregar filiais');
+    }
+  };
+
+  const loadDashboardAnalytics = async () => {
+    setLoading(true);
+    try {
+      const data = await adminApi.getAnalytics(selectedBranchId);
+      setAnalytics(data);
+    } catch (error) {
+      console.error('Erro ao carregar analytics:', error);
+      toast.error('Erro ao carregar dados do dashboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBranchChange = (branchId: number | null) => {
+    setSelectedBranchId(branchId);
+  };
 
   // Debug logs
   useEffect(() => {
     if (analytics) {
-  // ...
+      console.log('DEBUG analytics:', analytics);
+      console.log('DEBUG product_metrics:', analytics.product_metrics);
     }
   }, [analytics]);
 
-  if (!analytics) {
+  if (loading) {
     return (
       <div className="space-y-6">
         <div>
@@ -34,30 +83,53 @@ export function AdminDashboard() {
     );
   }
 
+  if (!analytics) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1>Dashboard</h1>
+          <p className="text-muted-foreground">Erro ao carregar dados.</p>
+        </div>
+      </div>
+    );
+  }
 
-
-// Usar os campos do backend do dashboard admin (forçar any para evitar erro de tipagem)
-const todaySales = Number(analytics.statistics?.todaySales ?? 0);
-const todayOrders = Number(analytics.statistics?.totalOrders ?? 0);
-const thisMonthSales = Number(analytics.statistics?.monthSales ?? 0);
-const thisYearSales = Number(analytics.statistics?.yearSales ?? 0);
-const totalRevenue = Number(analytics.totalRevenue ?? 0);
-const pendingOrders = Number(analytics.statistics?.pendingOrders ?? 0);
-const totalProducts = Number(analytics.statistics?.totalProducts ?? products?.length ?? 0);
-const availableProducts = products?.filter(p => p.available && p.stock > 0)?.length ?? 0;
-const lowStockProducts = products?.filter(p => p.stock <= 5 && p.stock > 0)?.length ?? 0;
-const outOfStockProducts = products?.filter(p => p.stock === 0)?.length ?? 0;
-  
-
+  // Mapear dados do backend do dashboard (estrutura atualizada)
+  const todaySales = Number(analytics.sales_today ?? 0);
+  const todayOrders = Number(analytics.orders_today ?? 0);
+  const thisMonthSales = Number(analytics.sales_month ?? 0);
+  const thisYearSales = Number(analytics.sales_year ?? 0);
+  const totalRevenue = Number(analytics.total_revenue ?? 0);
+  const pendingOrders = Number(analytics.ticket_statistics?.awaiting_confirmation ?? 0);
+  const totalProducts = Number(analytics.product_metrics?.total_products ?? 0);
+  const availableProducts = Number(analytics.product_metrics?.available_products ?? 0);
+  const lowStockProducts = Number(analytics.product_metrics?.low_stock_products ?? 0);
+  const outOfStockProducts = Number(analytics.product_metrics?.out_of_stock_products ?? 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6">;
+
       {/* Header */}
-      <div>
-        <h1>Dashboard - {STORE_CONFIG.name}</h1>
-        <p className="text-muted-foreground">
-          Visão geral das vendas e operações da loja
-        </p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1>Dashboard - {STORE_CONFIG.name}</h1>
+          <p className="text-muted-foreground">
+            Visão geral das vendas e operações da loja
+          </p>
+          {!isMaster && userBranchId && (
+            <Badge variant="outline" className="mt-2">
+              📍 Visualizando apenas sua filial
+            </Badge>
+          )}
+        </div>
+        {isMaster && branches && branches.length > 0 && (
+          <BranchSelector
+            selectedBranchId={selectedBranchId}
+            onBranchChange={handleBranchChange}
+            branches={branches}
+            showAllOption={true}
+          />
+        )}
       </div>
 
       {/* KPI Cards */}

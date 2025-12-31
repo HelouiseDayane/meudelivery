@@ -63,6 +63,30 @@ class AuthController extends Controller
 
         $token = $user->createToken('admin-token')->plainTextToken;
 
-        return response()->json(['token' => $token]);
+        // Carregar dados da filial se existir
+        $branchData = null;
+        if ($user->branch_id) {
+            $branch = $user->branch;
+            if ($branch) {
+                $branchData = [
+                    'id' => $branch->id,
+                    'name' => $branch->name,
+                    'code' => $branch->code,
+                    'is_open' => $branch->is_open,
+                    'is_active' => $branch->is_active,
+                ];
+            }
+        }
+
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'branch' => $branchData,
+            ]
+        ]);
     }
 }

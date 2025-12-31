@@ -3,7 +3,9 @@ const CACHE_NAME = 'bruno-cakes-v1';
 const CACHE_ASSETS = [
   '/',
   '/manifest.json',
-  '/favicon.ico'
+  '/favicon.ico',
+  '/assets/index-BCPJtEbs.js',
+  '/assets/index-CPnmURed.css'
 ];
 
 // Install event
@@ -18,6 +20,8 @@ self.addEventListener('install', (event) => {
       .then(() => self.skipWaiting())
       .catch(err => console.log('Bruno Cake Service Worker: Cache failed', err))
   );
+  // Força update automático do SW
+  self.skipWaiting();
 });
 
 // Activate event
@@ -35,6 +39,8 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+  // Força update automático do SW
+  self.clients.claim();
 });
 
 // Fetch event
@@ -65,12 +71,32 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Return cached version or fetch from network
+        // Se for JS ou CSS e não encontrar, retorna mensagem amigável
+        if (!response && (event.request.destination === 'script' || event.request.destination === 'style')) {
+          return new Response('O sistema foi atualizado! Por favor, recarregue a página.', {
+            status: 503,
+            statusText: 'Atualização necessária',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
+        }
+        // Para documentos (HTML), retorna index.html como fallback
+        if (!response && event.request.destination === 'document') {
+          return caches.match('/');
+        }
+        // Para outros casos, retorna cache ou busca na rede
         return response || fetch(event.request);
       })
       .catch(err => {
         console.log('SW: Fetch failed for:', event.request.url, err);
-        // Fallback for offline
+        // Se for JS ou CSS, retorna mensagem amigável
+        if (event.request.destination === 'script' || event.request.destination === 'style') {
+          return new Response('O sistema foi atualizado! Por favor, recarregue a página.', {
+            status: 503,
+            statusText: 'Atualização necessária',
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
+        }
+        // Para documentos (HTML), retorna index.html como fallback
         if (event.request.destination === 'document') {
           return caches.match('/');
         }

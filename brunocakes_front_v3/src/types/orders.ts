@@ -1,3 +1,5 @@
+import { Branch } from './admin';
+
 export interface CartItem {
   id: string;
   name: string;
@@ -19,6 +21,8 @@ export type OrderStatus =
 
 export interface Order {
   id: string;
+  branch_id?: number;
+  branch?: Branch;
   clientName: string;
   email: string;
   whatsapp: string;

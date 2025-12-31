@@ -31,7 +31,6 @@ export const PUBLIC_API_ENDPOINTS = {
     notify: `${API_BASE_URL}/payment/notify`,
   },
   addresses: {
-    active: `${API_BASE_URL}/addresses/active`,
   },
   store: {
     publicSettings: `${API_BASE_URL}/store/settings`,
