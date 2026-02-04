@@ -58,8 +58,10 @@
       host: '0.0.0.0', // Permite acesso externo
       allowedHosts: [
         'brunocake.zapsrv.com',
+        'brunocakedev.zapsrv.com',
         'localhost',
-        '127.0.0.1'
+        '127.0.0.1',
+        '.zapsrv.com' // Permite todos os subdomínios
       ],
       proxy: {
         '/api': {
