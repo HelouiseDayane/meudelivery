@@ -1,4 +1,8 @@
+
 FROM php:8.3-fpm
+
+# Corrige permissões do /tmp para evitar erro de mkstemp
+RUN chmod 1777 /tmp
 
 # Instala dependências do sistema
 RUN apt-get update && apt-get install -y \

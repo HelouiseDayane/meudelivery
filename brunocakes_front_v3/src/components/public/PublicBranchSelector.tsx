@@ -3,7 +3,7 @@ import { MapPin, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Branch } from '../../types/admin';
-import api from '../../api/public';
+import { apiRequest } from '../../api/common/request';
 import { toast } from 'sonner';
 
 interface PublicBranchSelectorProps {
@@ -21,10 +21,13 @@ export function PublicBranchSelector({ selectedBranch, onBranchSelect }: PublicB
 
   const fetchBranches = async () => {
     try {
-      const response = await api.get('/branches');
-      setBranches(response.data);
-    } catch (error) {
-      toast.error('Erro ao carregar filiais');
+      // Usa a função genérica de requisição pública
+      const data = await apiRequest('/branches', { method: 'GET', headers: { Accept: 'application/json' } });
+      // apiRequest retorna o body já parseado
+      setBranches(Array.isArray(data) ? data : (data?.data || []));
+    } catch (error: any) {
+      // Log silencioso - não mostrar toast de erro, mas registrar
+      console.log('ℹ️ Problema ao carregar filiais:', error?.message || error);
     } finally {
       setLoading(false);
     }

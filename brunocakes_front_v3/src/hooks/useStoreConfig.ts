@@ -346,20 +346,53 @@ export const updateLogoElements = (type: 'horizontal' | 'icon', logoUrl: string)
   }
 };
 
+// Timestamp da última requisição bem-sucedida
+let lastFetchTime = 0;
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos (otimizado)
+let ongoingFetch: Promise<any> | null = null; // Promise compartilhada para evitar requisições duplicadas
+
 // Hook personalizado para gerenciar configurações da loja
 export const useStoreConfig = () => {
   const [storeSettings, setStoreSettings] = useState<any>(null);
 
-  const loadStoreConfig = async () => {
+  const loadStoreConfig = async (forceReload = false) => {
     try {
-      // Tenta buscar o updated_at salvo
+      // Tenta buscar o cache primeiro
       const cachedSettings = localStorage.getItem('store_settings_cache');
       let cached = null;
       if (cachedSettings) {
         try { cached = JSON.parse(cachedSettings); } catch {}
       }
 
-      const settings = await fetchStoreSettings(apiRequest);
+      // Se tem cache válido e não é reload forçado, usa o cache
+      const now = Date.now();
+      if (!forceReload && cached && (now - lastFetchTime) < CACHE_DURATION) {
+        console.log('✅ Usando configurações em cache (válido por', Math.round((CACHE_DURATION - (now - lastFetchTime)) / 1000), 'segundos)');
+        setStoreSettings(cached);
+        updateStoreConfig(cached);
+        
+        // Aplica cor do cache se necessário
+        if (cached.primary_color && lastAppliedColor !== cached.primary_color) {
+          applyPrimaryColor(cached.primary_color);
+          lastAppliedColor = cached.primary_color;
+        }
+        return;
+      }
+
+      // Se já tem uma requisição em andamento, espera ela
+      if (ongoingFetch) {
+        const settings = await ongoingFetch;
+        if (settings) {
+          setStoreSettings(settings);
+          updateStoreConfig(settings);
+        }
+        return;
+      }
+
+      // Faz requisição apenas se necessário
+      ongoingFetch = fetchStoreSettings(apiRequest);
+      const settings = await ongoingFetch;
+      ongoingFetch = null; // Limpa a promise após conclusão
 
       // Se não veio nada da API, mantém o cache
       if (!settings && cached) {
@@ -372,12 +405,16 @@ export const useStoreConfig = () => {
       if (settings && settings.updated_at) {
         // Se for igual ao cache, não atualiza nada
         if (cached && cached.updated_at === settings.updated_at) {
+          console.log('✅ Configurações já estão atualizadas');
           setStoreSettings(cached);
           updateStoreConfig(cached);
+          lastFetchTime = now;
           return;
         }
         // Se mudou, salva novo cache
+        console.log('🆕 Novas configurações recebidas');
         localStorage.setItem('store_settings_cache', JSON.stringify(settings));
+        lastFetchTime = now;
       }
 
       if (settings) {
@@ -403,12 +440,20 @@ export const useStoreConfig = () => {
   };
 
   useEffect(() => {
-    // Carrega as configurações da loja ao montar
-    const initConfig = () => {
+    // Carrega as configurações da loja apenas no mount inicial
+    let mounted = true;
+    
+    const initConfig = async () => {
+      if (!mounted) return;
+      
       // Aguarda o DOM estar pronto
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadStoreConfig);
-      } else {
+        await new Promise(resolve => {
+          document.addEventListener('DOMContentLoaded', resolve, { once: true });
+        });
+      }
+      
+      if (mounted) {
         loadStoreConfig();
       }
     };
@@ -417,9 +462,9 @@ export const useStoreConfig = () => {
     
     // Cleanup
     return () => {
-      document.removeEventListener('DOMContentLoaded', loadStoreConfig);
+      mounted = false;
     };
-  }, []);
+  }, []); // Array vazio - executa apenas uma vez no mount
 
   return {
     storeSettings, // Retorna os dados das configurações

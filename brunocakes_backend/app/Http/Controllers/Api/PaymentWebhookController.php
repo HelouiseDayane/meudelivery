@@ -207,18 +207,24 @@ class PaymentWebhookController extends Controller
         // Dispara evento de atualização de status do pedido
         broadcast(new \App\Events\OrderStatusUpdated($order));
 
-        // Remove definitivamente do estoque (Redis e MySQL)
+        // Remove definitivamente do estoque (Redis e MySQL) - por filial
         foreach ($order->items as $item) {
+            $branchId = $order->branch_id;
             // Remove do estoque no Redis (já estava reservado, agora remove definitivo)
-            Redis::decrby("product_stock_{$item->product_id}", $item->quantity);
-            // Atualiza MySQL
-            DB::table('products')
-                ->where('id', $item->product_id)
+            $stockKey = "product_stock_{$branchId}_{$item->product_id}";
+            Redis::connection('stock')->decrby($stockKey, $item->quantity);
+            
+            // Atualiza MySQL (product_stocks)
+            DB::table('product_stocks')
+                ->where('product_id', $item->product_id)
+                ->where('branch_id', $branchId)
                 ->decrement('quantity', $item->quantity);
+            
             // ✅ Dispara evento de atualização de estoque
             broadcast(new StockUpdated($item->product_id, 'stock_decreased'));
+            
             // Sincroniza Redis com MySQL
-            dispatch(new SyncStockJob($item->product_id));
+            dispatch(new SyncStockJob($item->product_id, $branchId));
         }
     }
 
@@ -233,27 +239,31 @@ class PaymentWebhookController extends Controller
             'stock_reserved' => false
         ]);
 
-        // Reverte estoque (Redis e MySQL)
+        // Reverte estoque (Redis e MySQL) - por filial
         foreach ($order->items as $item) {
-            // Remove do reservado no Redis
-            $reservedKey = "product_reserved_{$item->product_id}";
-            $currentReserved = Redis::get($reservedKey) ?? 0;
+            $branchId = $order->branch_id;
+            
+            // Remove do reservado no Redis (por filial)
+            $reservedKey = "product_reserved_{$branchId}_{$item->product_id}";
+            $currentReserved = Redis::connection('stock')->get($reservedKey) ?? 0;
             $newReserved = max(0, $currentReserved - $item->quantity);
-            Redis::set($reservedKey, $newReserved);
+            Redis::connection('stock')->set($reservedKey, $newReserved);
 
-            // Adiciona de volta ao estoque disponível no Redis
-            Redis::incrby("product_stock_{$item->product_id}", $item->quantity);
+            // Adiciona de volta ao estoque disponível no Redis (por filial)
+            $stockKey = "product_stock_{$branchId}_{$item->product_id}";
+            Redis::incrby($stockKey, $item->quantity);
 
-            // Atualiza MySQL
-            DB::table('products')
-                ->where('id', $item->product_id)
+            // Atualiza MySQL (product_stocks)
+            DB::table('product_stocks')
+                ->where('product_id', $item->product_id)
+                ->where('branch_id', $branchId)
                 ->increment('quantity', $item->quantity);
 
             // ✅ Dispara evento de atualização de estoque
             broadcast(new StockUpdated($item->product_id, 'stock_increased'));
 
             // Sincroniza Redis com MySQL
-            dispatch(new SyncStockJob($item->product_id));
+            dispatch(new SyncStockJob($item->product_id, $branchId));
 
             // Log detalhado
         }

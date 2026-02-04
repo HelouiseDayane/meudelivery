@@ -14,29 +14,38 @@ class StreamController extends Controller
      */
     public function updates(Request $request)
     {
-        $response = new StreamedResponse(function () use ($request) {
+        $branchId = $request->query('branch_id');
+        
+        $response = new StreamedResponse(function () use ($branchId) {
             // Headers para SSE
             header('Content-Type: text/event-stream');
             header('Cache-Control: no-cache');
             header('Connection: keep-alive');
             header('X-Accel-Buffering: no'); // Para Nginx
             
-            $lastEventId = $request->header('Last-Event-ID', 0);
+            $redis = Redis::connection('stock');
             $clientConnected = true;
+            $lastHeartbeat = time();
             
-            while ($clientConnected && !connection_aborted()) {
+            // Subscribe nos canais relevantes
+            $channels = ['stock-updates'];
+            if ($branchId) {
+                $channels[] = "stock-updates-branch-{$branchId}";
+            }
+            
+            $redis->subscribe($channels, function ($message, $channel) use (&$clientConnected, &$lastHeartbeat) {
+                if (connection_aborted()) {
+                    $clientConnected = false;
+                    return;
+                }
+                
                 try {
-                    // Verifica se há atualizações de estoque
-                    $stockUpdates = $this->getStockUpdates($lastEventId);
+                    $data = json_decode($message, true);
                     
-                    if (!empty($stockUpdates)) {
-                        foreach ($stockUpdates as $update) {
-                            echo "id: {$update['id']}\n";
-                            echo "event: stock_update\n";
-                            echo "data: " . json_encode($update['data']) . "\n\n";
-                            
-                            $lastEventId = $update['id'];
-                        }
+                    // Validar dados antes de enviar
+                    if ($data && isset($data['product_id']) && $data['product_id'] > 0) {
+                        echo "event: stock_update\n";
+                        echo "data: " . json_encode($data) . "\n\n";
                         
                         if (ob_get_level()) {
                             ob_flush();
@@ -44,8 +53,8 @@ class StreamController extends Controller
                         flush();
                     }
                     
-                    // Heartbeat para manter conexão viva
-                    if (time() % 30 === 0) {
+                    // Heartbeat a cada 30 segundos
+                    if (time() - $lastHeartbeat >= 30) {
                         echo "event: heartbeat\n";
                         echo "data: " . json_encode(['timestamp' => now()->toISOString()]) . "\n\n";
                         
@@ -53,65 +62,20 @@ class StreamController extends Controller
                             ob_flush();
                         }
                         flush();
+                        
+                        $lastHeartbeat = time();
                     }
-                    
-                    usleep(2000000); // 2 segundos
                     
                 } catch (\Exception $e) {
                     \Log::error('SSE Stream Error: ' . $e->getMessage());
                     $clientConnected = false;
                 }
-                
-                // Verifica se cliente ainda está conectado
-                if (connection_status() !== CONNECTION_NORMAL) {
-                    $clientConnected = false;
-                }
-            }
+            });
         });
         
         return $response;
     }
     
-    /**
-     * Simula atualizações de estoque (em produção seria um evento real)
-     */
-    private function getStockUpdates($lastEventId)
-    {
-        // Pega atualizações de estoque do Redis
-        $updates = [];
-        $currentTime = time();
-        
-        // Checa se houve mudanças nos últimos 5 segundos
-        $stockKeys = Redis::keys('product_stock_*');
-        
-        foreach ($stockKeys as $key) {
-            $productId = str_replace('product_stock_', '', $key);
-            $totalStock = Redis::get($key) ?? 0;
-            $reservedStock = Redis::get("product_reserved_{$productId}") ?? 0;
-            $availableStock = max(0, $totalStock - $reservedStock);
-            
-            // Simula verificação de mudança (em produção seria mais sofisticado)
-            $updateId = $currentTime . '_' . $productId;
-            
-            if ($updateId > $lastEventId) {
-                $updates[] = [
-                    'id' => $updateId,
-                    'data' => [
-                        'type' => 'stock_change',
-                        'product_id' => (int)$productId,
-                        'available_stock' => $availableStock,
-                        'total_stock' => (int)$totalStock,
-                        'reserved_stock' => (int)$reservedStock,
-                        'is_available' => $availableStock > 0,
-                        'is_low_stock' => $availableStock <= 5 && $availableStock > 0,
-                        'timestamp' => now()->toISOString()
-                    ]
-                ];
-            }
-        }
-        
-        return $updates;
-    }
     
     /**
      * ✅ NOVA: Força um evento de atualização (para testes)

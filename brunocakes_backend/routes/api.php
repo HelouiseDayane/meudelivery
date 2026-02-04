@@ -18,6 +18,14 @@ use App\Http\Controllers\Api\GeocodeController;
 
 // ==========================================
 // ROTAS PÚBLICAS
+
+
+// Health check
+Route::get('/health', function () {
+    return response()->json(['status' => 'ok']);
+});
+
+
 // Geocodificação reversa
 Route::get('/geocode/reverse', [GeocodeController::class, 'reverse']);
 
@@ -64,7 +72,7 @@ Route::get('/analytics', [AnalyticsController::class, 'index']);
 
 // Stream (se implementado)
 Route::prefix('stream')->group(function () {
-    Route::get('/updates', [StreamController::class, 'streamUpdates']);
+    Route::get('/updates', [StreamController::class, 'updates']);
     Route::post('/trigger-stock-update', [StreamController::class, 'triggerStockUpdate']);
 });
 
@@ -87,6 +95,15 @@ Route::prefix('admin')->group(function () {
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::post('/logout', [AuthController::class, 'logout']);
+
+        // Master Dashboard - Métricas avançadas
+        Route::prefix('master')->middleware('role:master')->group(function () {
+            Route::get('/metrics', [App\Http\Controllers\Admin\MasterDashboardController::class, 'masterMetrics']);
+            Route::get('/stock', [App\Http\Controllers\Admin\MasterDashboardController::class, 'stockByBranch']);
+            Route::get('/top-products', [App\Http\Controllers\Admin\MasterDashboardController::class, 'topProducts']);
+            Route::get('/top-neighborhoods', [App\Http\Controllers\Admin\MasterDashboardController::class, 'topNeighborhoods']);
+            Route::get('/time-series', [App\Http\Controllers\Admin\MasterDashboardController::class, 'timeSeriesData']);
+        });
 
                 // Customer
                 // Route::get('/customer/last-order', [CheckoutController::class, 'Customer']);

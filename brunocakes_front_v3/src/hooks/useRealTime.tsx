@@ -77,7 +77,7 @@ export const RealTimeProvider = ({
 
     try {
       // URL para SSE no backend (você precisará implementar esta rota no Laravel)
-      const sse = new EventSource(`${API_BASE_URL}/stream/updates`);
+      const sse = new EventSource(`${API_BASE_URL}/api/stream/updates`);
       
       sse.onopen = () => {
         setIsConnected(true);

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductStock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -47,25 +48,30 @@ class ExpireCheckoutJob implements ShouldQueue
             return;
         }
 
-        // Se já está cancelado, libera estoque se ainda houver reservado
+        // Se já está cancelado, libera estoque se ainda houver reservado (por filial)
         if ($order->status === 'canceled') {
             Log::info('⚠️ Ordem já cancelada, verificando estoque reservado para liberar', [
                 'order_id' => $this->orderId
             ]);
             foreach ($order->items as $item) {
-                $reservedKey = "product_reserved_{$item->product_id}";
+                $branchId = $order->branch_id;
+                $reservedKey = "product_reserved_{$branchId}_{$item->product_id}";
                 $currentReserved = Redis::get($reservedKey) ?? 0;
                 $newReserved = max(0, $currentReserved - $item->quantity);
                 Redis::set($reservedKey, $newReserved);
 
-                // Adiciona de volta ao estoque disponível no Redis
-                Redis::incrby("product_stock_{$item->product_id}", $item->quantity);
+                // Adiciona de volta ao estoque disponível no Redis (por filial)
+                $stockKey = "product_stock_{$branchId}_{$item->product_id}";
+                Redis::incrby($stockKey, $item->quantity);
 
-                // Atualiza MySQL
-                Product::where('id', $item->product_id)->increment('quantity', $item->quantity);
+                // Atualiza MySQL (product_stocks)
+                ProductStock::where('product_id', $item->product_id)
+                    ->where('branch_id', $branchId)
+                    ->increment('quantity', $item->quantity);
 
                 Log::info('📦 Estoque liberado do pedido já cancelado', [
                     'order_id' => $this->orderId,
+                    'branch_id' => $branchId,
                     'product_id' => $item->product_id,
                     'product_name' => $item->product_name,
                     'quantity_released' => $item->quantity,
@@ -92,21 +98,26 @@ class ExpireCheckoutJob implements ShouldQueue
             'stock_reserved' => false
         ]);
 
-        // Liberar estoque de todos os itens (devolve para disponível e libera reservado)
+        // Liberar estoque de todos os itens (devolve para disponível e libera reservado) - por filial
         foreach ($order->items as $item) {
-            $reservedKey = "product_reserved_{$item->product_id}";
+            $branchId = $order->branch_id;
+            $reservedKey = "product_reserved_{$branchId}_{$item->product_id}";
             $currentReserved = Redis::get($reservedKey) ?? 0;
             $newReserved = max(0, $currentReserved - $item->quantity);
             Redis::set($reservedKey, $newReserved);
 
-            // Adiciona de volta ao estoque disponível no Redis
-            Redis::incrby("product_stock_{$item->product_id}", $item->quantity);
+            // Adiciona de volta ao estoque disponível no Redis (por filial)
+            $stockKey = "product_stock_{$branchId}_{$item->product_id}";
+            Redis::incrby($stockKey, $item->quantity);
 
-            // Atualiza MySQL
-            Product::where('id', $item->product_id)->increment('quantity', $item->quantity);
+            // Atualiza MySQL (product_stocks)
+            ProductStock::where('product_id', $item->product_id)
+                ->where('branch_id', $branchId)
+                ->increment('quantity', $item->quantity);
 
             Log::info('📦 Estoque liberado do checkout expirado', [
                 'order_id' => $this->orderId,
+                'branch_id' => $branchId,
                 'product_id' => $item->product_id,
                 'product_name' => $item->product_name,
                 'quantity_released' => $item->quantity,

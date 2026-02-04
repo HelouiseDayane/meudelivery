@@ -2,7 +2,7 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { STORE_CONFIG, fetchAndSetActiveAddress, fetchStoreSettings, updateStoreConfig, apiRequest } from '../../api';
-import { ShoppingCart, Package, Search } from 'lucide-react';
+import { ShoppingCart, Package, Search, MapPin } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useApp } from '../../App';
@@ -39,25 +39,131 @@ export const PublicLayout = () => {
   // Estado local para endereços, sem travar renderização global
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [allAddresses, setAllAddresses] = useState<any[]>([]);
+  const [branchAddress, setBranchAddress] = useState<any>(null);
+  const [branchStatus, setBranchStatus] = useState<any>(null);
   
   // Estado para controle de seleção de filial
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
 
-  // Verificar se já tem filial selecionada no localStorage
+  // Verificar se já tem filial selecionada no localStorage e validar
   useEffect(() => {
-    const savedBranch = localStorage.getItem('selected_branch');
-    if (savedBranch) {
+    let timeoutId: NodeJS.Timeout;
+    
+    const validateSavedBranch = async () => {
+      const savedBranch = localStorage.getItem('selected_branch');
+      console.log('🔍 Validando filial salva:', savedBranch);
+      
+      if (!savedBranch) {
+        console.log('📭 Nenhuma filial salva, abrindo modal');
+        setShowBranchModal(true);
+        return;
+      }
+      
       try {
-        setSelectedBranch(JSON.parse(savedBranch));
-        setShowBranchModal(false);
+        const parsed = JSON.parse(savedBranch);
+        console.log('📦 Filial parseada:', parsed);
+        
+        // Validar se a filial ainda existe e está ativa
+        const branchesResponse = await apiRequest('/branches');
+        const branchList = Array.isArray(branchesResponse) ? branchesResponse : [];
+        console.log('🏪 Filiais disponíveis:', branchList);
+        
+        const branchExists = branchList.find((b: any) => b.id === parsed.id && b.is_active !== false);
+        console.log('✓ Filial existe?', branchExists);
+        
+        if (branchExists) {
+          setSelectedBranch(parsed);
+          setShowBranchModal(false);
+          console.log('✅ Filial válida, modal fechado');
+        } else {
+          // Filial não existe mais ou está inativa
+          console.log('❌ Filial inválida, removendo localStorage');
+          localStorage.removeItem('selected_branch');
+          setShowBranchModal(true);
+        }
       } catch (e) {
+        console.error('❌ Erro ao validar filial:', e);
+        localStorage.removeItem('selected_branch');
         setShowBranchModal(true);
       }
-    } else {
-      setShowBranchModal(true);
-    }
+    };
+    
+    // Timeout de segurança: se após 5s não tiver filial válida, força abertura do modal
+    timeoutId = setTimeout(() => {
+      if (!selectedBranch) {
+        console.log('⏰ Timeout: Forçando abertura do modal');
+        setShowBranchModal(true);
+      }
+    }, 5000);
+    
+    validateSavedBranch();
+    
+    return () => clearTimeout(timeoutId);
   }, []);
+
+  // Buscar endereço e status da filial selecionada
+  useEffect(() => {
+    let lastUpdateTimestamp = 0;
+    const DEBOUNCE_TIME = 500; // 500ms para evitar requisições duplicadas
+    
+    const fetchBranchData = async () => {
+      const now = Date.now();
+      if (now - lastUpdateTimestamp < DEBOUNCE_TIME) {
+        console.log('⏭️ Atualização ignorada (debounce)');
+        return;
+      }
+      lastUpdateTimestamp = now;
+      
+      if (!selectedBranch) {
+        setBranchAddress(null);
+        setBranchStatus(null);
+        return;
+      }
+
+      setLoadingAddress(true);
+      try {
+        const response = await apiRequest('/addresses/active');
+        const addressList = Array.isArray(response) ? response : [];
+        
+        // Encontrar o endereço da filial selecionada
+        const address = addressList.find((a: any) => a.branch_id === selectedBranch.id);
+        
+        if (address) {
+          setBranchAddress(address);
+          setBranchStatus(address.store_status);
+          setAllAddresses([address]); // Para compatibilidade com o footer
+        } else {
+          setBranchAddress(null);
+          setBranchStatus(null);
+          setAllAddresses([]);
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar dados da filial:', error);
+        setBranchAddress(null);
+        setBranchStatus(null);
+        setAllAddresses([]);
+      } finally {
+        setLoadingAddress(false);
+      }
+    };
+
+    fetchBranchData();
+
+    // Listener para evento de atualização de endereço via localStorage (sincroniza entre abas)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'address_updated') {
+        console.log('🔄 Endereço atualizado (localStorage) - recarregando...');
+        fetchBranchData();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [selectedBranch]);
 
   // Listener para evento de troca de filial
   useEffect(() => {
@@ -72,6 +178,7 @@ export const PublicLayout = () => {
   }, []);
 
   const handleBranchSelect = (branch: Branch) => {
+    console.log('🏪 Filial selecionada:', branch);
     setSelectedBranch(branch);
     localStorage.setItem('selected_branch', JSON.stringify(branch));
     setShowBranchModal(false);
@@ -114,47 +221,55 @@ export const PublicLayout = () => {
 
             {/* Navigation - Mobile Friendly */}
             <nav className="flex items-center space-x-2 sm:space-x-4">
-              <Button
-                variant={isActive('/') ? 'default' : 'ghost'}
-                size={isMobile ? 'sm' : 'default'}
-                asChild
-                className={isActive('/') ? 'bruno-gradient text-white' : ''}
-              >
-                <Link to="/">
+              <Link to="/">
+                <Button
+                  variant={isActive('/') ? 'default' : 'ghost'}
+                  size={isMobile ? 'sm' : 'default'}
+                  className={isActive('/') ? 'bruno-gradient text-white' : ''}
+                >
                   {isMobile ? 'Menu' : 'Cardápio'}
-                </Link>
-              </Button>
+                </Button>
+              </Link>
 
-              <Button
-                variant={isActive('/tracking') ? 'default' : 'ghost'}
-                size={isMobile ? 'sm' : 'default'}
-                asChild
-                className={isActive('/tracking') ? 'bruno-gradient text-white' : ''}
-              >
-                <Link to="/tracking" className="flex items-center gap-1">
+              <Link to="/tracking">
+                <Button
+                  variant={isActive('/tracking') ? 'default' : 'ghost'}
+                  size={isMobile ? 'sm' : 'default'}
+                  className={`flex items-center gap-1 ${isActive('/tracking') ? 'bruno-gradient text-white' : ''}`}
+                >
                   <Search className="w-4 h-4" />
                   {!isMobile && 'Acompanhe seu pedido'}
-                </Link>
-              </Button>
+                </Button>
+              </Link>
 
-              <Button
-                variant={isActive('/cart') ? 'default' : 'ghost'}
-                size={isMobile ? 'sm' : 'default'}
-                asChild
-                className={`relative ${isActive('/cart') ? 'bruno-gradient text-white' : ''}`}
-              >
-                <Link to="/cart" className="flex items-center gap-1">
+              <Link to="/cart" className="relative">
+                <Button
+                  variant={isActive('/cart') ? 'default' : 'ghost'}
+                  size={isMobile ? 'sm' : 'default'}
+                  className={`flex items-center gap-1 ${isActive('/cart') ? 'bruno-gradient text-white' : ''}`}
+                >
                   <ShoppingCart className="w-4 h-4" />
                   {!isMobile && 'Carrinho'}
-                  {cartItemsCount > 0 && (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                    >
-                      {cartItemsCount}
-                    </Badge>
-                  )}
-                </Link>
+                </Button>
+                {cartItemsCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                  >
+                    {cartItemsCount}
+                  </Badge>
+                )}
+              </Link>
+
+              <Button
+                variant="outline"
+                size={isMobile ? 'sm' : 'default'}
+                className="flex items-center gap-1"
+                onClick={() => setShowBranchModal(true)}
+                title="Trocar filial"
+              >
+                <MapPin className="w-4 h-4" />
+                {!isMobile && selectedBranch ? selectedBranch.name : 'Filial'}
               </Button>
 
             </nav>
@@ -202,7 +317,7 @@ export const PublicLayout = () => {
                 )}
                 {storeConfigState.instagram && (
                   <span>
-                    <span role="img" aria-label="instagram">📸</span> <a href={`https://instagram.com/${storeConfigState.instagram}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 font-semibold underline hover:opacity-80">{storeConfigState.instagram}</a><br />
+                    <span role="img" aria-label="instagram">📸</span> <a href={`https://instagram.com/${storeConfigState.instagram.replace(/^@+/, '')}`} target="_blank" rel="noopener noreferrer" className="text-purple-600 font-semibold underline hover:opacity-80">{storeConfigState.instagram.replace(/^@+/, '@')}</a><br />
                   </span>
                 )}
                 {allAddresses.length > 0 ? (
@@ -223,10 +338,24 @@ export const PublicLayout = () => {
             <div>
               <h4 className="font-semibold mb-2">Horário de Funcionamento</h4>
               <p className="text-muted-foreground">
-                {STORE_CONFIG.workingHours && STORE_CONFIG.workingHours.trim() !== ''
+                {branchAddress?.horarios && branchAddress.horarios.trim() !== ''
+                  ? branchAddress.horarios
+                  : STORE_CONFIG.workingHours && STORE_CONFIG.workingHours.trim() !== ''
                   ? STORE_CONFIG.workingHours
                   : 'Horário não disponível'}
               </p>
+              {branchStatus && (
+                <div className="mt-2">
+                  <span className={`font-semibold ${branchStatus.is_open ? 'text-green-600' : 'text-red-600'}`}>
+                    {branchStatus.message}
+                  </span>
+                  {!branchAddress?.checkout_active && (
+                    <span className="block text-orange-600 font-medium mt-1">
+                      ⚠️ Loja Fechada
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="border-t pt-4 mt-4 text-center text-muted-foreground">

@@ -171,6 +171,16 @@ export function AddressesManagement() {
       if (!res.ok) throw new Error('Erro ao ativar endereço');
       setActiveId(id);
       await fetchAddresses();
+      
+      // Dispara evento via localStorage para sincronizar entre abas
+      const timestamp = Date.now().toString();
+      localStorage.setItem('address_updated', timestamp);
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'address_updated',
+        newValue: timestamp,
+        url: window.location.href
+      }));
+      console.log('✅ Evento address-updated disparado via localStorage (ativação)');
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -202,6 +212,16 @@ export function AddressesManagement() {
         setActiveId(addr.id);
       }
       await fetchAddresses();
+      
+      // Dispara evento via localStorage para sincronizar entre abas
+      const timestamp = Date.now().toString();
+      localStorage.setItem('address_updated', timestamp);
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'address_updated',
+        newValue: timestamp,
+        url: window.location.href
+      }));
+      console.log('✅ Evento address-updated disparado via localStorage (toggle)');
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -221,7 +241,9 @@ export function AddressesManagement() {
     try {
       const data = await adminApi.get('/admin/branches');
       console.log('🔍 Filiais carregadas:', data);
-      setBranches(Array.isArray(data) ? data : []);
+      // Filtrar apenas filiais ativas
+      const activeBranches = Array.isArray(data) ? data.filter((b: any) => b.is_active) : [];
+      setBranches(activeBranches);
     } catch (error) {
       console.error('Erro ao carregar filiais:', error);
       setBranches([]);
@@ -283,6 +305,16 @@ export function AddressesManagement() {
       if (!res.ok) throw new Error('Erro ao salvar endereço');
       await fetchAddresses();
       handleCancel();
+      
+      // Dispara evento via localStorage para sincronizar entre abas
+      const timestamp = Date.now().toString();
+      localStorage.setItem('address_updated', timestamp);
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'address_updated',
+        newValue: timestamp,
+        url: window.location.href
+      }));
+      console.log(`✅ Evento address-updated disparado via localStorage (${editing ? 'atualização' : 'criação'})`);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -533,10 +565,16 @@ export function AddressesManagement() {
                             await fetch(`${API_BASE_URL}/admin/addresses/${address.id}/activate`, { method: 'PATCH', headers: getHeaders() });
                             await fetchAddresses();
                             setLoading(false);
-                            // Dispara evento global ao ativar checkout
-                            if (!address.ativo) {
-                              window.dispatchEvent(new Event('address-updated'));
-                            }
+                            
+                            // Dispara evento via localStorage para sincronizar entre abas
+                            const timestamp = Date.now().toString();
+                            localStorage.setItem('address_updated', timestamp);
+                            window.dispatchEvent(new StorageEvent('storage', {
+                              key: 'address_updated',
+                              newValue: timestamp,
+                              url: window.location.href
+                            }));
+                            console.log('✅ Evento address-updated disparado via localStorage (checkout toggle)');
                           }}
                         title={address.ativo ? 'Desligar checkout' : 'Ligar checkout'}
                       >

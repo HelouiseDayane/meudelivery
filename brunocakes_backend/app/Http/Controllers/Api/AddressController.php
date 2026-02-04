@@ -211,7 +211,19 @@ class AddressController extends Controller
                   ->where('is_active', true);
             })
             ->with('branch:id,name,code,is_open')
-            ->get();
+            ->get()
+            ->map(function($address) {
+                // Adicionar store_status calculado
+                $storeStatus = $this->calculateStoreStatus($address->horarios);
+                $address->store_status = $storeStatus;
+                
+                // Garantir que checkout_active existe
+                if (!isset($address->checkout_active)) {
+                    $address->checkout_active = true;
+                }
+                
+                return $address;
+            });
         
         if ($activeAddresses->isEmpty()) {
             return response()->json([], 200);
@@ -219,5 +231,54 @@ class AddressController extends Controller
 
         return response()->json($activeAddresses, 200, ['Content-Type' => 'application/json; charset=UTF-8'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     }
-
+    
+    /**
+     * Calcula o status da loja baseado no horário de funcionamento
+     */
+    private function calculateStoreStatus($horarios)
+    {
+        if (empty($horarios)) {
+            return [
+                'is_open' => false,
+                'message' => 'Horário não configurado'
+            ];
+        }
+        
+        // Obter horário atual no fuso de Brasília
+        $now = new \DateTime('now', new \DateTimeZone('America/Sao_Paulo'));
+        $currentTime = $now->format('H:i');
+        
+        // Parse do formato "08:00 até 12:00" ou "08:00-12:00"
+        $pattern = '/(\d{2}:\d{2})\s*(?:até|ate|-)\s*(\d{2}:\d{2})/i';
+        
+        if (preg_match($pattern, $horarios, $matches)) {
+            $openTime = $matches[1];
+            $closeTime = $matches[2];
+            
+            $isOpen = ($currentTime >= $openTime && $currentTime <= $closeTime);
+            
+            if ($isOpen) {
+                return [
+                    'is_open' => true,
+                    'message' => 'Aberto agora'
+                ];
+            } else {
+                $message = $currentTime < $openTime 
+                    ? "Abre às $openTime" 
+                    : "Fechado - Abre amanhã às $openTime";
+                
+                return [
+                    'is_open' => false,
+                    'message' => $message,
+                    'next_opening' => $openTime
+                ];
+            }
+        }
+        
+        // Se não conseguiu fazer parse, assume fechado
+        return [
+            'is_open' => false,
+            'message' => 'Horário não reconhecido'
+        ];
+    }
 }

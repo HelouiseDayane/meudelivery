@@ -65,6 +65,7 @@ brunocakes_front_v3/config/*.json
 brunocakes_front_v3/config/*.env
 brunocakes_front_v3/config/*.yml
 brunocakes_front_v3/config/*.yaml
+brunocakes_front_v3/ssl/*
 set-frontend-env.sh
 init.sh
 manage.sh

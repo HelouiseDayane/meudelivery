@@ -45,6 +45,31 @@ interface Product {
     branch?: Branch;
   }>;
 }
+
+// Função auxiliar para converter is_active para boolean real
+const isProductActive = (product: Product): boolean => {
+  const value = product.is_active;
+  
+  // Se já é boolean, retorna direto
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  
+  // Se é número, considera 1 como true e 0 como false
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  
+  // Se é string, verifica valores comuns
+  if (typeof value === 'string') {
+    const str = value.toLowerCase().trim();
+    return str === '1' || str === 'true' || str === 'yes';
+  }
+  
+  // Fallback: considera falso
+  return false;
+};
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
@@ -99,7 +124,8 @@ export function ProductsManagement() {
   const fetchBranches = async () => {
     try {
       const data = await adminApi.get('/admin/branches');
-      const branchList = Array.isArray(data) ? data : [];
+      // Filtrar apenas filiais ativas
+      const branchList = Array.isArray(data) ? data.filter((b: any) => b.is_active) : [];
       setBranches(branchList);
       
       // Inicializar estoques com 0 para cada filial
@@ -285,7 +311,8 @@ const handleSubmit = async (e: React.FormEvent) => {
         if (product.id === productId) {
           return {
             ...product,
-            is_active: newStatus
+            is_active: newStatus,
+            available: newStatus // Atualizar ambos os campos
           };
         }
         return product;
@@ -293,15 +320,30 @@ const handleSubmit = async (e: React.FormEvent) => {
       setAdminProducts(updatedProducts);
 
       // Tentar primeiro o endpoint específico de toggle
+      let result;
       try {
-        await adminApi.toggleProduct(productId);
+        result = await adminApi.toggleProduct(productId);
       } catch (toggleError) {
         // Fallback para update manual
-        await adminApi.updateProduct(productId, { is_active: newStatus });
+        result = await adminApi.updateProduct(productId, { is_active: newStatus });
       }
       
-      // Atualiza novamente para garantir sincronização com o backend
-      await refreshProducts();
+      // Atualizar com os dados retornados pelo backend
+      if (result && result.product) {
+        const finalProducts = adminProducts.map(product => {
+          if (product.id === productId) {
+            return {
+              ...product,
+              ...result.product,
+              is_active: result.product.is_active,
+              available: result.product.is_active
+            };
+          }
+          return product;
+        });
+        setAdminProducts(finalProducts);
+      }
+      
       toast.success(`Produto ${newStatus ? 'ativado' : 'desativado'} com sucesso!`);
     } catch (error) {
       // Em caso de erro, reverte a alteração local
@@ -309,7 +351,8 @@ const handleSubmit = async (e: React.FormEvent) => {
         if (product.id === productId) {
           return {
             ...product,
-            is_active: currentStatus
+            is_active: currentStatus,
+            available: currentStatus
           };
         }
         return product;
@@ -816,18 +859,18 @@ const handleSubmit = async (e: React.FormEvent) => {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Checkbox
-                        checked={Boolean(product.is_active)}
-                        onCheckedChange={() => handleToggleAvailability(product.id, Boolean(product.is_active))}
-                        aria-label={`${Boolean(product.is_active) ? 'Desativar' : 'Ativar'} produto`}
+                        checked={isProductActive(product)}
+                        onCheckedChange={() => handleToggleAvailability(product.id, isProductActive(product))}
+                        aria-label={`${isProductActive(product) ? 'Desativar' : 'Ativar'} produto`}
                       />
                       <Badge 
-                        variant={Boolean(product.is_active) ? 'default' : 'secondary'}
-                        className={Boolean(product.is_active) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
+                        variant={isProductActive(product) ? 'default' : 'secondary'}
+                        className={isProductActive(product) ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-red-100 text-red-800 hover:bg-red-200'}
                       >
-                        {Boolean(product.is_active) ? 'Ativo' : 'Inativo'}
+                        {isProductActive(product) ? 'Ativo' : 'Inativo'}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        (Clique para {Boolean(product.is_active) ? 'desativar' : 'ativar'})
+                        (Clique para {isProductActive(product) ? 'desativar' : 'ativar'})
                       </span>
                     </div>
                   </TableCell>

@@ -11,12 +11,16 @@
   <title id="dynamic-title"></title>
   <script>
     // Preenche dinamicamente o título e descrição usando storeSettings
-    fetch('http://localhost:8191/api/store/settings')
-      .then(res => res.json())
+    // Use caminho relativo para funcionar em dev e produção (sem hardcode em localhost)
+    fetch('/api/store/settings')
+      .then(res => res.ok ? res.json() : Promise.reject(new Error('store settings not found')))
       .then(data => {
         document.title = `${data.store_name}${data.store_slogan ? ' - ' + data.store_slogan : ''}`;
         document.getElementById('dynamic-title').textContent = document.title;
         document.getElementById('meta-description').setAttribute('content', `${data.store_name}${data.store_slogan ? ' - ' + data.store_slogan : ''} A melhor doceria da cidade.`);
+      })
+      .catch(() => {
+        // Não quebrar a página se a configuração não estiver disponível no momento
       });
   </script>
 

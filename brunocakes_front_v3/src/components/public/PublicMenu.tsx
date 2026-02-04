@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { API_BASE_URL } from '../../api/common/config';
 import { fetchAndSetActiveAddress, getProductImageUrl, api, apiRequest } from '../../api';
 import { useRealTime } from '../../hooks/useRealTime';
+import { useStockUpdates } from '../../hooks/useRealtimeUpdates';
 import { useStoreConfigState } from '../../hooks/useStoreConfigState';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -31,9 +32,11 @@ const PublicMenu = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [branchData, setBranchData] = useState<any>(null);
   const [footerData, setFooterData] = useState({
     workingHours: '',
-    isOpen: true, // assume aberto por padrão até carregar
+    isOpen: false, // Iniciar como fechado até carregar dados reais
+    checkoutActive: false, // Iniciar como desativado até carregar dados reais
   });
 
   // Padroniza os campos de badge e converte price/promotionPrice para número
@@ -98,6 +101,38 @@ const PublicMenu = () => {
     };
   }, []);
 
+  // ============================================================================
+  // SSE: ATUALIZAÇÕES EM TEMPO REAL (substitui polling)
+  // ============================================================================
+  
+  const handleStockUpdate = useCallback(async (event: any) => {
+    // Recarregar produtos para obter estoque atualizado
+    try {
+      const { publicApi } = await import('../../api');
+      const products = await publicApi.getPublicProducts(selectedBranch?.id);
+      setPublicProducts(products);
+      
+      // Notificar usuário se for um produto relevante
+      toast.info('Estoque atualizado!', {
+        description: 'Os preços e disponibilidade foram atualizados.',
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar produtos após SSE:', error);
+    }
+  }, [selectedBranch, setPublicProducts]);
+
+  // Conectar ao SSE quando tiver filial selecionada
+  useStockUpdates(
+    selectedBranch?.id || null,
+    handleStockUpdate,
+    !!selectedBranch // Só ativa se tiver filial
+  );
+
+  // ============================================================================
+  // FIM SSE
+  // ============================================================================
+
   // Função para obter o estoque disponível corretamente do produto
   const getProductAvailableStock = (productId: string | number) => {
     const idToSearch = String(productId);
@@ -154,82 +189,70 @@ const PublicMenu = () => {
     }
   }, [lastEvent, setPublicProducts, selectedBranch]);
 
-  // Efeito para atualizar o status da loja (aberto/fechado) e escutar evento address-updated
+  // Efeito para buscar dados da filial selecionada (endereço, horário, checkout)
   useEffect(() => {
-    const updateStoreStatus = async () => {
+    let lastUpdateTimestamp = 0;
+    const DEBOUNCE_TIME = 500; // 500ms para evitar requisições duplicadas
+    
+    const updateBranchStatus = async () => {
+      const now = Date.now();
+      if (now - lastUpdateTimestamp < DEBOUNCE_TIME) {
+        return;
+      }
+      lastUpdateTimestamp = now;
+      
+      if (!selectedBranch) {
+        setFooterData({ workingHours: '', isOpen: false, checkoutActive: false });
+        setBranchData(null);
+        return;
+      }
+
       try {
-        const cachedAddress = localStorage.getItem('active_address_cache');
-        let cached = null;
-        if (cachedAddress) {
-          try { cached = JSON.parse(cachedAddress); } catch {}
-        }
-        const res = await apiRequest(`${API_BASE_URL}/addresses/active`, {
+        const res = await apiRequest('/addresses/active', {
           method: 'GET',
           headers: { 'Accept': 'application/json' },
         });
-        const active = res && typeof res === 'object' ? res : null;
-        if (!active && cached) {
+        
+        const addressList = Array.isArray(res) ? res : [];
+        const branchAddress = addressList.find((a: any) => a.branch_id === selectedBranch.id);
+        
+        if (branchAddress) {
+          setBranchData(branchAddress);
+          const storeStatus = branchAddress.store_status || { is_open: false, message: 'Fechado' };
+          const checkoutActive = branchAddress.checkout_active !== false;
+          const isOpen = storeStatus.is_open && checkoutActive;
+          
           setFooterData({
-            workingHours: cached.horarios || '',
-            isOpen: cached.horarios ? String(cached.horarios).toLowerCase() !== '' : false,
+            workingHours: branchAddress.horarios || '',
+            isOpen: isOpen,
+            checkoutActive: checkoutActive,
           });
-          return;
+        } else {
+          setBranchData(null);
+          setFooterData({ workingHours: '', isOpen: false, checkoutActive: false });
         }
-        if (active && active.updated_at) {
-          if (cached && cached.updated_at === active.updated_at) {
-            setFooterData({
-              workingHours: cached.horarios || '',
-              isOpen: cached.horarios ? String(cached.horarios).toLowerCase() !== '' : false,
-            });
-            return;
-          }
-          localStorage.setItem('active_address_cache', JSON.stringify(active));
-        }
-        let workingHours = '';
-        let isOpen = false;
-        if (active) {
-          workingHours = active.horarios || '';
-          if (active.ativo) {
-            let ini = '', fim = '';
-            if (workingHours && (workingHours.includes('até') || workingHours.includes('-'))) {
-              if (workingHours.includes('até')) {
-                [ini, fim] = workingHours.split('até').map(s => s.trim());
-              } else if (workingHours.includes('-')) {
-                [ini, fim] = workingHours.split('-').map(s => s.trim());
-              }
-              const now = new Date();
-              const pad = (n: number) => n.toString().padStart(2, '0');
-              const nowStr = pad(now.getHours()) + ':' + pad(now.getMinutes());
-              const toMinutes = (h: string) => {
-                const [hh, mm] = h.split(':');
-                return parseInt(hh, 10) * 60 + parseInt(mm, 10);
-              };
-              const nowMin = toMinutes(nowStr);
-              const iniMin = toMinutes(ini);
-              const fimMin = toMinutes(fim);
-              isOpen = nowMin >= iniMin && nowMin <= fimMin;
-            } else {
-              isOpen = true;
-            }
-          } else {
-            isOpen = false;
-          }
-        }
-        setFooterData({
-          workingHours,
-          isOpen,
-        });
       } catch (e) {
-        setFooterData({ workingHours: '', isOpen: false });
+        console.error('❌ Erro ao atualizar status da filial:', e);
+        setFooterData({ workingHours: '', isOpen: false, checkoutActive: false });
+        setBranchData(null);
       }
     };
-    updateStoreStatus();
-    // Escuta evento address-updated para atualizar status da loja
-    window.addEventListener('address-updated', updateStoreStatus);
-    return () => {
-      window.removeEventListener('address-updated', updateStoreStatus);
+
+    updateBranchStatus();
+
+    // Listener para atualização via localStorage (sincroniza entre abas)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'address_updated') {
+        updateBranchStatus();
+      }
     };
-  }, []);
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [selectedBranch]);
 
   // Sincroniza a quantidade local com o estoque disponível
   useEffect(() => {
@@ -251,7 +274,6 @@ const PublicMenu = () => {
   useEffect(() => {
     const handleCartExpired = async (event: Event) => {
       const customEvent = event as CustomEvent;
-      console.log('[cart-expired] Evento recebido:', customEvent);
       toast.error(customEvent.detail?.message || 'Carrinho expirado!', {
         duration: 6000,
       });
@@ -278,23 +300,10 @@ const PublicMenu = () => {
     };
   }, [setPublicProducts]);
 
-  // Disparo manual do evento cart-expired para teste/debug (remova depois de validar)
-  useEffect(() => {
-    // Exemplo: se houver alguma flag de expiração do carrinho, dispare o evento
-    // Substitua por sua lógica real de expiração do carrinho!
-    const checkCartExpired = () => {
-      // Exemplo: checar se existe uma flag no localStorage
-      const expired = window.localStorage.getItem('bruno_cart_force_expired');
-      if (expired === '1') {
-        const event = new CustomEvent('cart-expired', { detail: { message: 'Carrinho expirado (debug manual)' } });
-        window.dispatchEvent(event);
-        window.localStorage.removeItem('bruno_cart_force_expired');
-      }
-    };
-    const interval = setInterval(checkCartExpired, 2000);
-    return () => clearInterval(interval);
-  }, []);
-
+  // ============================================================================
+  // REMOVIDO: Polling a cada 2 segundos (substituído por SSE)
+  // ============================================================================
+  
   // Listener para atualização via localStorage (garante atualização em todas as abas)
   useEffect(() => {
     const handleStorage = async (event: StorageEvent) => {
@@ -353,12 +362,21 @@ const PublicMenu = () => {
         // Adiciona ao carrinho normalmente
         await addToCart(product, quantity);
         setLocalQuantity(product.id, 1);
-        // Força a re-busca dos produtos para atualizar o estoque na UI
-        import('../../api').then(({ api }) => {
-          api.getPublicProducts().then((products) => {
-            setPublicProducts(products);
-          });
-        });
+        
+        // Atualiza o estoque localmente de forma otimista
+        setPublicProducts(prevProducts => 
+          prevProducts.map(p => {
+            if (String(p.id) === String(product.id)) {
+              const currentAvailable = p.available_stock ?? 0;
+              return {
+                ...p,
+                available_stock: Math.max(0, currentAvailable - quantity)
+              };
+            }
+            return p;
+          })
+        );
+        
       } catch (error) {
         console.error('Erro ao adicionar ao carrinho:', error);
         toast.error('Erro ao adicionar ao carrinho. Tente novamente.');
@@ -438,17 +456,23 @@ const PublicMenu = () => {
         {footerData.workingHours && (
           <div className="mt-2 text-base font-medium">
             <span className="mr-2">{footerData.workingHours}</span>
-            {footerData.isOpen ? (
-              <span className="text-primary font-bold">(Aberto)</span>
+            {footerData.isOpen && footerData.checkoutActive ? (
+              <span className="text-green-600 font-bold">✅ Aberto - Pedidos disponíveis</span>
+            ) : !footerData.checkoutActive ? (
+              <span className="text-orange-600 font-bold">⚠️ Loja Fechada</span>
             ) : (
-              <span className="text-red-700 font-bold">(Fechado)</span>
+              <span className="text-red-700 font-bold">🔒 Fechado</span>
             )}
           </div>
         )}
-        {!footerData.isOpen && (
+        {(!footerData.isOpen || !footerData.checkoutActive) && (
             <Alert className="mb-6 border-2 border-red-500 bg-red-50 flex justify-center">
             <AlertDescription className="font-medium text-red-800 text-center">
-              <strong>Loja Fechada:</strong> Não é possível comprar no momento.
+              {!footerData.checkoutActive ? (
+                <><strong>Loja Fechada:</strong> Esta filial não está aceitando pedidos online no momento.</>
+              ) : (
+                <><strong>Loja Fechada:</strong> Não é possível comprar no momento.</>
+              )}
             </AlertDescription>
             </Alert>
         )}
@@ -494,9 +518,10 @@ const PublicMenu = () => {
         {filteredProducts.map((product: any) => {
           const availableStock = getProductAvailableStock(product.id);
           const isLowStock = availableStock <= 5 && availableStock > 0;
-          // Um produto está indisponível apenas se não tiver estoque
+          // Um produto está indisponível se não tiver estoque, loja fechada OU checkout desativado
           const isIndisponivel = availableStock <= 0;
-          const lojaFechada = !footerData.isOpen;
+          const lojaFechada = !footerData.isOpen || !footerData.checkoutActive;
+          
           return (
             <Card key={product.id} className={`overflow-hidden transition-shadow flex flex-col ${isIndisponivel || lojaFechada ? 'opacity-80 grayscale' : 'hover:shadow-lg'}`}>
               <div className="relative flex flex-col items-center pt-4">

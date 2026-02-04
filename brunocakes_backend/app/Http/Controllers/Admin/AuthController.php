@@ -61,6 +61,17 @@ class AuthController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        // Verificar se a filial do usuário está ativa (se tiver filial)
+        if ($user->branch_id) {
+            $branch = $user->branch;
+            if (!$branch || !$branch->is_active) {
+                return response()->json([
+                    'error' => 'A filial vinculada a este usuário está inativa. Entre em contato com o administrador.',
+                    'code' => 'BRANCH_INACTIVE'
+                ], 403);
+            }
+        }
+
         $token = $user->createToken('admin-token')->plainTextToken;
 
         // Carregar dados da filial se existir
@@ -85,8 +96,36 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'branch_id' => $user->branch_id,
                 'branch' => $branchData,
             ]
+        ]);
+    }
+
+    /**
+     * @OA\Post(
+     *      path="/api/admin/logout",
+     *      operationId="adminLogout",
+     *      tags={"Admin Auth"},
+     *      summary="Logout de administrador",
+     *      description="Faz logout do administrador e revoga o token atual",
+     *      security={{"sanctum":{}}},
+     *      @OA\Response(
+     *          response=200,
+     *          description="Logout realizado com sucesso",
+     *          @OA\JsonContent(
+     *              @OA\Property(property="message", type="string", example="Logged out successfully")
+     *          )
+     *      )
+     * )
+     */
+    public function logout(Request $request)
+    {
+        // Revoga o token atual
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json([
+            'message' => 'Logged out successfully'
         ]);
     }
 }

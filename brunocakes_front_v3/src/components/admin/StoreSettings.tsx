@@ -4,8 +4,14 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
-import { AlertCircle, Save, Upload, RotateCcw } from 'lucide-react';
+import { AlertCircle, Save, Upload, RotateCcw, ArrowLeft } from 'lucide-react';
 import { adminApiRequest, ADMIN_API_ENDPOINTS } from '../../api';
+import adminApi from '../../api/admin';
+import { toast } from 'sonner';
+
+interface StoreSettingsProps {
+  onBack?: () => void;
+}
 
 interface StoreSettingsData {
   store_name: string;
@@ -21,7 +27,7 @@ interface StoreSettingsData {
   logo_icon_url?: string;
 }
 
-export const StoreSettings: React.FC = () => {
+export const StoreSettings: React.FC<StoreSettingsProps> = ({ onBack }) => {
   const [settings, setSettings] = useState<StoreSettingsData>({
     store_name: '',
     store_slogan: '',
@@ -40,6 +46,13 @@ export const StoreSettings: React.FC = () => {
   const [logoHorizontalFile, setLogoHorizontalFile] = useState<File | null>(null);
   const [logoIconFile, setLogoIconFile] = useState<File | null>(null);
   const [isExistingSettings, setIsExistingSettings] = useState(false);
+  const [masterContact, setMasterContact] = useState<{ phone?: string; email?: string } | null>(null);
+  const [branchContact, setBranchContact] = useState<string>('');
+  const [branchesList, setBranchesList] = useState<any[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
+
+  const currentAdmin = JSON.parse(localStorage.getItem('bruno_admin') || '{}');
+  const isMaster = currentAdmin?.role === 'master';
 
   // Carregar configurações
   useEffect(() => {
@@ -49,36 +62,11 @@ export const StoreSettings: React.FC = () => {
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        setMessage({ type: 'error', text: 'Token de autenticação não encontrado' });
-        return;
-      }
-
-      const response = await fetch(ADMIN_API_ENDPOINTS.store.settings, {
+      
+      const data = await adminApiRequest(ADMIN_API_ENDPOINTS.store.settings, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
       });
 
-      if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        let errorMessage = `Erro ${response.status}`;
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage += `: ${errorData.message || response.statusText}`;
-        } else {
-          // Se não é JSON, provavelmente é uma página de erro HTML
-          errorMessage += `: Erro interno do servidor. Verifique se o endpoint existe no backend.`;
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
       setSettings({
         ...data,
         store_slogan: data.store_slogan || '',
@@ -94,6 +82,51 @@ export const StoreSettings: React.FC = () => {
       
       // Verificar se já existe configurações salvas (tem ID)
       setIsExistingSettings(!!data.id);
+
+      // Determina contato da filial/master e, se for master, busca lista de filiais
+      try {
+        if (!isMaster) {
+          const branchId = currentAdmin?.branch_id;
+          let contactPhone: string | undefined = undefined;
+
+          if (branchId) {
+            try {
+              const branchesResp = await adminApi.get('/admin/branches');
+              const branchesListResp = Array.isArray(branchesResp) ? branchesResp : (branchesResp.data || []);
+              const myBranch = branchesListResp.find((b: any) => b.id === branchId);
+              if (myBranch) {
+                contactPhone = myBranch.phone || myBranch.whatsapp || undefined;
+              }
+            } catch (e) {
+              console.warn('Não foi possível buscar filial do usuário:', e);
+            }
+          }
+
+          // Se não encontrou telefone na filial, usa whatsapp/phone das configurações da loja
+          if (!contactPhone) {
+            contactPhone = data.whatsapp || data.phone || undefined;
+          }
+
+          setMasterContact({ phone: contactPhone || '', email: data.email || '' });
+          setBranchContact(contactPhone || '');
+        } else {
+          // Se for master, buscar lista de filiais para permitir selecionar qual filial conectar
+          try {
+            const branchesResp = await adminApi.get('/admin/branches');
+            const list = Array.isArray(branchesResp) ? branchesResp : (branchesResp.data || []);
+            setBranchesList(list);
+            if (list.length > 0) {
+              setSelectedBranchId(list[0].id);
+              const firstPhone = list[0].phone || list[0].whatsapp || data.whatsapp || data.phone || '';
+              setBranchContact(firstPhone);
+            }
+          } catch (e) {
+            console.warn('Não foi possível buscar lista de filiais para master:', e);
+          }
+        }
+      } catch (e) {
+        console.warn('Não foi possível determinar o contato da filial/master:', e);
+      }
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
       setMessage({ type: 'error', text: 'Erro ao carregar configurações' });
@@ -107,78 +140,35 @@ export const StoreSettings: React.FC = () => {
       setSaving(true);
       setMessage(null);
 
-      const token = localStorage.getItem('admin_token');
-      if (!token) {
-        setMessage({ type: 'error', text: 'Token de autenticação não encontrado. Faça login novamente.' });
-        return;
-      }
-
       // Verificar se há arquivos para upload
       const hasFiles = logoHorizontalFile || logoIconFile;
 
-      let requestBody;
-      let headers: Record<string, string> = {
-        'Authorization': `Bearer ${token}`,
-      };
-      // Sempre usar POST, especialmente quando há arquivos
-      let method = 'POST';
-
       if (hasFiles) {
-        // Se há arquivos, usar FormData com POST
-        const formData = new FormData();
-        
-        formData.append('store_name', settings.store_name);
-        formData.append('store_slogan', settings.store_slogan);
-        formData.append('instagram', settings.instagram);
-        formData.append('primary_color', settings.primary_color || '#8B4513');
-        formData.append('mercado_pago_key', settings.mercado_pago_key);
-
-        if (logoHorizontalFile) {
-          formData.append('logo_horizontal', logoHorizontalFile);
-        }
-        if (logoIconFile) {
-          formData.append('logo_icon', logoIconFile);
-        }
-
-        requestBody = formData;
-      } else {
-        // Se não há arquivos, usar JSON com POST também    
-        const jsonData = {
-          store_name: settings.store_name,
-          store_slogan: settings.store_slogan,
-          instagram: settings.instagram,
-          primary_color: settings.primary_color || '#8B4513',
-          mercado_pago_key: settings.mercado_pago_key,
-        };
-
-        headers['Content-Type'] = 'application/json';
-        requestBody = JSON.stringify(jsonData);
+        // TEMPORÁRIO: Impedir upload de arquivos até corrigir
+        setMessage({ 
+          type: 'error', 
+          text: 'Upload de imagens temporariamente desabilitado. Salvando apenas texto...' 
+        });
+        // Continue sem os arquivos por enquanto
       }
 
-      const response = await fetch(ADMIN_API_ENDPOINTS.store.settings, {
-        method: method,
-        headers: headers,
-        body: requestBody,
+      // Usar adminApiRequest que já funciona
+      const jsonData = {
+        store_name: settings.store_name,
+        store_slogan: settings.store_slogan,
+        instagram: settings.instagram,
+        primary_color: settings.primary_color || '#8B4513',
+        mercado_pago_key: settings.mercado_pago_key,
+      };
+
+      console.log('=== STORE SETTINGS DEBUG ===');
+      console.log('Sending data:', jsonData);
+      console.log('============================');
+
+      const result = await adminApiRequest(ADMIN_API_ENDPOINTS.store.settings, {
+        method: 'POST',
+        body: JSON.stringify(jsonData),
       });
-
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        let errorMessage = `Erro ${response.status}`;
-        
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage += `: ${errorData.message || response.statusText}`;
-        } else {
-          // Se não é JSON, provavelmente é uma página de erro HTML
-          errorMessage += `: Erro interno do servidor. Verifique se o backend está configurado corretamente.`;
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
 
       setMessage({ type: 'success', text: 'Configurações salvas com sucesso!' });
       setLogoHorizontalFile(null);
@@ -231,7 +221,8 @@ export const StoreSettings: React.FC = () => {
         return;
       }
 
-      const response = await fetch(ADMIN_API_ENDPOINTS.store.settings, {
+      const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+      const response = await fetch(`${apiBase}${ADMIN_API_ENDPOINTS.store.settings}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -275,28 +266,43 @@ export const StoreSettings: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Configurações da Loja</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            {isExistingSettings ? 'Editando configurações existentes' : 'Criando novas configurações'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isExistingSettings && (
-            <Button 
-              onClick={handleReset} 
-              disabled={resetting || saving} 
-              variant="outline"
-              className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
-            >
-              <RotateCcw className="w-4 h-4" />
-              {resetting ? 'Resetando...' : 'Resetar'}
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <Button variant="outline" size="sm" onClick={onBack}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Voltar
             </Button>
           )}
-          <Button onClick={handleSave} disabled={saving || resetting} className="flex items-center gap-2">
-            <Save className="w-4 h-4" />
-            {saving ? 'Salvando...' : (isExistingSettings ? 'Atualizar' : 'Criar')}
-          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Configurações da Loja</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {isExistingSettings ? 'Editando configurações existentes' : 'Criando novas configurações'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Apenas master pode resetar/atualizar configurações globais */}
+          {isMaster ? (
+            <>
+              {isExistingSettings && (
+                <Button 
+                  onClick={handleReset} 
+                  disabled={resetting || saving} 
+                  variant="outline"
+                  className="flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  {resetting ? 'Resetando...' : 'Resetar'}
+                </Button>
+              )}
+              <Button onClick={handleSave} disabled={saving || resetting} className="flex items-center gap-2">
+                <Save className="w-4 h-4" />
+                {saving ? 'Salvando...' : (isExistingSettings ? 'Atualizar' : 'Criar')}
+              </Button>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Você é um administrador de filial — apenas pagamento e contato do master estão visíveis.</div>
+          )}
         </div>
       </div>
 
@@ -310,148 +316,334 @@ export const StoreSettings: React.FC = () => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Informações Básicas */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Informações Básicas</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="store_name">Nome da Loja</Label>
-              <Input
-                id="store_name"
-                value={settings.store_name}
-                onChange={(e) => handleInputChange('store_name', e.target.value)}
-                placeholder={settings.store_name || 'Nome da loja'}
-              />
-            </div>
+        {isMaster ? (
+          <>
+            {/* Informações Básicas */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Informações Básicas</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="store_name">Nome da Loja</Label>
+                  <Input
+                    id="store_name"
+                    value={settings.store_name}
+                    onChange={(e) => handleInputChange('store_name', e.target.value)}
+                    placeholder={settings.store_name || 'Nome da loja'}
+                  />
+                </div>
 
-            <div>
-              <Label htmlFor="store_slogan">Slogan</Label>
-              <Textarea
-                id="store_slogan"
-                value={settings.store_slogan}
-                onChange={(e) => handleInputChange('store_slogan', e.target.value)}
-                placeholder={settings.store_slogan || 'Slogan da loja'}
-                rows={3}
-              />
-            </div>
+                <div>
+                  <Label htmlFor="store_slogan">Slogan</Label>
+                  <Textarea
+                    id="store_slogan"
+                    value={settings.store_slogan}
+                    onChange={(e) => handleInputChange('store_slogan', e.target.value)}
+                    placeholder={settings.store_slogan || 'Slogan da loja'}
+                    rows={3}
+                  />
+                </div>
 
-            <div>
-              <Label htmlFor="instagram">Instagram (sem @)</Label>
-              <Input
-                id="instagram"
-                value={settings.instagram}
-                onChange={(e) => handleInputChange('instagram', e.target.value)}
-                placeholder="Ex: brunocakee"
-              />
-            </div>
+                <div>
+                  <Label htmlFor="instagram">Instagram (sem @)</Label>
+                  <Input
+                    id="instagram"
+                    value={settings.instagram}
+                    onChange={(e) => handleInputChange('instagram', e.target.value)}
+                    placeholder="Ex: brunocakee"
+                  />
+                </div>
 
-            <div>
-              <Label htmlFor="primary_color">Cor Primária</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="primary_color"
-                  type="color"
-                  value={settings.primary_color}
-                  onChange={(e) => handleInputChange('primary_color', e.target.value)}
-                  className="w-20 h-10"
-                />
-                <Input
-                  value={settings.primary_color}
-                  onChange={(e) => handleInputChange('primary_color', e.target.value)}
-                  placeholder="#8B4513"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Configurações de Pagamento */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pagamento</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="mercado_pago_key">Chave Mercado Pago</Label>
-              <Textarea
-                id="mercado_pago_key"
-                value={settings.mercado_pago_key}
-                onChange={(e) => handleInputChange('mercado_pago_key', e.target.value)}
-                placeholder="Chave de acesso do Mercado Pago"
-                rows={3}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Logos */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Logos e Imagens</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="phone">Telefone</Label>
-              <Input
-                id="phone"
-                value={settings.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-                placeholder="Ex: (84) 99999-9999"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="whatsapp">WhatsApp</Label>
-              <Input
-                id="whatsapp"
-                value={settings.whatsapp}
-                onChange={(e) => handleInputChange('whatsapp', e.target.value)}
-                placeholder="Ex: (84) 99999-9999"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="logo_horizontal">Logo Horizontal</Label>
-                {settings.logo_horizontal_url && (
-                  <div className="mt-2 mb-2">
-                    <img 
-                      src={settings.logo_horizontal_url} 
-                      alt="Logo Horizontal Atual" 
-                      className="h-16 w-auto border rounded"
+                <div>
+                  <Label htmlFor="primary_color">Cor Primária</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="primary_color"
+                      type="color"
+                      value={settings.primary_color}
+                      onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                      className="w-20 h-10"
+                    />
+                    <Input
+                      value={settings.primary_color}
+                      onChange={(e) => handleInputChange('primary_color', e.target.value)}
+                      placeholder="#8B4513"
                     />
                   </div>
-                )}
-                <Input
-                  id="logo_horizontal"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setLogoHorizontalFile(e.target.files?.[0] || null)}
-                />
-              </div>
+                </div>
+              </CardContent>
+            </Card>
 
-              <div>
-                <Label htmlFor="logo_icon">Logo Ícone</Label>
-                {settings.logo_icon_url && (
-                  <div className="mt-2 mb-2">
-                    <img 
-                      src={settings.logo_icon_url} 
-                      alt="Logo Ícone Atual" 
-                      className="h-16 w-16 border rounded"
+            {/* Configurações de Pagamento */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Pagamento</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="mercado_pago_key">Chave Mercado Pago</Label>
+                  <Textarea
+                    id="mercado_pago_key"
+                    value={settings.mercado_pago_key}
+                    onChange={(e) => handleInputChange('mercado_pago_key', e.target.value)}
+                    placeholder="Chave de acesso do Mercado Pago"
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Logos */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Logos e Imagens</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="phone">Telefone</Label>
+                  <Input
+                    id="phone"
+                    value={settings.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    placeholder="Ex: (84) 99999-9999"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="whatsapp">WhatsApp</Label>
+                  <Input
+                    id="whatsapp"
+                    value={settings.whatsapp}
+                    onChange={(e) => handleInputChange('whatsapp', e.target.value)}
+                    placeholder="Ex: (84) 99999-9999"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="logo_horizontal">Logo Horizontal</Label>
+                    {settings.logo_horizontal_url && (
+                      <div className="mt-2 mb-2">
+                        <img 
+                          src={settings.logo_horizontal_url} 
+                          alt="Logo Horizontal Atual" 
+                          className="h-16 w-auto border rounded"
+                        />
+                      </div>
+                    )}
+                    <Input
+                      id="logo_horizontal"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setLogoHorizontalFile(e.target.files?.[0] || null)}
                     />
                   </div>
-                )}
-                <Input
-                  id="logo_icon"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setLogoIconFile(e.target.files?.[0] || null)}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
+                  <div>
+                    <Label htmlFor="logo_icon">Logo Ícone</Label>
+                    {settings.logo_icon_url && (
+                      <div className="mt-2 mb-2">
+                        <img 
+                          src={settings.logo_icon_url} 
+                          alt="Logo Ícone Atual" 
+                          className="h-16 w-16 border rounded"
+                        />
+                      </div>
+                    )}
+                    <Input
+                      id="logo_icon"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setLogoIconFile(e.target.files?.[0] || null)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Conectar WhatsApp (visível também para master) */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Conectar WhatsApp (Pedidos e Impressão)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Conecte o WhatsApp da filial para receber pedidos e habilitar impressão de pedidos diretamente pelo WhatsApp.</p>
+                <div>
+                  <Label htmlFor="branch_whatsapp">WhatsApp da Filial</Label>
+                  <div className="flex items-center gap-2">
+                    {isMaster ? (
+                      <Input
+                        id="branch_whatsapp"
+                        value={branchContact}
+                        onChange={(e) => setBranchContact(e.target.value)}
+                        placeholder="Ex: +5584999953363"
+                      />
+                    ) : (
+                      <>
+                        <select
+                          value={selectedBranchId ?? ''}
+                          onChange={(e) => {
+                            const id = Number(e.target.value) || null;
+                            setSelectedBranchId(id);
+                            const branch = branchesList.find(b => b.id === id);
+                            const phone = branch ? (branch.phone || branch.whatsapp) : (settings.whatsapp || settings.phone || '');
+                            setBranchContact(phone || '');
+                          }}
+                          className="border rounded p-2"
+                        >
+                          {branchesList.map(b => (
+                            <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                          ))}
+                        </select>
+                        <Input
+                          id="branch_whatsapp"
+                          value={branchContact}
+                          onChange={(e) => setBranchContact(e.target.value)}
+                          placeholder="Ex: +5584999953363"
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button onClick={async () => {
+                    try {
+                      if (isMaster) {
+                        // Atualiza o whatsapp nas configurações da loja (master)
+                        const payload = { whatsapp: branchContact };
+                        await adminApiRequest(ADMIN_API_ENDPOINTS.store.settings, {
+                          method: 'POST',
+                          body: JSON.stringify(payload),
+                        });
+                        toast.success('WhatsApp das informações da loja atualizado com sucesso');
+                        loadSettings();
+                        return;
+                      }
+
+                      // Para admins de filial: atualiza a filial específica
+                      const branchId = currentAdmin?.branch_id;
+                      if (!branchId) {
+                        toast.error('Filial não encontrada para seu usuário.');
+                        return;
+                      }
+                      const payload = { phone: branchContact };
+                      await adminApi.put(`/admin/branches/${branchId}`, payload);
+                      toast.success('WhatsApp da filial atualizado com sucesso');
+                      loadSettings();
+                    } catch (err: any) {
+                      console.error('Erro ao conectar WhatsApp da filial:', err);
+                      toast.error(err.response?.data?.message || 'Erro ao conectar WhatsApp');
+                    }
+                  }}>
+                    Conectar
+                  </Button>
+
+                  {branchContact ? (
+                    <>
+                      <a
+                        className="inline-flex items-center gap-2 btn btn-outline"
+                        href={`https://wa.me/${branchContact.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Testar WhatsApp
+                      </a>
+                      <img
+                        src={`https://chart.googleapis.com/chart?cht=qr&chs=150x150&chl=${encodeURIComponent(`https://wa.me/${branchContact.replace(/\D/g, '')}`)}`}
+                        alt="QR WhatsApp Filial"
+                        className="h-28 w-28 border"
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhum número configurado.</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Se não tiver número local, o sistema usará o WhatsApp de configuração da loja como fallback.</p>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          // Visão reduzida para admins de filial: apenas pagamento + contato do master via WhatsApp (QR)
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Pagamento</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="mercado_pago_key">Chave Mercado Pago</Label>
+                  <Textarea
+                    id="mercado_pago_key"
+                    value={settings.mercado_pago_key}
+                    onChange={(e) => handleInputChange('mercado_pago_key', e.target.value)}
+                    placeholder="Chave de acesso do Mercado Pago"
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <CardTitle>Conectar WhatsApp (Pedidos e Impressão)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Conecte o WhatsApp da filial para receber pedidos e habilitar impressão de pedidos diretamente pelo WhatsApp.</p>
+                <div>
+                  <Label htmlFor="branch_whatsapp">WhatsApp da Filial</Label>
+                  <Input
+                    id="branch_whatsapp"
+                    value={branchContact}
+                    onChange={(e) => setBranchContact(e.target.value)}
+                    placeholder="Ex: +5584999953363"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button onClick={async () => {
+                    try {
+                      const branchId = currentAdmin?.branch_id;
+                      if (!branchId) {
+                        toast.error('Filial não encontrada para seu usuário.');
+                        return;
+                      }
+                      const payload = { phone: branchContact };
+                      await adminApi.put(`/admin/branches/${branchId}`, payload);
+                      toast.success('WhatsApp da filial atualizado com sucesso');
+                      // Atualiza settings/local state
+                      loadSettings();
+                    } catch (err: any) {
+                      console.error('Erro ao conectar WhatsApp da filial:', err);
+                      toast.error(err.response?.data?.message || 'Erro ao conectar WhatsApp');
+                    }
+                  }}>
+                    Conectar
+                  </Button>
+
+                  {branchContact ? (
+                    <>
+                      <a
+                        className="inline-flex items-center gap-2 btn btn-outline"
+                        href={`https://wa.me/${branchContact.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Testar WhatsApp
+                      </a>
+                      <img
+                        src={`https://chart.googleapis.com/chart?cht=qr&chs=150x150&chl=${encodeURIComponent(`https://wa.me/${branchContact.replace(/\D/g, '')}`)}`}
+                        alt="QR WhatsApp Filial"
+                        className="h-28 w-28 border"
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Nenhum número configurado.</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Se não tiver número local, o sistema usará o WhatsApp de configuração da loja como fallback.</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </div>
   );

@@ -7,13 +7,19 @@ import { Separator } from '../ui/separator';
 import { Alert, AlertDescription } from '../ui/alert';
 import { ShoppingCart, Plus, Minus, Trash2, ArrowLeft, ArrowRight, Package, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { STORE_CONFIG, getProductImageUrl } from '../../api';
+import { STORE_CONFIG, getProductImageUrl, API_BASE_URL, apiRequest } from '../../api';
 import { useCartExpiration } from '../../hooks/useCartExpiration';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { Branch } from '../../types/admin';
 
 export function Cart() {
   const { cart, updateCartQuantity, removeFromCart, clearCart } = useApp();
   const { currentStatus, clearAllExpirationItems, CART_EXPIRATION_MINUTES } = useCartExpiration();
+  const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
+  const [branchData, setBranchData] = useState<any>(null);
+
+  const previousBranchIdRef = useRef<number | null>(null);
+  const isInitialMount = useRef(true);
 
   // Limpar expiração quando o carrinho for limpo
   useEffect(() => {
@@ -22,11 +28,109 @@ export function Cart() {
     }
   }, [cart.length, clearAllExpirationItems]);
 
+  // Único useEffect para carregar branch e seus dados (apenas uma requisição)
+  useEffect(() => {
+    const fetchBranchData = async () => {
+      // Carregar filial do localStorage
+      const stored = localStorage.getItem('selected_branch');
+      if (!stored) {
+        setBranchData(null);
+        setSelectedBranch(null);
+        return;
+      }
+
+      try {
+        const branch = JSON.parse(stored);
+        
+        // Detectar mudança de filial e limpar carrinho
+        if (previousBranchIdRef.current !== null && previousBranchIdRef.current !== branch.id) {
+          console.log('🔄 Filial mudou de', previousBranchIdRef.current, 'para', branch.id, '- Limpando carrinho');
+          clearCart();
+        }
+        
+        previousBranchIdRef.current = branch.id;
+        setSelectedBranch(branch);
+
+        // Buscar dados do endereço ativo (apenas uma requisição usando apiRequest)
+        const branches = await apiRequest('/addresses/active');
+        const addressList = Array.isArray(branches) ? branches : [];
+        
+        // Encontrar endereço da filial selecionada
+        const currentBranch = addressList.find((b: any) => {
+          const addressBranchId = b.branch_id || b.id;
+          return addressBranchId == branch.id;
+        });
+        
+        if (currentBranch) {
+          // Buscar dados completos da filial (incluindo telefone)
+          const branchesData = await apiRequest('/branches');
+          const branchId = currentBranch.branch_id || currentBranch.id;
+          const fullBranch = branchesData.find((b: any) => b.id == branchId);
+          
+          const data = {
+            name: fullBranch?.name || currentBranch.nome || 'Bruno Miranda Cakes',
+            phone: formatPhone(fullBranch?.phone || '84991277973'),
+            address: currentBranch.logradouro 
+              ? `${currentBranch.logradouro}, ${currentBranch.numero}${currentBranch.complemento ? `, ${currentBranch.complemento}` : ''} - ${currentBranch.bairro}, ${currentBranch.cidade} - ${currentBranch.estado}, ${currentBranch.cep}`
+              : currentBranch.rua 
+                ? `${currentBranch.rua}, ${currentBranch.numero}${currentBranch.complemento ? `, ${currentBranch.complemento}` : ''} - ${currentBranch.bairro}, ${currentBranch.cidade} - ${currentBranch.estado}, ${currentBranch.cep}`
+                : STORE_CONFIG.address,
+            workingHours: currentBranch.horarios || 'Horário não informado',
+          };
+          setBranchData(data);
+        }
+      } catch (e) {
+        console.error('❌ Erro ao buscar dados da filial:', e);
+        setBranchData(null);
+      }
+    };
+
+    // Executar apenas no mount e quando houver evento de atualização
+    if (isInitialMount.current) {
+      fetchBranchData();
+      isInitialMount.current = false;
+    }
+
+    // Listener para mudanças no storage (outras abas)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'selected_branch') {
+        fetchBranchData();
+      }
+    };
+
+    // Listener para evento customizado de atualização de branch
+    const handleBranchUpdate = () => {
+      fetchBranchData();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('branch-updated', handleBranchUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('branch-updated', handleBranchUpdate);
+    };
+  }, [clearCart]);
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
     }).format(price);
+  };
+
+  const formatPhone = (phone: string) => {
+    // Remove tudo que não é número
+    const numbers = phone.replace(/\D/g, '');
+    
+    // Formata para (XX) XXXXX-XXXX ou (XX) XXXX-XXXX
+    if (numbers.length === 11) {
+      return `(${numbers.substring(0, 2)}) ${numbers.substring(2, 7)}-${numbers.substring(7)}`;
+    } else if (numbers.length === 10) {
+      return `(${numbers.substring(0, 2)}) ${numbers.substring(2, 6)}-${numbers.substring(6)}`;
+    }
+    
+    return phone; // Retorna o original se não tiver o tamanho esperado
   };
 
   const subtotal = cart.reduce((sum, item) => {
@@ -77,10 +181,10 @@ export function Cart() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="font-medium">{STORE_CONFIG.name}</p>
-            <p className="text-sm text-muted-foreground">{STORE_CONFIG.address}</p>
-            <p className="text-sm text-muted-foreground">{STORE_CONFIG.workingHours}</p>
-            <p className="text-sm text-muted-foreground">{STORE_CONFIG.phone}</p>
+            <p className="font-medium">{branchData?.name || STORE_CONFIG.name}</p>
+            <p className="text-sm text-muted-foreground">{branchData?.address || STORE_CONFIG.address}</p>
+            <p className="text-sm text-muted-foreground">{branchData?.workingHours || STORE_CONFIG.workingHours}</p>
+            <p className="text-sm text-muted-foreground">{branchData?.phone || STORE_CONFIG.phone}</p>
           </CardContent>
         </Card>
       </div>
@@ -298,10 +402,10 @@ export function Cart() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p className="font-medium text-primary">{STORE_CONFIG.name}</p>
-              <p className="text-muted-foreground">{STORE_CONFIG.address}</p>
-              <p className="text-muted-foreground">{STORE_CONFIG.workingHours}</p>
-              <p className="text-muted-foreground">{STORE_CONFIG.phone}</p>
+              <p className="font-medium text-primary">{branchData?.name || STORE_CONFIG.name}</p>
+              <p className="text-muted-foreground">{branchData?.address || STORE_CONFIG.address}</p>
+              <p className="text-muted-foreground">{branchData?.workingHours || STORE_CONFIG.workingHours}</p>
+              <p className="text-muted-foreground">{branchData?.phone || STORE_CONFIG.phone}</p>
             </CardContent>
           </Card>
 

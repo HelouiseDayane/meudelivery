@@ -10,6 +10,7 @@ import { BranchSelector } from './BranchSelector';
 import { Branch } from '../../types/admin';
 import adminApi from '../../api/admin';
 import { toast } from 'sonner';
+import { MasterDashboard } from './MasterDashboard';
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#8dd1e1'];
 
@@ -24,6 +25,11 @@ export function AdminDashboard() {
   const isMaster = currentAdmin?.role === 'master';
   const isAdmin = currentAdmin?.role === 'admin';
   const userBranchId = currentAdmin?.branch_id;
+
+  // Se for Master, mostrar MasterDashboard
+  if (isMaster) {
+    return <MasterDashboard />;
+  }
 
   useEffect(() => {
     if (isMaster) {

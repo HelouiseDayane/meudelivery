@@ -12,27 +12,30 @@ class UserSeeder extends Seeder
     {
 
 
-        // Manter usuários antigos para compatibilidade (serão master)
-        DB::table('users')->insert([
-            'name' => 'Admin Teste',
-            'email' => 'admin@admin.com',
-            'password' => Hash::make('Gatopreto11.'),
-            'is_admin' => true,
-            'role' => 'master',
-            'branch_id' => null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::table('users')->updateOrInsert(
+            ['email' => 'admin@admin.com'],
+            [
+                'name' => 'Admin Teste',
+                'password' => Hash::make('Gatopreto11.'),
+                'is_admin' => true,
+                'role' => 'master',
+                'branch_id' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
 
-        DB::table('users')->insert([
-            'name' => 'Bruno Miranda Cake',
-            'email' => 'brunocakes@zapsrv.com',
-            'password' => Hash::make('BrunoC2k3.s#@.'),
-            'is_admin' => true,
-            'role' => 'master',
-            'branch_id' => null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        DB::table('users')->updateOrInsert(
+            ['email' => 'brunocakes@zapsrv.com'],
+            [
+                'name' => 'Bruno Miranda Cake',
+                'password' => Hash::make('BrunoC2k3.s#@.'),
+                'is_admin' => true,
+                'role' => 'master',
+                'branch_id' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
     }
 }

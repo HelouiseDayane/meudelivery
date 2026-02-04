@@ -5,12 +5,16 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
-import { Building2, Pencil, Trash2, Plus, MapPin, Phone, Mail } from 'lucide-react';
+import { Building2, Pencil, Trash2, Plus, MapPin, Phone, Mail, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import adminApi from '../../api/admin';
 import { Branch } from '../../types/admin';
 
-export function BranchesManagement() {
+interface BranchesManagementProps {
+  onBack?: () => void;
+}
+
+export function BranchesManagement({ onBack }: BranchesManagementProps) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -26,12 +30,7 @@ export function BranchesManagement() {
   const currentAdmin = JSON.parse(localStorage.getItem('bruno_admin') || '{}');
   const isMaster = currentAdmin?.role === 'master';
 
-  console.log('🔍 DEBUG BranchesManagement:', {
-    currentAdmin,
-    role: currentAdmin?.role,
-    isMaster,
-    localStorage_bruno_admin: localStorage.getItem('bruno_admin')
-  });
+ 
 
   useEffect(() => {
     fetchBranches();
@@ -144,12 +143,37 @@ export function BranchesManagement() {
 
   const getStatusBadge = (branch: Branch) => {
     if (!branch.is_active) {
-      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Inativa</span>;
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500 text-white">❌ Inativa</span>;
     }
     if (branch.is_open) {
-      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Aberta</span>;
+      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">✅ Aberta</span>;
     }
-    return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Fechada</span>;
+    return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">🔒 Fechada</span>;
+  };
+
+  const handleToggleActive = async (branch: Branch) => {
+    if (!isMaster) {
+      toast.error('Apenas master pode ativar/desativar filiais');
+      return;
+    }
+
+    const action = branch.is_active ? 'desativar' : 'ativar';
+    const confirmMessage = branch.is_active 
+      ? `Desativar a filial "${branch.name}"?\n\n⚠️ Esta ação irá:\n• Bloquear login de usuários vinculados\n• Ocultar a filial no cardápio público\n• Ocultar produtos desta filial`
+      : `Ativar a filial "${branch.name}"?\n\nEsta ação irá permitir o acesso novamente.`;
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      await adminApi.put(`/admin/branches/${branch.id}`, {
+        is_active: !branch.is_active
+      });
+      toast.success(`Filial ${action === 'desativar' ? 'desativada' : 'ativada'} com sucesso`);
+      fetchBranches();
+    } catch (error: any) {
+      console.error('❌ Erro ao atualizar filial:', error);
+      toast.error(error.response?.data?.message || `Erro ao ${action} filial`);
+    }
   };
 
   if (loading) {
@@ -159,7 +183,13 @@ export function BranchesManagement() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <Button variant="outline" size="sm" onClick={onBack}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Voltar
+            </Button>
+          )}
           <p className="text-muted-foreground">Cadastre e gerencie as filiais da loja</p>
         </div>
         {isMaster && (
@@ -315,23 +345,33 @@ export function BranchesManagement() {
               </div>
 
               {isMaster && (
-                <div className="flex gap-2 pt-4 border-t">
+                <div className="space-y-2 pt-4 border-t">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(branch)}
+                      className="flex-1"
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Editar
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(branch.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                   <Button
-                    variant="outline"
+                    variant={branch.is_active ? "destructive" : "default"}
                     size="sm"
-                    onClick={() => handleEdit(branch)}
-                    className="flex-1"
+                    onClick={() => handleToggleActive(branch)}
+                    className="w-full"
                   >
-                    <Pencil className="w-4 h-4 mr-2" />
-                    Editar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(branch.id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="w-4 h-4" />
+                    {branch.is_active ? '❌ Desativar Filial' : '✅ Ativar Filial'}
                   </Button>
                 </div>
               )}

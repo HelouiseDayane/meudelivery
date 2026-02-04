@@ -22,6 +22,7 @@ export const publicApi = {
   createOrder: (data: any) => {
     // Monta payload conforme backend espera
     const payload = {
+      branch_id: data.branch_id, // IMPORTANTE: branch_id é obrigatório
       customer_name: data.customer_name || data.customer?.name || data.clientName || '',
       customer_email: data.customer_email || data.customer?.email || data.clientEmail || '',
       customer_phone: data.customer_phone || data.customer?.phone || data.clientPhone || '',
@@ -36,6 +37,9 @@ export const publicApi = {
         : [],
       session_id: data.session_id || '',
     };
+    
+    console.log('📦 Payload sendo enviado para checkout:', payload);
+    
     return apiRequest(PUBLIC_API_ENDPOINTS.checkout.create, {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -83,12 +87,20 @@ export const publicApi = {
   },
 
   addToCart: (sessionId: string, productId: string, quantity: number) => {
+    const selectedBranch = localStorage.getItem('selected_branch');
+    const branchId = selectedBranch ? JSON.parse(selectedBranch).id : null;
+    
+    if (!branchId) {
+      throw new Error('Nenhuma filial selecionada');
+    }
+    
     return apiRequest(PUBLIC_API_ENDPOINTS.cart.add, {
       method: 'POST',
       body: JSON.stringify({ 
         session_id: sessionId,
         product_id: productId,
-        quantity 
+        quantity,
+        branch_id: branchId
       }),
       headers: {
         'Content-Type': 'application/json',
@@ -98,9 +110,17 @@ export const publicApi = {
   },
 
   removeFromCart: (sessionId: string, productId: string, quantity?: number) => {
+    const selectedBranch = localStorage.getItem('selected_branch');
+    const branchId = selectedBranch ? JSON.parse(selectedBranch).id : null;
+    
+    if (!branchId) {
+      throw new Error('Nenhuma filial selecionada');
+    }
+    
     const body: any = { 
       session_id: sessionId,
-      product_id: productId
+      product_id: productId,
+      branch_id: branchId
     };
     if (quantity) body.quantity = quantity;
 
@@ -115,12 +135,20 @@ export const publicApi = {
   },
 
   updateCartQuantity: (sessionId: string, productId: string, quantity: number) => {
+    const selectedBranch = localStorage.getItem('selected_branch');
+    const branchId = selectedBranch ? JSON.parse(selectedBranch).id : null;
+    
+    if (!branchId) {
+      throw new Error('Nenhuma filial selecionada');
+    }
+    
     return apiRequest(PUBLIC_API_ENDPOINTS.cart.update, {
       method: 'POST',
       body: JSON.stringify({ 
         session_id: sessionId,
         product_id: productId,
-        quantity 
+        quantity,
+        branch_id: branchId
       }),
       headers: {
         'Content-Type': 'application/json',

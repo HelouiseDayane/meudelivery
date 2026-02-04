@@ -26,12 +26,16 @@ export const getAdminAuthHeadersForFormData = () => {
 // Função genérica de requisição pública
 export const apiRequest = async (url: string, options: RequestInit = {}) => {
   try {
+    // Adiciona o base URL se não for uma URL completa
+    const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
+    const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+    
     const defaultOptions: RequestInit = { 
       headers: { ...getPublicHeaders(), ...options.headers }, 
       ...options 
     };
 
-    const response = await fetch(url, defaultOptions);
+    const response = await fetch(fullUrl, defaultOptions);
 
     if (response.status === 204) return null; // sem conteúdo
     if (!response.ok) {
@@ -52,12 +56,12 @@ export const apiRequest = async (url: string, options: RequestInit = {}) => {
 export const adminApiRequest = async (url: string, options: RequestInit = {}) => {
   try {
     // Adiciona o base URL se não for uma URL completa
-    const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8191/api';
+    const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
     const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
     
     const defaultOptions: RequestInit = { 
       headers: { ...getAdminAuthHeaders(), ...options.headers }, 
-      mode: 'cors', // Adicionar modo CORS
+      mode: 'cors',
       ...options 
     };
 

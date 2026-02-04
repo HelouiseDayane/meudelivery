@@ -185,7 +185,9 @@ class BranchController extends Controller
      */
     public function publicList()
     {
+        // Apenas filiais ATIVAS devem aparecer no cardápio público
         $branches = Branch::where('is_active', true)
+            ->where('is_open', true) // Apenas abertas
             ->select('id', 'name', 'code', 'address', 'phone', 'email', 'opening_hours', 'is_open', 'is_active')
             ->orderBy('name')
             ->get();

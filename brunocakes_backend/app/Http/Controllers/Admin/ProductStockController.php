@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\Branch;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Redis;
 
 class ProductStockController extends Controller
 {
@@ -25,11 +26,16 @@ class ProductStockController extends Controller
             $query->where('branch_id', $user->branch_id);
         }
         
+        // Filtrar apenas filiais ativas
+        $query->whereHas('branch', function($q) {
+            $q->where('is_active', true);
+        });
+        
         $stocks = $query->get();
         
         // Se não existir estoque para alguma filial, criar com quantidade 0
         if ($user->isMaster()) {
-            $branches = Branch::all();
+            $branches = Branch::where('is_active', true)->get();
             foreach ($branches as $branch) {
                 $existingStock = $stocks->firstWhere('branch_id', $branch->id);
                 if (!$existingStock) {
@@ -82,11 +88,25 @@ class ProductStockController extends Controller
             ]
         );
         
+        // Sincronizar com Redis
+        $stockKey = "product_stock_{$branchId}_{$productId}";
+        $reservedKey = "product_reserved_{$branchId}_{$productId}";
+        
+        Redis::connection('stock')->set($stockKey, $data['quantity']);
+        // Garantir que reserved existe (set NX = só cria se não existir)
+        if (Redis::connection('stock')->get($reservedKey) === null) {
+            Redis::connection('stock')->set($reservedKey, 0);
+        }
+        
         $stock->load('branch');
         
         return response()->json([
-            'message' => 'Estoque atualizado com sucesso',
-            'stock' => $stock
+            'message' => 'Estoque atualizado com sucesso (MySQL + Redis)',
+            'stock' => $stock,
+            'redis' => [
+                'stock_key' => $stockKey,
+                'quantity' => $data['quantity']
+            ]
         ]);
     }
 

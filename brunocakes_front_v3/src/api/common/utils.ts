@@ -5,16 +5,28 @@ import { PUBLIC_API_ENDPOINTS } from './endpoints';
 // Função utilitária para montar a URL da imagem do produto
 export const getProductImageUrl = (image: string | undefined | null) => {
   if (!image) return undefined;
+  
   // Remove barras iniciais
   const cleanPath = image.replace(/^\/+/, '');
+  
   // Se já começa com http, retorna direto
   if (cleanPath.startsWith('http')) return cleanPath;
-  // Se já começa com storage, retorna com domínio
-  if (cleanPath.startsWith('storage/')) return `${DOMAIN_BASE_URL}/${cleanPath}`;
+  
+  // Para admin e produção, usar path relativo para aproveitar o proxy nginx
+  // que está configurado para servir /storage/ do backend
+  
+  // Se já começa com storage, retorna path relativo
+  if (cleanPath.startsWith('storage/')) {
+    return `/${cleanPath}`;
+  }
+  
   // Se começa com products/, retorna storage/products
-  if (cleanPath.startsWith('products/')) return `${DOMAIN_BASE_URL}/storage/products/${cleanPath.replace('products/', '')}`;
+  if (cleanPath.startsWith('products/')) {
+    return `/storage/${cleanPath}`;
+  }
+  
   // Caso contrário, assume storage/products
-  return `${DOMAIN_BASE_URL}/storage/products/${cleanPath}`;
+  return `/storage/products/${cleanPath}`;
 };
 
 // Função para verificar se está aberto agora, dado o texto de horários
@@ -103,6 +115,10 @@ export const fetchAllAddresses = async (apiRequest: (url: string, options?: Requ
 };
 
 // Busca as configurações dinâmicas da loja
+// OTIMIZADO: Esta função é chamada apenas uma vez no mount inicial e quando há eventos específicos:
+// - Mudança de filial (evento 'branch-updated')
+// - Atualização de status de checkout (evento 'checkout-status-changed')
+// Usa cache de 5 minutos para evitar requisições desnecessárias
 export const fetchStoreSettings = async (apiRequest: (url: string, options?: RequestInit) => Promise<any>) => {
   try {
     // Usar a URL completa da API

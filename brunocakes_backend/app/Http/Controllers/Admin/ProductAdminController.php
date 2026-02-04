@@ -48,29 +48,35 @@ class ProductAdminController extends Controller
         $user = $request->user();
         
         // Determinar filial a filtrar
-        $query = Product::query()->with('stocks.branch');
+        $branchId = $user->isMaster() ? $request->query('branch_id') : $user->branch_id;
         
-        if ($user->isMaster()) {
-            // Master pode ver todos ou filtrar por filial específica
-            $branchId = $request->query('branch_id');
-            if ($branchId) {
-                $query->where('branch_id', $branchId);
-            }
+        $query = Product::query();
+        
+        // Carregar apenas stocks da filial específica
+        if ($branchId) {
+            $query->with(['stocks' => function($q) use ($branchId) {
+                $q->where('branch_id', $branchId)->with('branch');
+            }]);
+            
+            // Filtrar produtos que têm estoque nesta filial
+            $query->whereHas('stocks', function($q) use ($branchId) {
+                $q->where('branch_id', $branchId);
+            });
         } else {
-            // Admin e Employee veem apenas produtos da sua filial
-            $query->where('branch_id', $user->branch_id);
+            // Master sem filtro vê todos os produtos com todos os stocks
+            $query->with('stocks.branch');
         }
         
         $products = $query->get();
 
         $appUrl = config('app.url');
-        $products->transform(function ($product) use ($appUrl) {
+        $products->transform(function ($product) {
             if ($product->image) {
                 if (preg_match('/^https?:\/\//', $product->image)) {
                     $product->image_url = $product->image;
                 } else {
                     $imagePath = Storage::url($product->image);
-                    $product->image_url = rtrim($appUrl, '/') . $imagePath;
+                    $product->image_url = $imagePath;
                 }
             } else {
                 $product->image_url = null;
@@ -202,7 +208,7 @@ class ProductAdminController extends Controller
                 $product->image_url = $product->image;
             } else {
                 $imagePath = Storage::url($product->image);
-                $product->image_url = rtrim($appUrl, '/') . $imagePath;
+                $product->image_url = $imagePath;
             }
         } else {
             $product->image_url = null;
@@ -255,7 +261,7 @@ class ProductAdminController extends Controller
                 $product->image_url = $product->image;
             } else {
                 $imagePath = Storage::url($product->image);
-                $product->image_url = rtrim($appUrl, '/') . $imagePath;
+                $product->image_url = $imagePath;
             }
         } else {
             $product->image_url = null;

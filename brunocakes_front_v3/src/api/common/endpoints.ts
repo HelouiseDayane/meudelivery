@@ -1,91 +1,94 @@
-import { API_BASE_URL } from './config';
-
-// Endpoints públicos
+// Endpoints públicos (apenas caminhos, sem API_BASE_URL)
 export const PUBLIC_API_ENDPOINTS = {
   products: {
-    listPublic: `${API_BASE_URL}/products`,
-    showPublic: (id: string) => `${API_BASE_URL}/products/${id}`,
-    withStock: `${API_BASE_URL}/products/with-stock`,
-    stock: (id: string) => `${API_BASE_URL}/products/${id}/stock`,
-    allStock: `${API_BASE_URL}/products/stock/all`,
+    listPublic: '/products',
+    showPublic: (id: string) => `/products/${id}`,
+    withStock: '/products/with-stock',
+    stock: (id: string) => `/products/${id}/stock`,
+    allStock: '/products/stock/all',
   },
   orders: {
-    create: `${API_BASE_URL}/orders`,
-    show: (id: string) => `${API_BASE_URL}/orders/${id}`,
-    byContact: `${API_BASE_URL}/checkout/pedidos`,
+    create: '/orders',
+    show: (id: string) => `/orders/${id}`,
+    byContact: '/checkout/pedidos',
   },
   customer: {
-    lastOrder: `${API_BASE_URL}/customer/last-order`,
+    lastOrder: '/customer/last-order',
   },
   checkout: {
-    create: `${API_BASE_URL}/checkout`,
+    create: '/checkout',
   },
   cart: {
-    add: `${API_BASE_URL}/cart/add`,
-    remove: `${API_BASE_URL}/cart/remove`,
-    update: `${API_BASE_URL}/cart/update`,
-    get: (sessionId: string) => `${API_BASE_URL}/cart/session/${sessionId}`,
-    clear: (sessionId: string) => `${API_BASE_URL}/cart/session/${sessionId}`,
+    add: '/cart/add',
+    remove: '/cart/remove',
+    update: '/cart/update',
+    get: (sessionId: string) => `/cart/session/${sessionId}`,
+    clear: (sessionId: string) => `/cart/session/${sessionId}`,
   },
   payments: {
-    notify: `${API_BASE_URL}/payment/notify`,
+    notify: '/payment/notify',
   },
   addresses: {
   },
   store: {
-    publicSettings: `${API_BASE_URL}/store/settings`,
+    publicSettings: '/store/settings',
+  },
+  stream: {
+    updates: (branchId?: number) => branchId 
+      ? `/api/stream/updates?branch_id=${branchId}`
+      : '/api/stream/updates',
   },
 };
 
-// Endpoints administrativos
+// Endpoints administrativos (apenas caminhos, sem API_BASE_URL)
 export const ADMIN_API_ENDPOINTS = {
   auth: {
-    login: `${API_BASE_URL}/admin/login`,
-    logout: `${API_BASE_URL}/admin/logout`,
-    me: `${API_BASE_URL}/admin/me`,
+    login: '/admin/login',
+    logout: '/admin/logout',
+    me: '/admin/me',
   },
   products: {
-    list: `${API_BASE_URL}/admin/products`,
-    create: `${API_BASE_URL}/admin/products`,
-    show: (id: string) => `${API_BASE_URL}/admin/products/${id}`,
-    update: (id: string) => `${API_BASE_URL}/admin/products/${id}`,
-    toggle: (id: string) => `${API_BASE_URL}/admin/products/${id}/toggle`,
-    stock: (id: string) => `${API_BASE_URL}/admin/products/${id}/stock`,
-    updateStock: (id: string) => `${API_BASE_URL}/admin/products/${id}/stock`,
-    reserveStock: (id: string) => `${API_BASE_URL}/admin/products/${id}/reserve-stock`,
-    syncStock: `${API_BASE_URL}/admin/products/sync-stock`,
-    lowStock: `${API_BASE_URL}/admin/products/low-stock`,
-    stockReport: `${API_BASE_URL}/admin/products/stock-report`,
+    list: '/admin/products',
+    create: '/admin/products',
+    show: (id: string) => `/admin/products/${id}`,
+    update: (id: string) => `/admin/products/${id}`,
+    toggle: (id: string) => `/admin/products/${id}/toggle`,
+    stock: (id: string) => `/admin/products/${id}/stock`,
+    updateStock: (id: string) => `/admin/products/${id}/stock`,
+    reserveStock: (id: string) => `/admin/products/${id}/reserve-stock`,
+    syncStock: '/admin/products/sync-stock',
+    lowStock: '/admin/products/low-stock',
+    stockReport: '/admin/products/stock-report',
   },
   orders: {
-    list: `${API_BASE_URL}/admin/orders`,
-    show: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
-    update: (id: string) => `${API_BASE_URL}/admin/orders/${id}`,
-    updateStatus: (id: string) => `${API_BASE_URL}/admin/orders/${id}/status`,
-    markDelivered: (id: string) => `${API_BASE_URL}/admin/orders/${id}/mark-delivered`,
-    cancelPayment: `${API_BASE_URL}/admin/orders/cancel-payment`,
-    finish: `${API_BASE_URL}/admin/orders/finish`,
-    approvePayment: `${API_BASE_URL}/admin/orders/finish`,
-    confirmMany: `${API_BASE_URL}/admin/orders/confirm-many`,
+    list: '/admin/orders',
+    show: (id: string) => `/admin/orders/${id}`,
+    update: (id: string) => `/admin/orders/${id}`,
+    updateStatus: (id: string) => `/admin/orders/${id}/status`,
+    markDelivered: (id: string) => `/admin/orders/${id}/mark-delivered`,
+    cancelPayment: '/admin/orders/cancel-payment',
+    finish: '/admin/orders/finish',
+    approvePayment: '/admin/orders/finish',
+    confirmMany: '/admin/orders/confirm-many',
   },
   clients: {
-    list: `${API_BASE_URL}/admin/clients`,
-    unique: `${API_BASE_URL}/admin/customers/unique`,
-    show: (id: string) => `${API_BASE_URL}/admin/clients/${id}`,
-    update: (id: string) => `${API_BASE_URL}/admin/clients/${id}`,
-    delete: (id: string) => `${API_BASE_URL}/admin/clients/${id}`,
+    list: '/admin/clients',
+    unique: '/admin/customers/unique',
+    show: (id: string) => `/admin/clients/${id}`,
+    update: (id: string) => `/admin/clients/${id}`,
+    delete: (id: string) => `/admin/clients/${id}`,
   },
   analytics: {
-    dashboard: `${API_BASE_URL}/admin/dashboard`,
-    general: `${API_BASE_URL}/analytics`,
-    customers: `${API_BASE_URL}/admin/customers/analytics`,
+    dashboard: '/admin/dashboard',
+    general: '/analytics',
+    customers: '/admin/customers/analytics',
   },
   store: {
-    settings: `${API_BASE_URL}/admin/settings`,
-    publicSettings: `${API_BASE_URL}/store/settings`,
+    settings: '/admin/settings',
+    publicSettings: '/store/settings',
   },
   admin: {
-    profile: `${API_BASE_URL}/admin/profile`,
-    testQueue: `${API_BASE_URL}/admin/test-queue`,
+    profile: '/admin/profile',
+    testQueue: '/admin/test-queue',
   }
 };

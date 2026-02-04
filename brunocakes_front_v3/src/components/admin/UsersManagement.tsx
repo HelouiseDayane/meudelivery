@@ -5,12 +5,16 @@ import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { UserPlus, Pencil, Trash2, Shield, User } from 'lucide-react';
+import { UserPlus, Pencil, Trash2, Shield, User, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import adminApi from '../../api/admin';
 import { Admin, Branch, CreateUserData } from '../../types/admin';
 
-export function UsersManagement() {
+interface UsersManagementProps {
+  onBack?: () => void;
+}
+
+export function UsersManagement({ onBack }: UsersManagementProps) {
   const [users, setUsers] = useState<Admin[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,14 +62,32 @@ export function UsersManagement() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.password !== formData.password_confirmation) {
-      toast.error('As senhas não coincidem');
+    // Validação de senha apenas quando está preenchida (criação ou alteração)
+    if (formData.password) {
+      if (formData.password.length < 8) {
+        toast.error('A senha deve ter no mínimo 8 caracteres');
+        return;
+      }
+      
+      if (formData.password !== formData.password_confirmation) {
+        toast.error('As senhas não coincidem');
+        return;
+      }
+    } else if (!editingUser) {
+      // Se não está editando, a senha é obrigatória
+      toast.error('A senha é obrigatória');
       return;
     }
 
     try {
       if (editingUser) {
-        await adminApi.put(`/admin/users/${editingUser.id}`, formData);
+        // Se estiver editando e a senha estiver vazia, não enviar os campos de senha
+        const payload: any = { ...formData };
+        if (!payload.password) {
+          delete payload.password;
+          delete payload.password_confirmation;
+        }
+        await adminApi.put(`/admin/users/${editingUser.id}`, payload);
         toast.success('Usuário atualizado com sucesso');
       } else {
         await adminApi.post('/admin/users', formData);
@@ -76,7 +98,16 @@ export function UsersManagement() {
       resetForm();
       fetchUsers();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erro ao salvar usuário');
+      const errorMessage = error.response?.data?.message || 'Erro ao salvar usuário';
+      const errors = error.response?.data?.errors;
+      
+      if (errors) {
+        // Exibe o primeiro erro encontrado
+        const firstError = Object.values(errors)[0] as string[];
+        toast.error(firstError[0] || errorMessage);
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
@@ -142,7 +173,15 @@ export function UsersManagement() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <p className="text-muted-foreground">Gerencie os usuários do sistema</p>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <Button variant="outline" size="sm" onClick={onBack}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Voltar
+            </Button>
+          )}
+          <p className="text-muted-foreground">Gerencie os usuários do sistema</p>
+        </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) resetForm();
@@ -189,7 +228,12 @@ export function UsersManagement() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required={!editingUser}
+                  minLength={8}
+                  placeholder="Mínimo 8 caracteres"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  A senha deve ter no mínimo 8 caracteres
+                </p>
               </div>
 
               <div>
@@ -200,6 +244,8 @@ export function UsersManagement() {
                   value={formData.password_confirmation}
                   onChange={(e) => setFormData({ ...formData, password_confirmation: e.target.value })}
                   required={!editingUser}
+                  minLength={8}
+                  placeholder="Confirme a senha"
                 />
               </div>
 
@@ -231,13 +277,16 @@ export function UsersManagement() {
                       <SelectValue placeholder="Selecione uma filial" />
                     </SelectTrigger>
                     <SelectContent>
-                      {branches.map((branch) => (
+                      {branches.filter(b => b.is_active).map((branch) => (
                         <SelectItem key={branch.id} value={branch.id.toString()}>
                           {branch.name} ({branch.code})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ⚠️ Apenas filiais ativas são exibidas. Se a filial for desativada, o login do usuário será bloqueado.
+                  </p>
                 </div>
               )}
 

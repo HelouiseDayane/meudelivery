@@ -54,7 +54,19 @@
       outDir: 'dist',
     },
     server: {
-      port: 8888,
-      open: true,
+      port: 5173,
+      host: '0.0.0.0', // Permite acesso externo
+      allowedHosts: [
+        'brunocake.zapsrv.com',
+        'localhost',
+        '127.0.0.1'
+      ],
+      proxy: {
+        '/api': {
+          target: 'http://backend:80',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
     },
   });

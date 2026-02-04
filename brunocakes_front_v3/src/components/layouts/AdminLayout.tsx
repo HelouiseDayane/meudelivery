@@ -48,24 +48,29 @@ export function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Mobile menu button */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="bg-white shadow-md"
-        >
-          {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-        </Button>
-      </div>
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-gray-200"
+      >
+        {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Sidebar */}
-      <div className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:static lg:inset-0
+      <aside className={`
+        w-64 h-screen bg-white border-r border-gray-200 shadow-sm flex-shrink-0
+        fixed lg:static top-0 left-0 z-40
+        transition-transform duration-300 ease-in-out
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="flex flex-col h-full">
           {/* Header */}
@@ -80,7 +85,7 @@ export function AdminLayout() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             {navigation.map((item) => {
               const Icon = item.icon;
               return (
@@ -115,19 +120,11 @@ export function AdminLayout() {
             </Button>
           </div>
         </div>
-      </div>
-
-      {/* Overlay for mobile */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/20 z-30 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      </aside>
 
       {/* Main content */}
-      <div className="lg:ml-64">
-        <main className="p-6 lg:p-8">
+      <div className="flex-1 min-w-0 overflow-auto">
+        <main className="p-4 sm:p-6 lg:p-8 pt-16 lg:pt-8">
           <Outlet />
         </main>
       </div>

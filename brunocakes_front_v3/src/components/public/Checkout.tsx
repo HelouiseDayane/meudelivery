@@ -73,6 +73,15 @@ export const Checkout = () => {
       
       const selectedBranch = JSON.parse(savedBranch);
       
+      // Validar se tem ID da filial
+      if (!selectedBranch?.id) {
+        toast.error('Filial inválida. Por favor, selecione novamente.');
+        navigate('/');
+        return;
+      }
+      
+      console.log('📍 Filial selecionada para checkout:', selectedBranch);
+      
       // Validar estrutura do carrinho
       const validatedItems = cart.filter(item => item?.product?.id).map(item => {
         const price = item.product.isPromotion ? item.product.promotionPrice || item.product.price : item.product.price;
