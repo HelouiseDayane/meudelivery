@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '../ui/card';
-import { Store, Users, Building2, ChevronRight } from 'lucide-react';
+import { Store, Users, Building2, ChevronRight, Wallet } from 'lucide-react';
 import { StoreSettings } from './StoreSettings';
 import { UsersManagement } from './UsersManagement';
 import { BranchesManagement } from './BranchesManagement';
+import { BankDataSettings } from './BankDataSettings';
+import { useApp } from '../../App';
 
-type SettingsSection = 'menu' | 'store' | 'users' | 'branches';
+type SettingsSection = 'menu' | 'store' | 'users' | 'branches' | 'bank';
 
 export function Settings() {
+  const { admin } = useApp();
   const [activeSection, setActiveSection] = useState<SettingsSection>('menu');
   const [mounted, setMounted] = useState(false);
   const [sectionMounted, setSectionMounted] = useState(false);
@@ -33,13 +36,14 @@ export function Settings() {
     return <div className="p-6">Carregando...</div>;
   }
 
-  const sections = [
+  const allSections = [
     {
       id: 'store' as const,
       title: 'Configurações da Loja',
       description: 'Nome, logo, cores, redes sociais e informações gerais',
       icon: Store,
       color: 'bg-blue-500',
+      roles: ['master', 'admin'] as const,
     },
     {
       id: 'branches' as const,
@@ -47,6 +51,15 @@ export function Settings() {
       description: 'Cadastre e gerencie as filiais da sua loja',
       icon: Building2,
       color: 'bg-green-500',
+      roles: ['master'] as const,
+    },
+    {
+      id: 'bank' as const,
+      title: 'Dados Bancários',
+      description: 'Configure chaves PIX e periodicidade de pagamento por filial',
+      icon: Wallet,
+      color: 'bg-orange-500',
+      roles: ['master', 'admin'] as const,
     },
     {
       id: 'users' as const,
@@ -54,8 +67,14 @@ export function Settings() {
       description: 'Gerencie usuários do sistema (master, admin, funcionários)',
       icon: Users,
       color: 'bg-purple-500',
+      roles: ['master'] as const,
     },
   ];
+
+  // Filtrar sections baseado no role do admin
+  const sections = allSections.filter(section => 
+    section.roles.includes(admin?.role as any)
+  );
 
   // Menu principal
   if (activeSection === 'menu') {
@@ -142,6 +161,7 @@ export function Settings() {
         {sectionMounted && activeSection === 'store' && <StoreSettings key="store" onBack={() => setActiveSection('menu')} />}
         {sectionMounted && activeSection === 'users' && <UsersManagement key="users" onBack={() => setActiveSection('menu')} />}
         {sectionMounted && activeSection === 'branches' && <BranchesManagement key="branches" onBack={() => setActiveSection('menu')} />}
+        {sectionMounted && activeSection === 'bank' && <BankDataSettings key="bank" onBack={() => setActiveSection('menu')} />}
         {!sectionMounted && <div className="p-6">Carregando...</div>}
       </div>
     </div>

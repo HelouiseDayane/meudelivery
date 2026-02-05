@@ -145,6 +145,11 @@ class ProductAdminController extends Controller
                 $input[$boolField] = filter_var($input[$boolField], FILTER_VALIDATE_BOOLEAN);
             }
         }
+        
+        // Garantir que is_active tenha valor padrão true se não fornecido
+        if (!isset($input['is_active'])) {
+            $input['is_active'] = true;
+        }
 
         // Gerar slug automaticamente se não fornecido
         if (!isset($input['slug']) && isset($input['name'])) {

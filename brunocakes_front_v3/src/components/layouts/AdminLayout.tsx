@@ -10,7 +10,8 @@ import {
   LogOut,
   Menu,
   X,
-  UserCog
+  UserCog,
+  DollarSign
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -33,6 +34,11 @@ export function AdminLayout() {
     { name: 'Pedidos', href: '/admin/orders', icon: ShoppingCart },
     { name: 'Clientes', href: '/admin/clients', icon: Users },
     { name: 'Endereços', href: '/admin/addresses', icon: Package },
+    // Pagamentos apenas para master
+    ...(admin?.role === 'master'
+      ? [{ name: 'Pagamentos', href: '/admin/payments', icon: DollarSign }]
+      : []
+    ),
     // Configurações apenas para master e admin
     ...(admin?.role === 'master' || admin?.role === 'admin' 
       ? [{ name: 'Configurações', href: '/admin/settings', icon: Shield }] 

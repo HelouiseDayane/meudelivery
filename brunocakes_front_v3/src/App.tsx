@@ -22,6 +22,7 @@ import { Cart } from './components/public/Cart';
 import { Checkout } from './components/public/Checkout';
 import { OrderTracking } from './components/public/OrderTracking';
 import { AddressesManagement } from './components/admin/AddressesManagement';
+import { PaymentsManagement } from './components/admin/PaymentsManagement';
 
 // Types
 interface Admin {
@@ -576,6 +577,10 @@ function AppProvider({ children }: { children: ReactNode }) {
     } else if (p.quantity !== undefined && p.quantity !== null && p.quantity !== '') {
       stockValue = typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity);
     }
+    
+    // Conversão segura de is_active para boolean
+    const isActive = p.is_active === true || p.is_active === 1 || p.is_active === '1' || p.is_active === 'true';
+    
     return {
       id: String(p.id),
       name: p.name || '',
@@ -585,7 +590,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       category: p.category || '',
       image: p.image || '',
       imageUrl: getProductImageUrl(p.image_url || p.image),
-      available: Boolean(p.is_active),
+      available: isActive,
       stock: stockValue,
       quantity: p.quantity !== undefined ? (typeof p.quantity === 'string' ? parseInt(p.quantity, 10) : Number(p.quantity)) : 0,
       expiryDate: p.expires_at ? p.expires_at.split(' ')[0] : '',
@@ -856,6 +861,7 @@ function App() {
                 <Route path="orders" element={<OrdersManagement />} />
                 <Route path="clients" element={<ClientsManagement />} />
                 <Route path="addresses" element={<AddressesManagement />} />
+                <Route path="payments" element={<PaymentsManagement />} />
                 <Route path="settings" element={<Settings />} />
               </Route>
               <Route path="*" element={<Navigate to="/admin/login" />} />

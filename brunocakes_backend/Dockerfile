@@ -39,7 +39,10 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 COPY php.ini /usr/local/etc/php/conf.d/custom.ini
 
 # Copia a configuração do nginx
-COPY default.conf /etc/nginx/conf.d/default.conf
+COPY default.conf /etc/nginx/sites-available/default
+RUN rm -f /etc/nginx/sites-enabled/default && \
+    ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default && \
+    rm -f /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

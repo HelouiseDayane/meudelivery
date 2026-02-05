@@ -173,6 +173,14 @@ Route::prefix('admin')->group(function () {
                 Route::delete('/{id}', [UserController::class, 'destroy']);
             });
             
+            // Branch Payments Management (Pagamentos de Filiais) - Apenas Master
+            Route::prefix('payments')->middleware(['role:master'])->group(function () {
+                Route::get('/', [App\Http\Controllers\BranchPaymentController::class, 'index']); // Listar pagamentos
+                Route::get('/dashboard', [App\Http\Controllers\BranchPaymentController::class, 'dashboard']); // Dashboard de vendas
+                Route::post('/calculate', [App\Http\Controllers\BranchPaymentController::class, 'calculatePayments']); // Calcular pagamentos do período
+                Route::patch('/{id}/pay', [App\Http\Controllers\BranchPaymentController::class, 'markAsPaid']); // Dar baixa
+            });
+            
             // Courses Management
             Route::apiResource('courses', App\Http\Controllers\Api\Admin\CourseController::class);
             

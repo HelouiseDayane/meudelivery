@@ -170,7 +170,7 @@ export function ProductsManagement() {
     adminApi.getProducts().then((products) => {
       setAdminProducts(products);
     });
-  }, [setAdminProducts]);
+  }, []); // Executar apenas uma vez ao montar o componente
   const filteredProducts = adminProducts.filter((product: any) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;

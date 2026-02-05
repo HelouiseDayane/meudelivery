@@ -301,7 +301,7 @@ export const StoreSettings: React.FC<StoreSettingsProps> = ({ onBack }) => {
               </Button>
             </>
           ) : (
-            <div className="text-sm text-muted-foreground">Você é um administrador de filial — apenas pagamento e contato do master estão visíveis.</div>
+            <div className="text-sm text-muted-foreground">Você é um administrador de filial — apenas o contato do master está visível.</div>
           )}
         </div>
       </div>
@@ -371,25 +371,6 @@ export const StoreSettings: React.FC<StoreSettingsProps> = ({ onBack }) => {
                       placeholder="#8B4513"
                     />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Configurações de Pagamento */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Pagamento</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="mercado_pago_key">Chave Mercado Pago</Label>
-                  <Textarea
-                    id="mercado_pago_key"
-                    value={settings.mercado_pago_key}
-                    onChange={(e) => handleInputChange('mercado_pago_key', e.target.value)}
-                    placeholder="Chave de acesso do Mercado Pago"
-                    rows={3}
-                  />
                 </div>
               </CardContent>
             </Card>
@@ -563,26 +544,8 @@ export const StoreSettings: React.FC<StoreSettingsProps> = ({ onBack }) => {
             </Card>
           </>
         ) : (
-          // Visão reduzida para admins de filial: apenas pagamento + contato do master via WhatsApp (QR)
+          // Visão reduzida para admins de filial: apenas contato do master via WhatsApp (QR)
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Pagamento</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="mercado_pago_key">Chave Mercado Pago</Label>
-                  <Textarea
-                    id="mercado_pago_key"
-                    value={settings.mercado_pago_key}
-                    onChange={(e) => handleInputChange('mercado_pago_key', e.target.value)}
-                    placeholder="Chave de acesso do Mercado Pago"
-                    rows={3}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
             <Card className="md:col-span-2">
               <CardHeader>
                 <CardTitle>Conectar WhatsApp (Pedidos e Impressão)</CardTitle>

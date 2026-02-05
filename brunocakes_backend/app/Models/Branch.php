@@ -16,11 +16,15 @@ class Branch extends Model
         'opening_hours',
         'is_open',
         'is_active',
+        'pix_key',
+        'payment_frequency',
+        'profit_percentage',
     ];
 
     protected $casts = [
         'is_open' => 'boolean',
         'is_active' => 'boolean',
+        'profit_percentage' => 'decimal:2',
     ];
 
     // Relacionamentos
@@ -42,6 +46,11 @@ class Branch extends Model
     public function addresses(): HasMany
     {
         return $this->hasMany(Address::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(BranchPayment::class);
     }
 
     // Scopes

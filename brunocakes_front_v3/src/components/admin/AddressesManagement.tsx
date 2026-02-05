@@ -79,7 +79,7 @@ export function AddressesManagement() {
   const [form, setForm] = useState<Omit<Address, 'id'> & { latitude?: string; longitude?: string }>({
     rua: '', numero: '', bairro: '', cidade: '', estado: 'RN', ponto_referencia: '', horario_abertura: '', horario_fechamento: '', latitude: '', longitude: '', branch_id: isMaster ? undefined : userBranchId
   });
-  // Preencher endereço via geolocalização
+  // Preencher endereço via geolocalização (com fallback)
   const handleFillAddressByLocation = async () => {
     if (!form.latitude || !form.longitude) {
       setError('Informe latitude e longitude');
@@ -87,13 +87,62 @@ export function AddressesManagement() {
     }
     setLoading(true);
     setError(null);
+    
+    console.log('🔍 Iniciando busca de endereço...', { lat: form.latitude, lon: form.longitude });
+    
     try {
-      // Usando Nominatim (OpenStreetMap)
-      const url = `${API_BASE_URL}/geocode/reverse?lat=${form.latitude}&lon=${form.longitude}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Erro ao buscar endereço pela localização');
-      const data = await res.json();
-      const addr = data.address || {};
+      let data: any = null;
+      
+      // Tentativa 1: Via backend (pode ter timeout se servidor bloquear Nominatim)
+      try {
+        console.log('🔄 Tentativa 1: Buscando via backend...');
+        const backendUrl = `${API_BASE_URL}/geocode/reverse?lat=${form.latitude}&lon=${form.longitude}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const backendRes = await fetch(backendUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        
+        if (backendRes.ok) {
+          data = await backendRes.json();
+          console.log('✅ Backend respondeu:', data);
+        } else {
+          console.warn('⚠️ Backend retornou erro:', backendRes.status);
+        }
+      } catch (backendError: any) {
+        console.warn('⚠️ Backend geocode falhou:', backendError.message);
+      }
+      
+      // Tentativa 2: Direto do navegador (fallback)
+      if (!data) {
+        console.log('🌐 Tentativa 2: Buscando direto do Nominatim...');
+        const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${form.latitude}&lon=${form.longitude}`;
+        const controller2 = new AbortController();
+        const timeoutId2 = setTimeout(() => controller2.abort(), 10000);
+        
+        const nominatimRes = await fetch(nominatimUrl, {
+          headers: { 
+            'User-Agent': 'BrunoCakes/1.0',
+            'Accept': 'application/json'
+          },
+          signal: controller2.signal
+        });
+        clearTimeout(timeoutId2);
+        
+        if (!nominatimRes.ok) {
+          throw new Error(`Nominatim retornou erro: ${nominatimRes.status}`);
+        }
+        data = await nominatimRes.json();
+        console.log('✅ Nominatim respondeu:', data);
+      }
+      
+      if (!data || !data.address) {
+        throw new Error('Nenhum endereço encontrado para esta localização');
+      }
+      
+      const addr = data.address;
+      console.log('📍 Dados do endereço:', addr);
+      
       // Mapeamento de estados para siglas
       const estadosMap: Record<string, string> = {
         'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM', 'Bahia': 'BA', 'Ceará': 'CE',
@@ -103,23 +152,32 @@ export function AddressesManagement() {
         'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC',
         'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO'
       };
+      
       let estado = addr.state_code || addr.state || addr.region || '';
-      // Se vier nome completo, converte para sigla
       if (estado && estado.length > 2 && estadosMap[estado]) {
         estado = estadosMap[estado];
       }
-      // Busca número em mais campos
+      
       const numero = addr.house_number || addr.number || addr['addr:housenumber'] || '';
-      setForm(f => ({
-        ...f,
+      
+      const endereco = {
         rua: addr.road || addr.street || addr['addr:street'] || '',
         numero,
         bairro: addr.suburb || addr.neighbourhood || addr.village || addr.town || '',
         cidade: addr.city || addr.town || addr.village || '',
         estado,
-      }));
+      };
+      
+      console.log('📝 Endereço formatado:', endereco);
+      
+      setForm(f => ({ ...f, ...endereco }));
+      console.log('✅ Formulário preenchido com sucesso!');
+      
     } catch (e: any) {
-      setError(e.message);
+      const errorMsg = e.message || 'Erro ao buscar endereço. Verifique sua conexão.';
+      setError(errorMsg);
+      console.error('❌ Erro fatal ao preencher endereço:', e);
+      alert(`Erro ao buscar endereço: ${errorMsg}\n\nTente novamente ou preencha manualmente.`);
     } finally {
       setLoading(false);
     }
