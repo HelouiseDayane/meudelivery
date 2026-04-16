@@ -18,6 +18,9 @@ certs/
 # ============================================================
 docker-compose.override.yml
 docker-compose.yml
+
+# Scripts com credenciais hardcoded
+*.sh
 *.pid
 *.sock
 supervisord.pid
