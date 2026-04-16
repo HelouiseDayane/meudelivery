@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================================
-# RESTORE COMPLETO - Bruno Cakes
+# RESTORE COMPLETO - seu_delivery
 # Restaura bancos de dados, volumes Docker e código a partir de um backup
 # ============================================================================
 
@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  RESTORE COMPLETO - Bruno Cakes${NC}"
+echo -e "${BLUE}  RESTORE COMPLETO - seu_delivery${NC}"
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -53,7 +53,7 @@ fi
 
 echo ""
 echo -e "${BLUE}ℹ Parando containers...${NC}"
-docker-compose down 2>/dev/null || true
+docker compose down 2>/dev/null || true
 
 # Restaurar código
 echo -e "${BLUE}ℹ Restaurando código...${NC}"
@@ -62,24 +62,20 @@ tar -xzf "$BACKUP_FILE" || {
   echo -e "${RED}✗ Erro ao extrair backup${NC}"
   exit 1
 }
-cd Bruno_Cakes_filial
+cd seu_delivery
 
-# Restaurar banco de dados
-echo -e "${BLUE}ℹ Iniciando containers...${NC}"
-docker-compose up -d mysql 2>/dev/null
-
+# Restaurar banco de dados no container db compartilhado
 echo -e "${BLUE}ℹ Aguardando MySQL ficar disponível...${NC}"
-until docker-compose exec -T mysql mysqladmin ping -h localhost -u root -proot_pass &>/dev/null; do
+until docker exec db mysqladmin ping -h localhost -uroot -paligayra658691 &>/dev/null; do
   sleep 2
   echo -n "."
 done
 echo ""
 
 echo -e "${BLUE}ℹ Restaurando banco de dados...${NC}"
-DB_FILE=$(ls -t "$BACKUP_DIR"/db/brunocakes_*.sql 2>/dev/null | head -1)
+DB_FILE=$(ls -t "$BACKUP_DIR"/db/seu_delivery_*.sql 2>/dev/null | head -1)
 if [ -f "$DB_FILE" ]; then
-  docker-compose exec -T mysql mysql -u brunocakes -pbrunocakes145236521478214821782171285742557 \
-    brunocakes < "$DB_FILE" || {
+  docker exec -i db mysql -uroot -paligayra658691 seu_delivery < "$DB_FILE" || {
     echo -e "${RED}✗ Erro ao restaurar banco de dados${NC}"
     exit 1
   }
@@ -90,10 +86,10 @@ fi
 
 # Iniciar todos os containers
 echo -e "${BLUE}ℹ Iniciando todos os serviços...${NC}"
-docker-compose up -d || true
+docker compose up -d || true
 
 echo ""
 echo -e "${GREEN}✓ RESTORE CONCLUÍDO COM SUCESSO!${NC}"
 echo ""
-echo -e "Verifique o status com: ${BLUE}docker-compose ps${NC}"
+echo -e "Verifique o status com: ${BLUE}docker compose ps${NC}"
 echo ""

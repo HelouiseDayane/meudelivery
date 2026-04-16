@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================================
-# START - Bruno Cakes
+# START - seu_delivery
 # Inicia containers e testa conectividade (SEM DESTRUIR DADOS)
 # ============================================================================
 
@@ -14,8 +14,83 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  INICIANDO SISTEMA - Bruno Cakes${NC}"
+echo -e "${BLUE}  INICIANDO SISTEMA - seu_delivery${NC}"
 echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+echo ""
+
+# Parar containers anteriores (mantém volumes/dados)
+echo -e "${BLUE}ℹ Parando containers anteriores (mantendo dados)...${NC}"
+docker compose down 2>/dev/null || true
+
+# Iniciar containers em background (sem rebuild)
+echo -e "${BLUE}ℹ Iniciando containers...${NC}"
+docker compose up -d --no-build
+
+# Aguardar serviços ficarem prontos
+echo -e "${BLUE}ℹ Aguardando serviços ficarem prontos...${NC}"
+
+# Esperar Redis próprio
+echo -n "  • Redis: "
+for i in {1..15}; do
+  if docker compose exec -T seu_delivery_redis redis-cli -a seudelivery_redis_2026 ping &>/dev/null; then
+    echo -e " ${GREEN}✓${NC}"
+    break
+  fi
+  sleep 2
+  echo -n "."
+done
+
+# Esperar Backend
+echo -n "  • Backend: "
+for i in {1..30}; do
+  if docker compose exec -T seu_delivery_backend php -v &>/dev/null; then
+    echo -e " ${GREEN}✓${NC}"
+    break
+  fi
+  sleep 2
+  echo -n "."
+done
+
+# Executar migrations
+echo -e "${BLUE}ℹ Executando migrations...${NC}"
+docker compose exec -T seu_delivery_backend php artisan migrate --force 2>&1 | grep -E "(Migrat|Nothing|error)" || echo "  ✓ Migrations OK"
+
+# Verificar seeders
+echo -e "${BLUE}ℹ Verificando seeders...${NC}"
+USER_COUNT=$(docker compose exec -T seu_delivery_backend php artisan tinker --execute="echo \App\Models\User::count();" 2>/dev/null | tail -1 | tr -d '\r\n' || echo "0")
+if [ "$USER_COUNT" == "0" ] || [ -z "$USER_COUNT" ]; then
+  echo "  • Banco vazio, executando seeders..."
+  docker compose exec -T seu_delivery_backend php artisan db:seed --force 2>&1 | grep -E "(Seed|Database|error)" || echo "  ✓ Seeders executados"
+else
+  echo "  ✓ Já existem $USER_COUNT usuários, seeders não necessários"
+fi
+
+# Corrigir permissões
+echo -e "${BLUE}ℹ Corrigindo permissões...${NC}"
+docker compose exec -T seu_delivery_backend chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+docker compose exec -T seu_delivery_backend chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+
+# Limpar cache
+echo -e "${BLUE}ℹ Limpando cache...${NC}"
+docker compose exec -T seu_delivery_backend php artisan config:clear 2>/dev/null || true
+docker compose exec -T seu_delivery_backend php artisan cache:clear 2>/dev/null || true
+docker compose exec -T seu_delivery_backend php artisan route:cache 2>/dev/null || true
+
+echo ""
+echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}✓ SISTEMA INICIADO!${NC}"
+echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
+echo ""
+
+echo -e "${YELLOW}Status dos containers:${NC}"
+docker compose ps
+echo ""
+
+echo -e "${YELLOW}🌐 URLs:${NC}"
+echo "   Frontend Prod: http://localhost:9998"
+echo "   Frontend Dev:  http://localhost:8886"
+echo ""
+echo -e "${BLUE}ℹ Para ver logs: ${NC}docker compose logs -f [seu_delivery_backend|seu_delivery_frontend_prod]${NC}"
 echo ""
 
 # Parar containers anteriores (mantém volumes/dados)

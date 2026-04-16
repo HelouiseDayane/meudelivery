@@ -1,158 +1,119 @@
-# Ignorar dependências e arquivos de build
-node_modules/
-dist/
+# ============================================================
+# CREDENCIAIS E SEGREDOS — NUNCA VERSIONAR
+# ============================================================
 .env
-*.log
-*.tmp
-*.swp
-.DS_Store
-.vscode/
-.idea/
-__pycache__/
-*.pyc
-*.pyo
-*.sqlite3
-storage/
-logs/
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+ssl/
+certs/
 
-# Scripts de deploy automático (contém senhas)
-deploy-auto.sh
-
-# Laravel
-/vendor/
-/public/storage/
-/.env
-.phpunit.result.cache
-composer.lock
-# Docker
+# ============================================================
+# DOCKER — arquivos gerados em runtime
+# ============================================================
+docker-compose.override.yml
+docker-compose.yml
 *.pid
 *.sock
-# Configurações locais e de ambiente
-docker/*.conf
-docker/*.cnf
-docker/*.ini
-docker/*.env
-docker/*.yml
-docker/*.yaml
-docker/*.json
-brunocakes_backend/config/*.php
-brunocakes_backend/.env
-brunocakes_backend/php.ini
-brunocakes_backend/default.conf
-brunocakes_backend/ngnix.conf
-brunocakes_backend/redis.conf
-brunocakes_backend/my.conf
-brunocakes_backend/my.cnf
-brunocakes_backend/*.conf
-brunocakes_backend/*.ini
-brunocakes_backend/*.env
-brunocakes_backend/*.yml
-brunocakes_backend/*.yaml
-brunocakes_backend/*.json
-brunocakes_front_v3/.env
-brunocakes_front_v3/vite.config.*
-brunocakes_front_v3/*.conf
-brunocakes_front_v3/*.ini
-brunocakes_front_v3/*.env
-brunocakes_front_v3/*.yml
-brunocakes_front_v3/*.yaml
-brunocakes_front_v3/*.json
-brunocakes_front_v3/ngnix.conf
-brunocakes_front_v3/redis.conf
-brunocakes_front_v3/my.conf
-brunocakes_front_v3/my.cnf
-brunocakes_front_v3/php.ini
-brunocakes_front_v3/default.conf
-brunocakes_front_v3/config/*.ts
-brunocakes_front_v3/config/*.js
-brunocakes_front_v3/config/*.json
-brunocakes_front_v3/config/*.env
-brunocakes_front_v3/config/*.yml
-brunocakes_front_v3/config/*.yaml
-brunocakes_front_v3/ssl/*
-set-frontend-env.sh
-init.sh
-manage.sh
-stop.sh
-health-check.sh
-# Frontend
-brunocakes_front_v3/node_modules/
-brunocakes_front_v3/dist/
-brunocakes_front_v3/public/sw.js
-brunocakes_front_v3/package-lock.json
-# Backend
-brunocakes_backend/vendor/
-brunocakes_backend/storage/
-brunocakes_backend/.env
-brunocakes_backend/phpunit.result.cache
-brunocakes_backend/composer.lock
-# Outros arquivos temporários
-*.bak
-*.old
-*.orig
-*.save
-*.out
-*.zip
-*.tar
-*.gz
-*.tgz
-*.7z
-*.rar
-*.exe
-*.dll
-*.so
-*.bin
-*.obj
-*.class
-*.jar
-*.war
-*.apk
-*.ipa
-*.app
-*.deb
-*.rpm
-*.msi
+supervisord.pid
+
+# ============================================================
+# DEPENDÊNCIAS
+# ============================================================
+node_modules/
+vendor/
+composer.lock
+package-lock.json
+yarn.lock
+
+# ============================================================
+# BUILD / DIST
+# ============================================================
+dist/
+build/
+.vite/
+public/hot
+public/storage
+
+# ============================================================
+# LARAVEL — backend
+# ============================================================
+seu_delivery_backend/.env
+seu_delivery_backend/.env.*
+!seu_delivery_backend/.env.example
+seu_delivery_backend/vendor/
+seu_delivery_backend/storage/logs/*.log
+seu_delivery_backend/storage/framework/cache/
+seu_delivery_backend/storage/framework/sessions/
+seu_delivery_backend/storage/framework/views/
+seu_delivery_backend/bootstrap/cache/*.php
+seu_delivery_backend/phpunit.result.cache
+seu_delivery_backend/php.ini
+seu_delivery_backend/default.conf
+seu_delivery_backend/start.sh
+
+# ============================================================
+# FRONTEND
+# ============================================================
+seu_delivery_front/.env
+seu_delivery_front/.env.*
+!seu_delivery_front/.env.example
+seu_delivery_front/node_modules/
+seu_delivery_front/dist/
+seu_delivery_front/ssl/
+seu_delivery_front/supervisord.pid
+seu_delivery_front/nginx.dev.conf
+seu_delivery_front/public/sw.js
+
+# ============================================================
+# CONFIGURAÇÕES DOCKER (contêm senhas/IPs internos)
+# ============================================================
+docker/my.conf
+docker/my.cnf
+docker/redis.conf
+docker/php.ini
+docker/nginx.conf
+docker/ngnix.conf
+
+# ============================================================
+# SCRIPTS DE DEPLOY/BACKUP (podem conter credenciais)
+# ============================================================
+deploy.sh
+backup.sh
+restore.sh
+apply_fixes.sh
+quick_rebuild.sh
+
+# ============================================================
+# LOGS E TEMPORÁRIOS
+# ============================================================
+*.log
+*.tmp
 *.swp
 *.swo
-*.swn
-*.tmp
-*.temp
-*.cache
-*.log
-*.pid
-*.seed
-*.pid.lock
-*.pidfile
-*.lock
-*.pid
-*.pid.lock
-*.pidfile
-*.lock
-*.seed
 *.bak
 *.old
 *.orig
-*.save
-*.out
+storage/logs/
+logs/
+
+# ============================================================
+# SISTEMA OPERACIONAL
+# ============================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ============================================================
+# OUTROS
+# ============================================================
 *.zip
-*.tar
-*.gz
+*.tar.gz
 *.tgz
-*.7z
-*.rar
-*.exe
-*.dll
-*.so
-*.bin
-*.obj
-*.class
-*.jar
-*.war
-*.apk
-*.ipa
-*.app
-*.deb
-*.rpm
-*.msi
-# Deploy scripts
-deploy-full.sh
+ngnix.conf
